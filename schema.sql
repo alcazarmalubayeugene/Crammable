@@ -34,6 +34,16 @@
 --   M3 — idx_referral_events_referred_id added
 --   M4 — idx_flashcards_user_id added
 --   L2 — referral_events.credits_awarded CHECK against known cap values
+--
+-- PROD-READINESS REVIEW (integration layer pass)
+--   PR-C1 — protect_immutable_profile_fields() now also guards token_balance
+--           and subscription_expires_at (was user-writable via the profiles
+--           UPDATE RLS policy → credit/Pro economy bypass)
+--   PR-H1 — approve_payment()/reject_payment() SECURITY DEFINER fns make the
+--           admin verify/reject flow atomic (claim → tier → audit) with
+--           renewal-stacking expiry
+--   PR-H2 — apply_card_review() does the review-counter increment in one
+--           atomic statement (was a lost-update race in the app layer)
 -- =============================================================================
 
 
@@ -463,6 +473,18 @@ BEGIN
     RAISE EXCEPTION 'FORBIDDEN: referred_by is set once on signup and cannot be changed';
   END IF;
 
+  -- C1: the credit economy lives in these two columns. The profiles UPDATE RLS
+  -- policy lets a user write their own row, so without these guards any client
+  -- with the anon key could PATCH their own token_balance / extend their Pro
+  -- expiry, bypassing credits and payments entirely. service_role (deduct_credit,
+  -- grant_credits, approve_payment) is allowed through by the early return above.
+  IF NEW.token_balance IS DISTINCT FROM OLD.token_balance THEN
+    RAISE EXCEPTION 'FORBIDDEN: token_balance is managed by the server only';
+  END IF;
+  IF NEW.subscription_expires_at IS DISTINCT FROM OLD.subscription_expires_at THEN
+    RAISE EXCEPTION 'FORBIDDEN: subscription_expires_at is managed by the server only';
+  END IF;
+
   RETURN NEW;
 END;
 $$;
@@ -657,6 +679,126 @@ BEGIN
     RETURN QUERY SELECT true, (p_max_requests - request_count - 1);
   END IF;
 END;
+$$;
+
+
+-- ---------------------------------------------------------------------------
+-- 4.10 approve_payment(p_admin_id, p_payment_id, p_notes)
+-- H1: Atomic admin approval. supabase-js cannot wrap multiple table writes in
+-- one transaction, so the claim → tier upgrade → audit insert must live in a
+-- single function or a partial failure can leave a payment 'verified' while the
+-- user is never upgraded. Returns the upgraded user_id.
+--
+-- Concurrency: the status='pending' guard on the UPDATE means a second admin
+-- acting on the same row gets zero rows back → ALREADY_PROCESSED.
+-- Renewal: expiry extends from the later of the current expiry and now, so
+-- renewing mid-cycle does not discard remaining Pro time.
+-- service_role only (callers must gate behind requireAdmin first).
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.approve_payment(
+  p_admin_id   UUID,
+  p_payment_id UUID,
+  p_notes      TEXT DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user_id UUID;
+BEGIN
+  UPDATE public.payment_submissions
+  SET    status      = 'verified',
+         verified_by = p_admin_id,
+         verified_at = now()
+  WHERE  id     = p_payment_id
+    AND  status = 'pending'
+  RETURNING user_id INTO v_user_id;
+
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'ALREADY_PROCESSED'
+      USING HINT = 'Payment is not pending (already verified/rejected or missing)';
+  END IF;
+
+  UPDATE public.profiles
+  SET    subscription_tier       = 'pro',
+         subscription_expires_at  = GREATEST(COALESCE(subscription_expires_at, now()), now())
+                                    + INTERVAL '30 days',
+         updated_at               = now()
+  WHERE  id = v_user_id;
+
+  INSERT INTO public.admin_action_log (admin_id, payment_id, action, notes)
+  VALUES (p_admin_id, p_payment_id, 'approved', p_notes);
+
+  RETURN v_user_id;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 4.11 reject_payment(p_admin_id, p_payment_id, p_reason, p_notes)
+-- H1: Atomic admin rejection (claim → audit insert). Returns the user_id.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.reject_payment(
+  p_admin_id   UUID,
+  p_payment_id UUID,
+  p_reason     TEXT,
+  p_notes      TEXT DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user_id UUID;
+BEGIN
+  UPDATE public.payment_submissions
+  SET    status           = 'rejected',
+         rejection_reason  = p_reason,
+         verified_by       = p_admin_id,
+         verified_at       = now()
+  WHERE  id     = p_payment_id
+    AND  status = 'pending'
+  RETURNING user_id INTO v_user_id;
+
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'ALREADY_PROCESSED'
+      USING HINT = 'Payment is not pending (already verified/rejected or missing)';
+  END IF;
+
+  INSERT INTO public.admin_action_log (admin_id, payment_id, action, notes)
+  VALUES (p_admin_id, p_payment_id, 'rejected', p_notes);
+
+  RETURN v_user_id;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 4.12 apply_card_review(p_card_id, p_was_correct, p_difficulty)
+-- H2: Atomic relative increment of a card's review counters. Replaces a
+-- read-modify-write in the app layer that lost updates under concurrent
+-- reviews and could corrupt difficulty_score (which drives Living Deck
+-- selection).
+--
+-- SECURITY INVOKER (default): RLS on flashcards ("users crud own") applies, so
+-- a caller can only ever update their OWN card even though it's addressed by id.
+-- Call through the SESSION client, not the service role.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.apply_card_review(
+  p_card_id      UUID,
+  p_was_correct  BOOLEAN,
+  p_difficulty   FLOAT
+)
+RETURNS VOID
+LANGUAGE sql
+AS $$
+  UPDATE public.flashcards
+  SET    times_seen       = times_seen + 1,
+         times_correct    = times_correct + (CASE WHEN p_was_correct THEN 1 ELSE 0 END),
+         difficulty_score = p_difficulty,
+         last_reviewed_at = now()
+  WHERE  id = p_card_id;
 $$;
 
 
