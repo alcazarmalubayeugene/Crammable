@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { DbError, dbError, toDbError } from "@/lib/db/errors";
 import { ApiErrorCode } from "@/lib/contracts";
@@ -90,5 +90,45 @@ describe("toDbError", () => {
     expect(err.status).toBe(500);
     // raw message must NOT leak into the client-facing message
     expect(err.message).not.toContain("internal pg detail leak");
+  });
+
+  // --- M1: sentinels are matched on `message` only, never `details` ----------
+  it("does NOT mis-map when a sentinel only appears in the error details (M1)", () => {
+    // A normal unique violation whose details happen to echo a sentinel-looking
+    // value must still map by SQLSTATE — not to the ALREADY_PROCESSED message.
+    const err = toDbError(
+      pgError({
+        code: "23505",
+        message: "duplicate key value violates unique constraint",
+        details: "Key (note)=(ALREADY_PROCESSED) already exists.",
+      })
+    );
+    expect(err.code).toBe(ApiErrorCode.VALIDATION_ERROR);
+    expect(err.message).not.toMatch(/already been processed/i);
+  });
+});
+
+// --- H1: 500-class DB failures are logged server-side ------------------------
+describe("toDbError logging (H1)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("logs the raw Postgres error on the unknown/default branch", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    toDbError(pgError({ code: "XX000", message: "boom", details: "stack" }));
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it("logs the raw error for USER_NOT_FOUND (maps to INTERNAL_ERROR)", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const err = toDbError(pgError({ code: "P0001", message: "USER_NOT_FOUND: no profile with id x" }));
+    expect(err.code).toBe(ApiErrorCode.INTERNAL_ERROR);
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it("does NOT log expected 4xx mappings", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    toDbError(pgError({ code: "P0001", message: "INSUFFICIENT_CREDITS" }));
+    toDbError(pgError({ code: "23505", message: "dup", details: "reference_number" }));
+    expect(spy).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { z, ZodError } from "zod";
 import { handleApiError, apiSuccess, failResponse } from "@/lib/api/errors";
 import { AuthError } from "@/lib/auth/errors";
@@ -51,11 +51,30 @@ describe("handleApiError", () => {
   });
 
   it("collapses unknown throwables to an opaque 500", async () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
     const res = handleApiError(new Error("kaboom with secret stack"));
     expect(res.status).toBe(500);
     const b = await body(res);
     expect(b.error?.code).toBe(ApiErrorCode.INTERNAL_ERROR);
     expect(b.error?.message).not.toContain("secret");
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+});
+
+describe("handleApiError logging (H1)", () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  it("logs a 5xx DbError server-side", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    handleApiError(dbError(ApiErrorCode.INTERNAL_ERROR, "Account not found."));
+    expect(spy).toHaveBeenCalledOnce();
+  });
+
+  it("stays quiet for an expected 4xx DbError", () => {
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    handleApiError(dbError(ApiErrorCode.INSUFFICIENT_CREDITS, "out of credits"));
+    expect(spy).not.toHaveBeenCalled();
   });
 });
 

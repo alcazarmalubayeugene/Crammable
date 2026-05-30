@@ -30,6 +30,11 @@ export function handleApiError(err: unknown): Response {
   }
 
   if (err instanceof DbError) {
+    // 5xx-class DbErrors are server faults — log them (toDbError also logs the
+    // raw Postgres cause). 4xx are expected client errors and stay quiet.
+    if (err.status >= 500) {
+      console.error("[handleApiError] DbError 5xx:", err.code, err.message);
+    }
     return failResponse(err.code, err.message, err.status);
   }
 

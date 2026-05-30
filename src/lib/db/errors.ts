@@ -48,6 +48,23 @@ export function dbError(code: ApiErrorCode, message: string): DbError {
 }
 
 /**
+ * Build an INTERNAL_ERROR DbError AND log the raw Postgres error server-side.
+ *
+ * The client only ever sees an opaque message, but a 500-class DB failure on a
+ * money/credit path must leave a trace we can debug — so the original
+ * PostgrestError (code + message + details) is logged here, not discarded.
+ */
+function internalError(error: PostgrestError, message: string): DbError {
+  console.error(
+    "[toDbError] Unmapped/internal database error:",
+    error.code,
+    error.message,
+    error.details
+  );
+  return dbError(ApiErrorCode.INTERNAL_ERROR, message);
+}
+
+/**
  * Translate a Supabase/PostgREST error into a typed DbError.
  *
  * Handles two error sources:
@@ -56,41 +73,46 @@ export function dbError(code: ApiErrorCode, message: string): DbError {
  *      (deduct_credit, grant_credits, the privilege-escalation triggers).
  *      These arrive as SQLSTATE P0001 with the custom text in `message`.
  *
- * Anything unrecognised collapses to INTERNAL_ERROR so we never leak raw
- * Postgres internals to the client (the original message is preserved on the
- * Error for server-side logging).
+ * Our RAISE sentinels are matched on `error.message` only (exact prefix) — NOT
+ * the combined message+details — because `details` can echo user-supplied values
+ * and cause a false sentinel match. Constraint/index names are matched within the
+ * SQLSTATE branches, where scanning details is safe (they're our identifiers).
+ *
+ * Anything unrecognised collapses to INTERNAL_ERROR and is logged (never leaked).
  */
 export function toDbError(
   error: PostgrestError,
   fallbackMessage: string = UIMessages.genericError
 ): DbError {
-  const raw = `${error.message ?? ""} ${error.details ?? ""}`;
+  // Sentinel text from our PL/pgSQL RAISE EXCEPTIONs lives in `message` exactly.
+  const msg = (error.message ?? "").trim();
 
-  // --- Custom RAISE EXCEPTION text from our PL/pgSQL functions ---------------
-  if (raw.includes("INSUFFICIENT_CREDITS")) {
+  if (msg.startsWith("INSUFFICIENT_CREDITS")) {
     return dbError(
       ApiErrorCode.INSUFFICIENT_CREDITS,
       "You're out of credits. Upgrade to Pro or earn more to keep generating."
     );
   }
-  if (raw.includes("FORBIDDEN:")) {
+  if (msg.startsWith("FORBIDDEN:")) {
     return dbError(ApiErrorCode.FORBIDDEN, "That change isn't allowed.");
   }
-  if (raw.includes("ALREADY_PROCESSED")) {
+  if (msg.startsWith("ALREADY_PROCESSED")) {
     // approve_payment()/reject_payment() raise this when the row is no longer
     // pending (already actioned, missing, or claimed by another admin).
     return dbError(ApiErrorCode.VALIDATION_ERROR, "This payment has already been processed.");
   }
-  if (raw.includes("INVALID_AMOUNT")) {
+  if (msg.startsWith("INVALID_AMOUNT")) {
     // grant_credits() rejects a non-positive amount — a caller bug, surfaced as 400.
     return dbError(ApiErrorCode.VALIDATION_ERROR, "Invalid credit amount.");
   }
-  if (raw.includes("USER_NOT_FOUND")) {
+  if (msg.startsWith("USER_NOT_FOUND")) {
     // grant_credits() target row missing — a server-side inconsistency, not user error.
-    return dbError(ApiErrorCode.INTERNAL_ERROR, "Account not found.");
+    return internalError(error, "Account not found.");
   }
 
   // --- SQLSTATE constraint violations ---------------------------------------
+  // Constraint/index names may appear in message or details — scan both here.
+  const raw = `${error.message ?? ""} ${error.details ?? ""}`;
   switch (error.code) {
     case "23505": {
       // unique_violation — disambiguate by constraint / index name
@@ -128,6 +150,6 @@ export function toDbError(
       // foreign_key_violation — referenced row missing/deleted
       return dbError(ApiErrorCode.VALIDATION_ERROR, "A referenced record no longer exists.");
     default:
-      return dbError(ApiErrorCode.INTERNAL_ERROR, fallbackMessage);
+      return internalError(error, fallbackMessage);
   }
 }
