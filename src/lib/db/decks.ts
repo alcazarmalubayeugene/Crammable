@@ -1,6 +1,7 @@
 import { createSessionClient } from "@/lib/supabase/server";
 import {
   TableNames,
+  Validation,
   type Deck,
   type Flashcard,
   type GeneratedCard,
@@ -8,6 +9,7 @@ import {
   type PdfType,
 } from "@/lib/contracts";
 import { toDbError } from "@/lib/db/errors";
+import { ensureMaxLength } from "@/lib/db/validate";
 import { insertFlashcards } from "@/lib/db/flashcards";
 
 /**
@@ -26,6 +28,9 @@ export interface NewDeckInput {
 
 /** Insert a deck row. card_count starts at 0 and is set after cards persist. */
 export async function createDeck(input: NewDeckInput): Promise<Deck> {
+  ensureMaxLength(input.title, Validation.deck.titleMaxLength, "Deck title");
+  ensureMaxLength(input.sourceFilename, Validation.deck.filenameMaxLength, "Filename");
+
   const supabase = await createSessionClient();
   const { data, error } = await supabase
     .from(TableNames.decks)
@@ -141,11 +146,16 @@ export async function createDeckWithCards(
   try {
     inserted = await insertFlashcards(deck.id, deckInput.userId, cards);
   } catch (err) {
-    // Compensating cleanup — best effort; swallow secondary errors.
+    // Compensating cleanup — best effort. Log (don't swallow) a cleanup failure
+    // so an orphaned deck is observable, then surface the original error.
     try {
       await deleteDeck(deck.id);
-    } catch {
-      /* deck cleanup failed; surface the original error below */
+    } catch (cleanupErr) {
+      console.error(
+        "[createDeckWithCards] orphan deck cleanup failed for",
+        deck.id,
+        cleanupErr
+      );
     }
     throw err;
   }

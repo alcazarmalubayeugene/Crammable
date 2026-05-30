@@ -20,7 +20,9 @@ beforeEach(() => {
 describe("checkRateLimit", () => {
   it("short-circuits to unlimited when the endpoint has no rule", async () => {
     const result = await checkRateLimit("u1", "/api/no-such-endpoint");
-    expect(result).toEqual({ allowed: true, remaining: Number.POSITIVE_INFINITY });
+    // MAX_SAFE_INTEGER, not Infinity — Infinity serializes to null in JSON.
+    expect(result).toEqual({ allowed: true, remaining: Number.MAX_SAFE_INTEGER });
+    expect(Number.isFinite(result.remaining)).toBe(true);
     expect(mockedCreateAdmin).not.toHaveBeenCalled();
   });
 

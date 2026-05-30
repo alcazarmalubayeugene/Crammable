@@ -81,6 +81,14 @@ export function toDbError(
     // pending (already actioned, missing, or claimed by another admin).
     return dbError(ApiErrorCode.VALIDATION_ERROR, "This payment has already been processed.");
   }
+  if (raw.includes("INVALID_AMOUNT")) {
+    // grant_credits() rejects a non-positive amount — a caller bug, surfaced as 400.
+    return dbError(ApiErrorCode.VALIDATION_ERROR, "Invalid credit amount.");
+  }
+  if (raw.includes("USER_NOT_FOUND")) {
+    // grant_credits() target row missing — a server-side inconsistency, not user error.
+    return dbError(ApiErrorCode.INTERNAL_ERROR, "Account not found.");
+  }
 
   // --- SQLSTATE constraint violations ---------------------------------------
   switch (error.code) {

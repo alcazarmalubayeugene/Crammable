@@ -51,15 +51,18 @@ export async function logReferralEvent(
   return data as ReferralEvent;
 }
 
-/** Events where the user is the referrer or the referred party (rewards page). */
-export async function listReferralEventsForUser(
-  userId: string
-): Promise<ReferralEvent[]> {
+/**
+ * Events where the current user is the referrer or the referred party (rewards
+ * page). The referral_events SELECT RLS policy is exactly
+ * `referrer_id = auth.uid() OR referred_id = auth.uid()`, so a plain select
+ * through the session client already returns precisely those rows — no explicit
+ * filter (and no string interpolation) needed.
+ */
+export async function listReferralEventsForCurrentUser(): Promise<ReferralEvent[]> {
   const supabase = await createSessionClient();
   const { data, error } = await supabase
     .from(TableNames.referralEvents)
     .select("*")
-    .or(`referrer_id.eq.${userId},referred_id.eq.${userId}`)
     .order("created_at", { ascending: false });
   if (error) throw toDbError(error, "Failed to load referral history.");
   return (data as ReferralEvent[]) ?? [];

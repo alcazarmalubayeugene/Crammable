@@ -1,7 +1,8 @@
 import { createSessionClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { TableNames, type Profile } from "@/lib/contracts";
+import { TableNames, Validation, type Profile } from "@/lib/contracts";
 import { toDbError } from "@/lib/db/errors";
+import { ensureMaxLength } from "@/lib/db/validate";
 
 /**
  * Profile reads/writes.
@@ -39,6 +40,9 @@ export async function updateOwnProfile(
   userId: string,
   fields: EditableProfileFields
 ): Promise<Profile> {
+  ensureMaxLength(fields.full_name, Validation.profile.fullNameMaxLength, "Full name");
+  ensureMaxLength(fields.course, Validation.profile.courseMaxLength, "Course");
+
   // Build the payload from an explicit allow-list rather than forwarding
   // `fields` — defense in depth so a route that passes an unvalidated body can
   // never reach a privileged column (e.g. token_balance) through this helper.

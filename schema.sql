@@ -44,6 +44,8 @@
 --           renewal-stacking expiry
 --   PR-H2 — apply_card_review() does the review-counter increment in one
 --           atomic statement (was a lost-update race in the app layer)
+--   PR-M2 — approve_payment() now also grants the Pro monthly allotment (30)
+--           via grant_credits() in the same transaction
 -- =============================================================================
 
 
@@ -727,6 +729,11 @@ BEGIN
                                     + INTERVAL '30 days',
          updated_at               = now()
   WHERE  id = v_user_id;
+
+  -- M2: grant the Pro monthly allotment (contracts TierLimits.pro.monthlyCredits = 30)
+  -- in the same transaction. No monthly top-up cron exists yet, so approval is
+  -- currently the only place a Pro user receives their credits.
+  PERFORM public.grant_credits(v_user_id, 30);
 
   INSERT INTO public.admin_action_log (admin_id, payment_id, action, notes)
   VALUES (p_admin_id, p_payment_id, 'approved', p_notes);

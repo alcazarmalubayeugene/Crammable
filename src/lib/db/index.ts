@@ -72,7 +72,7 @@ export {
 // Referrals
 export {
   logReferralEvent,
-  listReferralEventsForUser,
+  listReferralEventsForCurrentUser,
   type NewReferralEventInput,
 } from "@/lib/db/referrals";
 

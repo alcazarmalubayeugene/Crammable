@@ -2,10 +2,12 @@ import { createSessionClient } from "@/lib/supabase/server";
 import {
   LivingDeck,
   TableNames,
+  Validation,
   type Flashcard,
   type GeneratedCard,
 } from "@/lib/contracts";
 import { toDbError } from "@/lib/db/errors";
+import { ensureMaxItems, ensureMaxLength } from "@/lib/db/validate";
 
 /**
  * Flashcard reads/writes through the session client. user_id is denormalised on
@@ -27,6 +29,16 @@ export async function insertFlashcards(
   isReinforcement: boolean = false
 ): Promise<Flashcard[]> {
   if (cards.length === 0) return [];
+
+  // Validate before touching the DB (fail fast; backstops route-level Zod).
+  for (const card of cards) {
+    ensureMaxLength(card.front, Validation.flashcard.frontMaxLength, "Card front");
+    ensureMaxLength(card.back, Validation.flashcard.backMaxLength, "Card back");
+    ensureMaxItems(card.tags, Validation.flashcard.maxTags, "Card tags");
+    for (const tag of card.tags) {
+      ensureMaxLength(tag, Validation.flashcard.tagMaxLength, "Tag");
+    }
+  }
 
   const supabase = await createSessionClient();
   const rows = cards.map((card) => ({

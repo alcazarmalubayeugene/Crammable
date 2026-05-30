@@ -30,8 +30,10 @@ export async function checkRateLimit(
   endpoint: string
 ): Promise<RateLimitResult> {
   const rule = RateLimits[endpoint];
-  // No rule configured → not rate limited.
-  if (!rule) return { allowed: true, remaining: Number.POSITIVE_INFINITY };
+  // No rule configured → not rate limited. Use MAX_SAFE_INTEGER rather than
+  // Infinity: RateLimitResult.remaining is serialized to JSON, and Infinity
+  // becomes null there.
+  if (!rule) return { allowed: true, remaining: Number.MAX_SAFE_INTEGER };
 
   const admin = createAdminClient();
   const { data, error } = await admin.rpc("check_rate_limit", {
