@@ -9,12 +9,14 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.106.2",
     "next": "16.2.6",
     "pdfjs-dist": "^5.7.284",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "tesseract.js": "^7.0.0"
+    "tesseract.js": "^7.0.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
