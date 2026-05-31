@@ -1,3 +1,9 @@
+---
+description: 
+alwaysApply: true
+---
+
+@AGENTS.md
 
 # CLAUDE.md — Crammable Backend
 
