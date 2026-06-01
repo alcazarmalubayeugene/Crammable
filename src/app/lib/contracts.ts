@@ -308,7 +308,7 @@ export interface AdminActionLog {
 // Request: multipart/form-data with a `file` field (PDF only)
 
 export type UploadResponse =
-  | { success: true;  extractedText: string; pdfType: PdfType.TEXT }
+  | { success: true;  extractedText: string; pdfType: typeof PdfType.TEXT }
   | { success: false; needsOCR: true }  // client should run Tesseract.js
   | { success: false; error: ApiError };
 
