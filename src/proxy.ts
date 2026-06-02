@@ -19,7 +19,7 @@ const PROTECTED_PREFIXES = [
 /** Pages that should redirect to /dashboard when the user IS logged in. */
 const AUTH_ONLY_PAGES = [Routes.login, Routes.signup] as const;
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { supabase, response } = createMiddlewareClient(request);
 
   // getUser() validates the JWT against the Supabase auth server.
