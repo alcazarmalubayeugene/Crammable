@@ -124,6 +124,31 @@ Then run: `npm run dev`
 
 ---
 
+## Bug Fix Documentation Rule
+
+Whenever a bug is fixed, it **must** be documented here with three things:
+1. **What broke** — what the symptom was
+2. **Why it happened** — the root cause
+3. **What to watch out for** — so teammates don't cause the same bug again
+
+### Known fixes so far
+
+---
+
+#### Login not working on new machines
+- **What broke:** Users couldn't log in; session didn't persist after signing in.
+- **Why:** `.env.local` was missing on the new machine (it's gitignored and never committed), so Supabase had no URL or keys to connect to.
+- **Watch out for:** Every new machine or fresh clone needs its own `.env.local` created manually. See the New PC Setup section.
+
+---
+
+#### Login broken after Next.js 16 upgrade (`middleware.ts` → `proxy.ts`)
+- **What broke:** Session cookies weren't being refreshed properly, causing logged-in users to get redirected back to `/login`.
+- **Why:** Next.js 16 deprecated `middleware.ts` and renamed it to `proxy.ts` with a new export name (`proxy` instead of `middleware`). Having both files at once caused double cookie writes that cancelled each other out.
+- **Watch out for:** Never rename `proxy.ts` back to `middleware.ts`. Never have both files exist at the same time. If you see the warning _"The middleware file convention is deprecated"_, the fix is to rename and re-export correctly.
+
+---
+
 ## Notes for Teammates
 
 - **Quiz questions** are currently generated client-side from the deck's flashcards.
