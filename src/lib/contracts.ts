@@ -29,6 +29,7 @@
 
 export const App = {
   name:         "Crammable",
+  version:      "v.01",                  // bump by 0.1 on every meaningful frontend update
   tagline:      "Turn any document into a flashcard deck — in seconds.",
   supportEmail: "support@crammable.ph",  // update once domain is live
   gcashName:    "Crammable",             // name displayed in GCash payment screen

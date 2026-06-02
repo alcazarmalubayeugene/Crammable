@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Lora, DM_Sans } from "next/font/google";
+import { App } from "@/lib/contracts";
 import "./globals.css";
 
 const lora = Lora({
@@ -32,6 +33,26 @@ export default function RootLayout({
         style={{ fontFamily: "var(--font-dm-sans), sans-serif" }}
       >
         {children}
+        <div
+          style={{
+            position: "fixed",
+            bottom: 12,
+            left: 14,
+            zIndex: 40,
+            fontSize: 11,
+            fontWeight: 600,
+            color: "#C49A6C",
+            background: "rgba(46,26,12,0.75)",
+            backdropFilter: "blur(4px)",
+            padding: "3px 9px",
+            borderRadius: 6,
+            letterSpacing: "0.04em",
+            pointerEvents: "none",
+            userSelect: "none",
+          }}
+        >
+          {App.version}
+        </div>
       </body>
     </html>
   );

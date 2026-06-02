@@ -138,6 +138,19 @@ Then run: `npm run dev`
 
 ---
 
+## Versioning
+
+The app displays a version badge on every page (bottom-left corner).
+The version lives in `App.version` inside `src/lib/contracts.ts` — update it there and it
+changes everywhere automatically.
+
+**Rules:**
+- Start: `v.01`
+- Every meaningful update (new feature, bug fix, page change): bump by `+0.1` → `v.02`, `v.03`, …
+- Update `App.version` in `contracts.ts` **and** add a row to the Version History table below in the same commit.
+
+---
+
 ## Version History
 
 | Version | What changed |
@@ -149,3 +162,4 @@ Then run: `npm run dev`
 | v1.05 | Added /upgrade — GCash manual payment flow |
 | v1.06 | Added /rewards, /settings, /admin — all pages complete |
 | v1.07 | Fixed login: replaced deprecated middleware.ts with proxy.ts (Next.js 16) |
+| v.01  | Added version badge (bottom-left, all pages); dashboard shows "No active decks" |
