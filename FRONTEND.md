@@ -51,6 +51,23 @@ yet implemented by the backend; the UI will show an error gracefully until they 
 
 ---
 
+## Auth Proxy (Next.js 16)
+
+Next.js 16 renamed `middleware.ts` → `proxy.ts`. The file lives at `src/proxy.ts`
+and exports a `proxy` function (not `middleware`). It handles three things:
+
+1. **Redirect unauthenticated users** away from protected routes → `/login`
+2. **Redirect authenticated users** away from `/login` and `/signup` → `/dashboard`
+3. **Block non-admins** from `/admin` → `/dashboard`
+
+The session cookie refresh (required by `@supabase/ssr`) also happens here via
+`createMiddlewareClient` in `src/lib/supabase/middleware-client.ts`.
+
+> ⚠️ **Do not rename this file back to `middleware.ts`.** Having both files at once
+> causes double cookie writes that break login session persistence.
+
+---
+
 ## Supabase Client
 
 The frontend uses `getSupabaseBrowserClient()` from `@/lib/supabase/browser`.
@@ -92,12 +109,16 @@ git checkout FrontEnd
 npm install
 ```
 
-Create `.env.local` in the root:
+Create `.env.local` in the project root (this file is gitignored — every machine needs its own copy):
+
 ```
 NEXT_PUBLIC_SUPABASE_URL=https://gjrdlmxlqngqcnflygcp.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_dGN7NMHRmhnu9GfT25Jdhw_z6N2yPGD
 SUPABASE_URL=https://gjrdlmxlqngqcnflygcp.supabase.co
 ```
+
+> **Missing `.env.local` = login won't work.** The file is never committed to git,
+> so every new machine must create it manually before running the app.
 
 Then run: `npm run dev`
 
@@ -127,3 +148,4 @@ Then run: `npm run dev`
 | v1.04 | Added /decks/new wrapper, /decks/[id] flip-card viewer, /quiz/[deckId] session, /quiz/[deckId]/result |
 | v1.05 | Added /upgrade — GCash manual payment flow |
 | v1.06 | Added /rewards, /settings, /admin — all pages complete |
+| v1.07 | Fixed login: replaced deprecated middleware.ts with proxy.ts (Next.js 16) |
