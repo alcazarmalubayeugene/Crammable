@@ -14,36 +14,40 @@
 | `/` | `src/app/page.tsx` | ✅ Done | Landing page — hero, features, pricing |
 | `/login` | `src/app/login/page.tsx` | ✅ Done | Login form — wired to Supabase auth |
 | `/signup` | `src/app/signup/page.tsx` | ✅ Done | Signup form — wired to Supabase auth |
-| `/dashboard` | `src/app/dashboard/page.tsx` | ✅ Done | User dashboard — shows credits, decks, plan |
-| `/decks/new` | `src/app/decks/new/page.tsx` | 🔲 Next | PDF upload → AI generation flow |
-| `/decks/[id]` | `src/app/decks/[id]/page.tsx` | 🔲 Pending | Deck detail — flashcard viewer |
-| `/quiz/[deckId]` | `src/app/quiz/[deckId]/page.tsx` | 🔲 Pending | Interactive quiz session |
-| `/quiz/[deckId]/result` | `src/app/quiz/[deckId]/result/page.tsx` | 🔲 Pending | Quiz results screen |
-| `/upgrade` | `src/app/upgrade/page.tsx` | 🔲 Pending | GCash payment / Pro upgrade |
-| `/rewards` | `src/app/rewards/page.tsx` | 🔲 Pending | Referral & credits hub |
-| `/settings` | `src/app/settings/page.tsx` | 🔲 Pending | Profile settings |
-| `/admin` | `src/app/admin/page.tsx` | 🔲 Pending | Admin payment approval panel |
+| `/dashboard` | `src/app/dashboard/page.tsx` | ✅ Done | User dashboard — credits, plan, deck list |
+| `/decks/new` | `src/app/decks/new/page.tsx` | ✅ Done | PDF upload → AI generation flow (PdfUploadFlow) |
+| `/decks/[id]` | `src/app/decks/[id]/page.tsx` | ✅ Done | Deck detail — flip-card viewer, quiz CTA |
+| `/quiz/[deckId]` | `src/app/quiz/[deckId]/page.tsx` | ✅ Done | Quiz session — MC / Identification / Mixed |
+| `/quiz/[deckId]/result` | `src/app/quiz/[deckId]/result/page.tsx` | ✅ Done | Score, missed-card review, retry/back actions |
+| `/upgrade` | `src/app/upgrade/page.tsx` | ✅ Done | GCash manual payment — 13-digit ref number form |
+| `/rewards` | `src/app/rewards/page.tsx` | ✅ Done | Referral code, ways to earn, claim code, history |
+| `/settings` | `src/app/settings/page.tsx` | ✅ Done | Edit name/course, account info, sign out |
+| `/admin` | `src/app/admin/page.tsx` | ✅ Done | Admin-only — approve/reject GCash payments |
 
 ---
 
 ## API Routes the Frontend Calls
 
-These are all defined in `contracts.ts` under `ApiPaths`. The frontend
-calls these via `fetch()` — the backend team owns the implementation.
+All paths come from `ApiPaths` in `contracts.ts`. The frontend calls these via
+`fetch()` — the backend team owns the implementation. Routes marked ⚠️ are not
+yet implemented by the backend; the UI will show an error gracefully until they are.
 
-| Endpoint | Method | Used by page |
-|---|---|---|
-| `/api/upload` | POST | `/decks/new` |
-| `/api/generate` | POST | `/decks/new` |
-| `/api/decks` | GET | `/dashboard` |
-| `/api/decks/[id]` | GET | `/decks/[id]` |
-| `/api/quiz/[id]` | POST | `/quiz/[deckId]` |
-| `/api/quiz/result` | POST | `/quiz/[deckId]` |
-| `/api/referral/claim` | POST | `/rewards` |
-| `/api/payment/submit` | POST | `/upgrade` |
-| `/api/admin/payments` | GET | `/admin` |
-| `/api/admin/payments/approve` | POST | `/admin` |
-| `/api/admin/payments/reject` | POST | `/admin` |
+| Endpoint | Method | Used by page | Backend status |
+|---|---|---|---|
+| `/api/upload` | POST | `/decks/new` | ✅ Implemented |
+| `/api/generate` | POST | `/decks/new` | ✅ Implemented (test mode) |
+| `/api/decks` | GET | `/dashboard` | ⚠️ Not yet — reads Supabase directly |
+| `/api/decks/[id]` | GET | `/decks/[id]` | ⚠️ Not yet — reads Supabase directly |
+| `/api/quiz/[id]` | POST | `/quiz/[deckId]` | ⚠️ Not yet — questions generated client-side |
+| `/api/quiz/result` | POST | `/quiz/[deckId]` | ⚠️ Not yet — results stored in sessionStorage |
+| `/api/referral/claim` | POST | `/rewards` | ⚠️ Not yet |
+| `/api/payment/submit` | POST | `/upgrade` | ⚠️ Not yet |
+| `/api/admin/payments` | GET | `/admin` | ⚠️ Not yet |
+| `/api/admin/payments/approve` | POST | `/admin` | ⚠️ Not yet |
+| `/api/admin/payments/reject` | POST | `/admin` | ⚠️ Not yet |
+
+> **Note for teammates:** When you implement a route, remove the ⚠️ above and
+> update the corresponding page if it was reading from Supabase directly as a workaround.
 
 ---
 
@@ -99,9 +103,27 @@ Then run: `npm run dev`
 
 ---
 
+## Notes for Teammates
+
+- **Quiz questions** are currently generated client-side from the deck's flashcards.
+  When `/api/quiz/[id]` is ready, replace the `buildQuestions()` call in
+  `src/app/quiz/[deckId]/page.tsx` with a `fetch(ApiPaths.startQuiz(deckId))`.
+- **Quiz results** are passed to the result page via `sessionStorage` (key: `crammable_quiz_result`).
+  When `/api/quiz/result` is ready, add the submit call before the redirect in `nextQuestion()`.
+- **Deck + flashcard reads** on `/decks/[id]` and `/quiz/[deckId]` query Supabase directly.
+  RLS ensures users only see their own data. These are safe as-is until the API routes exist.
+- **Auth headers** — all `fetch()` calls to protected routes use `authHeaders()` from
+  `src/lib/api/auth-headers.ts`, which attaches `Authorization: Bearer <token>`.
+
+---
+
 ## Version History
 
 | Version | What changed |
 |---|---|
 | v1.01 | Landing page, login page, signup page, contracts.ts |
 | v1.02 | Merged auth-ocr branch, fixed Tailwind v4, updated dependencies, added dashboard |
+| v1.03 | Fixed auth flow, restored signup/login/dashboard, fixed browser client |
+| v1.04 | Added /decks/new wrapper, /decks/[id] flip-card viewer, /quiz/[deckId] session, /quiz/[deckId]/result |
+| v1.05 | Added /upgrade — GCash manual payment flow |
+| v1.06 | Added /rewards, /settings, /admin — all pages complete |
