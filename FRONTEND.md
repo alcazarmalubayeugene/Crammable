@@ -146,8 +146,8 @@ changes everywhere automatically.
 
 **Rules:**
 - Start: `v.01`
-- Every meaningful update (new feature, bug fix, page change): bump by `+0.1` → `v.02`, `v.03`, …
-- Update `App.version` in `contracts.ts` **and** add a row to the Version History table below in the same commit.
+- Bump by `+0.1` **once per working session** (not per individual fix or change) → `v.02`, `v.03`, …
+- At the end of each session: update `App.version` in `contracts.ts` **and** add one row to the Version History table below.
 
 ---
 
@@ -155,11 +155,4 @@ changes everywhere automatically.
 
 | Version | What changed |
 |---|---|
-| v1.01 | Landing page, login page, signup page, contracts.ts |
-| v1.02 | Merged auth-ocr branch, fixed Tailwind v4, updated dependencies, added dashboard |
-| v1.03 | Fixed auth flow, restored signup/login/dashboard, fixed browser client |
-| v1.04 | Added /decks/new wrapper, /decks/[id] flip-card viewer, /quiz/[deckId] session, /quiz/[deckId]/result |
-| v1.05 | Added /upgrade — GCash manual payment flow |
-| v1.06 | Added /rewards, /settings, /admin — all pages complete |
-| v1.07 | Fixed login: replaced deprecated middleware.ts with proxy.ts (Next.js 16) |
-| v.01  | Added version badge (bottom-left, all pages); dashboard shows "No active decks" |
+| v.01 | Initial frontend — landing, login, signup, dashboard, all app pages, proxy auth fix, version badge |
