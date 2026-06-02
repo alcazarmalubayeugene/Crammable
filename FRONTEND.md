@@ -135,6 +135,22 @@ Whenever a bug is fixed, it **must** be documented here with three things:
 
 ---
 
+#### Quiz result page clears on refresh *(deferred — building/testing phase)*
+- **What broke:** Refreshing `/quiz/[deckId]/result` shows "No quiz results found" because results are stored only in `sessionStorage`, which browser clears on refresh.
+- **Why:** The backend `/api/quiz/result` route is not yet implemented. Results are held client-side as a temporary workaround.
+- **Resolution:** When Mallubay/Alcazar implement `/api/quiz/result`, the quiz page will POST answers to the DB before redirecting. The result page will then read from the DB, not `sessionStorage`.
+- **Watch out for:** Do not ship this to production until quiz results are persisted server-side.
+
+---
+
+#### Quiz scores can be tampered via DevTools *(deferred — building/testing phase)*
+- **What broke:** A user could open DevTools, edit `sessionStorage`, and fake a perfect score on the result page.
+- **Why:** Same root cause as above — scores are computed client-side and passed via `sessionStorage` because the backend quiz routes aren't ready yet.
+- **Resolution:** Backend must re-compute and validate scores server-side. Never trust client-submitted `isCorrect` flags.
+- **Watch out for:** If the backend routes accept a pre-computed score from the frontend without re-validating, this becomes a real exploit.
+
+---
+
 #### Login not working on new machines
 - **What broke:** Users couldn't log in; session didn't persist after signing in.
 - **Why:** `.env.local` was missing on the new machine (it's gitignored and never committed), so Supabase had no URL or keys to connect to.
@@ -181,3 +197,4 @@ changes everywhere automatically.
 | Version | What changed |
 |---|---|
 | v.01 | Initial frontend — landing, login, signup, dashboard, all app pages, proxy auth fix, version badge |
+| v.02 | Security hardening — user_id double-filter on Supabase queries, load timeouts, login redirect fix, referral input sanitization, sign-out confirmation, dashboard deck shortcut |

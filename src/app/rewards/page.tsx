@@ -466,7 +466,8 @@ export default function RewardsPage() {
                   type="text"
                   value={claimCode}
                   onChange={(e) => {
-                    setClaimCode(e.target.value.toUpperCase().slice(0, Validation.referralCode.length));
+                    const clean = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, Validation.referralCode.length);
+                    setClaimCode(clean);
                     setClaimError("");
                   }}
                   placeholder="e.g. AB12CD34"

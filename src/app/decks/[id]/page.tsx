@@ -30,13 +30,19 @@ export default function DeckDetailPage() {
   const [isFlipped, setIsFlipped] = useState(false);
 
   useEffect(() => {
+    const timeout = setTimeout(() => {
+      setError("Taking too long to load. Check your connection and refresh.");
+      setLoading(false);
+    }, 10_000);
+
     async function load() {
+      try {
       const supabase = getSupabaseBrowserClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) {
-        window.location.href = Routes.login;
+        window.location.replace(Routes.login);
         return;
       }
 
@@ -50,11 +56,13 @@ export default function DeckDetailPage() {
           .from(TableNames.decks)
           .select("*")
           .eq("id", deckId)
+          .eq("user_id", user.id)
           .single(),
         supabase
           .from(TableNames.flashcards)
           .select("*")
           .eq("deck_id", deckId)
+          .eq("user_id", user.id)
           .order("created_at"),
       ]);
 
@@ -68,8 +76,12 @@ export default function DeckDetailPage() {
       setDeck(deckRes.data as Deck);
       setCards((cardsRes.data ?? []) as Flashcard[]);
       setLoading(false);
+      } finally {
+        clearTimeout(timeout);
+      }
     }
     load();
+    return () => clearTimeout(timeout);
   }, [deckId]);
 
   function goTo(idx: number) {

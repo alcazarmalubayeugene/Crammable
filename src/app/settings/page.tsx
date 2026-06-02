@@ -100,10 +100,11 @@ export default function SettingsPage() {
   }
 
   async function handleLogout() {
+    if (!confirm("Sign out of Crammable?")) return;
     setLoggingOut(true);
     const supabase = getSupabaseBrowserClient();
     await supabase.auth.signOut();
-    window.location.href = Routes.home;
+    window.location.replace(Routes.home);
   }
 
   // ── loading ───────────────────────────────────────────────────────────────────

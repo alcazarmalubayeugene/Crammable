@@ -111,22 +111,29 @@ export default function QuizPage() {
   const [answers, setAnswers] = useState<QuizResultData["answers"]>([]);
 
   useEffect(() => {
+    const timeout = setTimeout(() => {
+      setLoadError("Taking too long to load. Check your connection and refresh.");
+      setPhase("error");
+    }, 10_000);
+
     async function load() {
+      try {
       const supabase = getSupabaseBrowserClient();
       const {
         data: { user },
       } = await supabase.auth.getUser();
       if (!user) {
-        window.location.href = Routes.login;
+        window.location.replace(Routes.login);
         return;
       }
 
       const [deckRes, cardsRes] = await Promise.all([
-        supabase.from(TableNames.decks).select("*").eq("id", deckId).single(),
+        supabase.from(TableNames.decks).select("*").eq("id", deckId).eq("user_id", user.id).single(),
         supabase
           .from(TableNames.flashcards)
           .select("*")
           .eq("deck_id", deckId)
+          .eq("user_id", user.id)
           .order("created_at"),
       ]);
 
@@ -139,8 +146,12 @@ export default function QuizPage() {
       setDeck(deckRes.data as Deck);
       setCards((cardsRes.data ?? []) as Flashcard[]);
       setPhase("setup");
+      } finally {
+        clearTimeout(timeout);
+      }
     }
     load();
+    return () => clearTimeout(timeout);
   }, [deckId]);
 
   // ── quiz actions ──────────────────────────────────────────────────────────────

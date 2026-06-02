@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Routes } from "@/lib/contracts";
 
 export default function LoginPage() {
   const [email, setEmail]       = useState("");
@@ -8,7 +9,7 @@ export default function LoginPage() {
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState("");
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault();
     setError("");
 
@@ -33,8 +34,8 @@ export default function LoginPage() {
       return;
     }
 
-    // Login successful — redirect to dashboard
-    window.location.href = "/dashboard";
+    // replace() prevents the login page from appearing in browser back-history
+    window.location.replace(Routes.dashboard);
   }
 
   const inputStyle = {

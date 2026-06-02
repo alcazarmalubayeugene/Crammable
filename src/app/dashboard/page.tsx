@@ -113,10 +113,11 @@ export default function DashboardPage() {
 
           <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16 }}>
             <div style={{ width: 44, height: 44, background: "#EDF5E4", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>📚</div>
-            <div>
+            <div style={{ flex: 1 }}>
               <div style={{ fontFamily: "var(--font-lora, serif)", fontSize: 20, fontWeight: 700, color: "#8A6E52", lineHeight: 1 }}>No active decks</div>
               <div style={{ fontSize: 12, color: "#8A6E52", marginTop: 3 }}>Active decks</div>
             </div>
+            <a href="/decks/new" style={{ fontSize: 20, color: "#C47A2E", textDecoration: "none", fontWeight: 700, lineHeight: 1 }} title="Create a new deck">+</a>
           </div>
 
           <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16 }}>
