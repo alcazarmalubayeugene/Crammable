@@ -1,23 +1,25 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-// import { useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import {
-  // ApiErrorCode,
+  ApiErrorCode,
   ApiPaths,
   App,
   MAX_UPLOAD_SIZE_MB,
   OcrThresholds,
   PdfType,
-  // Routes,
+  Routes,
   UIMessages,
   type ApiResponse,
+  type GeneratedCard,
+  type GenerateRequest,
+  type GenerateResult,
   type UploadResult,
 } from "@/lib/contracts";
 import type { UploadTestDebug } from "@/app/api/upload/route";
 import { PDF_EXTRACTION_TEST_MODE } from "@/lib/dev/pdf-test-mode";
-// Supabase auth headers — disabled for PDF test mode
-// import { authHeaders } from "@/lib/api/auth-headers";
+import { authHeaders } from "@/lib/api/auth-headers";
 import { runOcrOnPages } from "@/lib/pdf/ocr-client";
 import { renderPdfPagesToCanvases } from "@/lib/pdf/render-pages-client";
 
@@ -27,18 +29,21 @@ type FlowPhase =
   | "ocr_confirm"
   | "ocr_running"
   | "paste_fallback"
+  | "generating"
   | "result"
-  // | "generating"
   | "error";
 
-type TestOutput = {
+type ResultView = {
   label: string;
-  payload: unknown;
   extractedText?: string;
+  cards?: GeneratedCard[];
+  creditsRemaining?: number;
+  deckId?: string;
+  debug?: unknown;
 };
 
 export function PdfUploadFlow() {
-  // const router = useRouter();
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<FlowPhase>("idle");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -47,14 +52,8 @@ export function PdfUploadFlow() {
   const [pastedText, setPastedText] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
   const [statusLine, setStatusLine] = useState("");
-  const [testOutput, setTestOutput] = useState<TestOutput | null>(null);
   const [layer1Payload, setLayer1Payload] = useState<unknown>(null);
-
-  const showTestResult = useCallback((label: string, payload: unknown, extractedText?: string) => {
-    setTestOutput({ label, payload, extractedText });
-    setPhase("result");
-    setStatusLine("");
-  }, []);
+  const [resultView, setResultView] = useState<ResultView | null>(null);
 
   const resetToIdle = useCallback(() => {
     setPhase("idle");
@@ -64,26 +63,91 @@ export function PdfUploadFlow() {
     setPastedText("");
     setErrorMessage("");
     setStatusLine("");
-    setTestOutput(null);
     setLayer1Payload(null);
+    setResultView(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
-  // ── Generate / credits / DeepSeek — disabled for PDF test mode ──────────────
-  // const callGenerate = useCallback(async (extractedText: string, pdfType: ...) => { ... }, [router]);
+  const showExtractionPreview = useCallback(
+    (label: string, payload: unknown, extractedText?: string) => {
+      setResultView({ label, debug: payload, extractedText });
+      setPhase("result");
+      setStatusLine("");
+    },
+    [],
+  );
+
+  const callGenerate = useCallback(
+    async (
+      extractedText: string,
+      pdfType: (typeof PdfType)[keyof typeof PdfType],
+      debug?: unknown,
+    ) => {
+      setPhase("generating");
+      setStatusLine("Sending to DeepSeek and generating flashcards…");
+      setErrorMessage("");
+
+      const payload: GenerateRequest = { extractedText, pdfType };
+      const headers = await authHeaders({ "Content-Type": "application/json" });
+      const res = await fetch(ApiPaths.generate, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await res.json()) as ApiResponse<GenerateResult>;
+      if (!data.success) {
+        if (data.error.code === ApiErrorCode.EXTRACTION_FAILED) {
+          setPhase("paste_fallback");
+          setErrorMessage("");
+          setResultView({
+            label: "Extraction too weak for AI",
+            debug: data.error,
+            extractedText,
+          });
+          return;
+        }
+        setPhase("error");
+        setErrorMessage(data.error.message);
+        return;
+      }
+
+      const isPreview = data.deckId.startsWith("preview-");
+
+      if (isPreview) {
+        setResultView({
+          label: "DeepSeek flashcards (preview — not saved to database)",
+          extractedText: extractedText.slice(0, 2000),
+          cards: data.cards,
+          creditsRemaining: data.creditsRemaining,
+          deckId: data.deckId,
+          debug,
+        });
+        setPhase("result");
+        setStatusLine("");
+        return;
+      }
+
+      setStatusLine(UIMessages.creditDeducted(data.creditsRemaining));
+      router.push(Routes.deck(data.deckId));
+    },
+    [router],
+  );
 
   const uploadPdf = useCallback(
     async (file: File) => {
       setPhase("uploading");
       setErrorMessage("");
-      setTestOutput(null);
+      setResultView(null);
       setStatusLine("Uploading and analyzing PDF (Layer 1)…");
 
       const formData = new FormData();
       formData.append("file", file);
 
+      const headers = await authHeaders();
       const res = await fetch(ApiPaths.upload, {
         method: "POST",
+        headers,
         body: formData,
       });
 
@@ -98,7 +162,11 @@ export function PdfUploadFlow() {
       }
 
       if (data.path === PdfType.TEXT) {
-        showTestResult("Layer 1 — text PDF (server)", data, data.extractedText);
+        if (PDF_EXTRACTION_TEST_MODE) {
+          showExtractionPreview("Layer 1 — text PDF", data, data.extractedText);
+          return;
+        }
+        await callGenerate(data.extractedText, PdfType.TEXT, data._debug ?? data);
         return;
       }
 
@@ -107,7 +175,7 @@ export function PdfUploadFlow() {
       setLayer1Payload(data);
       setPhase("ocr_confirm");
     },
-    [showTestResult],
+    [callGenerate, showExtractionPreview],
   );
 
   const onFileSelected = useCallback(
@@ -124,7 +192,7 @@ export function PdfUploadFlow() {
 
     setPhase("ocr_running");
     setErrorMessage("");
-    setTestOutput(null);
+    setResultView(null);
 
     try {
       const rendered = await renderPdfPagesToCanvases(pdfFile, (current, total) => {
@@ -137,7 +205,7 @@ export function PdfUploadFlow() {
         setStatusLine(UIMessages.ocrProgress(current, total));
       });
 
-      const payload = {
+      const debug = {
         path: PdfType.OCR,
         needsPasteFallback: ocrResult.needsPasteFallback,
         minTesseractConfidence: OcrThresholds.minTesseractConfidence,
@@ -145,61 +213,70 @@ export function PdfUploadFlow() {
           page: p.pageNumber,
           confidence: Math.round(p.confidence * 1000) / 1000,
           charCount: p.text.replace(/\s/g, "").length,
-          textPreview: p.text.slice(0, 200),
         })),
-        extractedTextLength: ocrResult.extractedText.length,
       };
 
       if (ocrResult.needsPasteFallback || !ocrResult.extractedText.trim()) {
         setPhase("paste_fallback");
-        setTestOutput({
-          label: "Layer 2 — OCR failed majority confidence → Layer 3",
-          payload,
+        setResultView({
+          label: "Layer 2 — low OCR confidence → paste fallback",
+          debug,
         });
         return;
       }
 
-      showTestResult("Layer 2 — OCR success", payload, ocrResult.extractedText);
+      if (PDF_EXTRACTION_TEST_MODE) {
+        showExtractionPreview("Layer 2 — OCR success", debug, ocrResult.extractedText);
+        return;
+      }
+
+      await callGenerate(ocrResult.extractedText, PdfType.OCR, debug);
     } catch (err) {
       setPhase("paste_fallback");
       setErrorMessage(err instanceof Error ? err.message : "OCR failed");
-      setTestOutput({
-        label: "Layer 2 — OCR error",
-        payload: { error: String(err) },
-      });
     }
-  }, [pdfFile, showTestResult]);
+  }, [pdfFile, callGenerate, showExtractionPreview]);
 
-  const submitPaste = useCallback(() => {
+  const submitPaste = useCallback(async () => {
     const text = pastedText.trim();
     if (!text) {
       setErrorMessage("Please paste your notes before continuing.");
       return;
     }
     setErrorMessage("");
-    showTestResult("Layer 3 — manual paste", { path: PdfType.PASTE, charCount: text.length }, text);
-  }, [pastedText, showTestResult]);
 
-  const isBusy = phase === "uploading" || phase === "ocr_running";
+    if (PDF_EXTRACTION_TEST_MODE) {
+      showExtractionPreview("Layer 3 — manual paste", { path: PdfType.PASTE }, text);
+      return;
+    }
+
+    await callGenerate(text, PdfType.PASTE);
+  }, [pastedText, callGenerate, showExtractionPreview]);
+
+  const isBusy =
+    phase === "uploading" || phase === "ocr_running" || phase === "generating";
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       <header>
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          PDF extraction test
-        </h1>
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+          Upload PDF
+        </h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
           {PDF_EXTRACTION_TEST_MODE ? (
             <>
-              <span className="font-medium text-amber-700 dark:text-amber-400">Test mode on</span>
+              <span className="font-medium text-amber-700 dark:text-amber-400">
+                Extraction test mode
+              </span>
               {" — "}
-              Supabase, credits, DeepSeek, and database are bypassed. Upload a PDF (max{" "}
-              {MAX_UPLOAD_SIZE_MB} MB) and inspect the output below.
+              DeepSeek generate is off. Set PDF_EXTRACTION_TEST_MODE to false in{" "}
+              <code className="text-xs">src/lib/dev/pdf-test-mode.ts</code>.
             </>
           ) : (
             <>
-              Upload a Philippine university handout (PDF, max {MAX_UPLOAD_SIZE_MB} MB).{" "}
-              {App.name} uses a 3-layer reader: fast text extraction, then OCR, then manual paste.
+              Upload a handout (max {MAX_UPLOAD_SIZE_MB} MB). {App.name} extracts text, then
+              sends it to DeepSeek to build flashcards. One credit is used only after cards
+              are generated successfully.
             </>
           )}
         </p>
@@ -220,7 +297,7 @@ export function PdfUploadFlow() {
         </label>
       )}
 
-      {phase === "uploading" && (
+      {(phase === "uploading" || phase === "generating") && (
         <div
           className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
           role="status"
@@ -246,7 +323,7 @@ export function PdfUploadFlow() {
             <button
               type="button"
               onClick={runClientOcr}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900"
             >
               Continue (Layer 2 OCR)
             </button>
@@ -256,14 +333,14 @@ export function PdfUploadFlow() {
                 setPhase("paste_fallback");
                 setStatusLine("");
               }}
-              className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300"
             >
-              Skip to Layer 3 (paste)
+              Paste text instead
             </button>
             <button
               type="button"
               onClick={resetToIdle}
-              className="rounded-lg px-4 py-2 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+              className="rounded-lg px-4 py-2 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400"
             >
               Start over
             </button>
@@ -320,7 +397,7 @@ export function PdfUploadFlow() {
               onClick={submitPaste}
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
             >
-              Show paste output (Layer 3)
+              {PDF_EXTRACTION_TEST_MODE ? "Show paste output" : "Generate flashcards"}
             </button>
             <button
               type="button"
@@ -333,12 +410,12 @@ export function PdfUploadFlow() {
         </div>
       )}
 
-      {phase === "result" && testOutput && (
+      {phase === "result" && resultView && (
         <div className="flex flex-col gap-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
-              {testOutput.label}
-            </h2>
+            <h3 className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+              {resultView.label}
+            </h3>
             <button
               type="button"
               onClick={resetToIdle}
@@ -348,25 +425,53 @@ export function PdfUploadFlow() {
             </button>
           </div>
 
-          {testOutput.extractedText !== undefined && (
-            <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
-                Extracted text
+          {resultView.cards && resultView.cards.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Generated flashcards ({resultView.cards.length})
               </p>
-              <pre className="max-h-64 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 text-xs whitespace-pre-wrap text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
-                {testOutput.extractedText || "(empty)"}
-              </pre>
+              <ul className="flex max-h-96 flex-col gap-2 overflow-auto">
+                {resultView.cards.map((card, i) => (
+                  <li
+                    key={i}
+                    className="rounded-lg border border-zinc-200 bg-white p-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                  >
+                    <p className="font-medium text-zinc-900 dark:text-zinc-100">
+                      {card.front}
+                    </p>
+                    <p className="mt-1 text-zinc-600 dark:text-zinc-400">{card.back}</p>
+                    {card.tags.length > 0 && (
+                      <p className="mt-2 text-xs text-zinc-500">
+                        {card.tags.join(" · ")}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
-          <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
-              API / pipeline JSON
-            </p>
-            <pre className="max-h-80 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 text-xs text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
-              {JSON.stringify(testOutput.payload, null, 2)}
-            </pre>
-          </div>
+          {resultView.extractedText !== undefined && (
+            <details>
+              <summary className="cursor-pointer text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Extracted text preview
+              </summary>
+              <pre className="mt-2 max-h-48 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 text-xs whitespace-pre-wrap text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
+                {resultView.extractedText || "(empty)"}
+              </pre>
+            </details>
+          )}
+
+          {resultView.debug != null && (
+            <details>
+              <summary className="cursor-pointer text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Pipeline debug JSON
+              </summary>
+              <pre className="mt-2 max-h-48 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 text-xs text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
+                {JSON.stringify(resultView.debug, null, 2)}
+              </pre>
+            </details>
+          )}
         </div>
       )}
 
@@ -383,6 +488,10 @@ export function PdfUploadFlow() {
             Try again
           </button>
         </div>
+      )}
+
+      {!PDF_EXTRACTION_TEST_MODE && phase === "generating" && (
+        <p className="text-xs text-zinc-500">{UIMessages.aiDisclaimer}</p>
       )}
     </div>
   );

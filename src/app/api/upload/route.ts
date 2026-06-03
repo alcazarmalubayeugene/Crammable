@@ -1,6 +1,7 @@
 import {
   ApiErrorCode,
-  // ApiPaths,
+  ApiPaths,
+  EnvKeys,
   MAX_UPLOAD_SIZE_MB,
   OcrThresholds,
   PdfType,
@@ -13,13 +14,12 @@ import {
 import { apiFail, genericInternalError } from "@/lib/api/errors";
 import { PDF_EXTRACTION_TEST_MODE } from "@/lib/dev/pdf-test-mode";
 import { extractTextFromPdfBuffer } from "@/lib/pdf/extract-text-server";
-// Supabase — disabled for PDF test mode
-// import {
-//   checkRateLimit,
-//   getMaxUploadPages,
-//   getProfileForUser,
-//   getUserFromRequest,
-// } from "@/lib/supabase/server";
+import {
+  checkRateLimit,
+  getMaxUploadPages,
+  getProfileForUser,
+  getUserFromRequest,
+} from "@/lib/supabase/server";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,6 +35,13 @@ export type UploadTestDebug = {
   threshold: typeof OcrThresholds.minCharsPerPageForText;
 };
 
+function isPersistenceEnabled(): boolean {
+  return Boolean(
+    process.env[EnvKeys.supabaseUrl]?.trim() &&
+      process.env[EnvKeys.supabaseServiceRoleKey]?.trim(),
+  );
+}
+
 function isPdfFile(file: File): boolean {
   const name = file.name.toLowerCase();
   return file.type === PDF_MIME || name.endsWith(".pdf");
@@ -42,22 +49,44 @@ function isPdfFile(file: File): boolean {
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    // ── Supabase / auth / rate limit (re-enable when PDF_EXTRACTION_TEST_MODE = false) ──
-    // const user = await getUserFromRequest(request);
-    // if (!user) {
-    //   return apiFail(ApiErrorCode.UNAUTHORIZED, "Please sign in to upload a document.", 401);
-    // }
-    // const profile = await getProfileForUser(user.id);
-    // if (!profile) {
-    //   return apiFail(ApiErrorCode.UNAUTHORIZED, "Profile not found. Please sign in again.", 401);
-    // }
-    // if (!profile.consent_deepseek) {
-    //   return apiFail(ApiErrorCode.CONSENT_REQUIRED, "You must consent to AI processing before uploading documents.", 403);
-    // }
-    // const rate = await checkRateLimit(user.id, ApiPaths.upload);
-    // if (!rate.allowed) {
-    //   return apiFail(ApiErrorCode.RATE_LIMITED, UIMessages.rateLimited, 429);
-    // }
+    let maxPages: number = TierLimits[SubscriptionTier.FREE].maxUploadPages;
+    let maxUploadMb: number = TierLimits[SubscriptionTier.FREE].maxUploadSizeMb;
+
+    if (!PDF_EXTRACTION_TEST_MODE && isPersistenceEnabled()) {
+      const user = await getUserFromRequest(request);
+      if (!user) {
+        return apiFail(
+          ApiErrorCode.UNAUTHORIZED,
+          "Please sign in to upload a document.",
+          401,
+        );
+      }
+
+      const profile = await getProfileForUser(user.id);
+      if (!profile) {
+        return apiFail(
+          ApiErrorCode.UNAUTHORIZED,
+          "Profile not found. Please sign in again.",
+          401,
+        );
+      }
+
+      if (!profile.consent_deepseek) {
+        return apiFail(
+          ApiErrorCode.CONSENT_REQUIRED,
+          "You must consent to AI processing before uploading documents.",
+          403,
+        );
+      }
+
+      const rate = await checkRateLimit(user.id, ApiPaths.upload);
+      if (!rate.allowed) {
+        return apiFail(ApiErrorCode.RATE_LIMITED, UIMessages.rateLimited, 429);
+      }
+
+      maxPages = getMaxUploadPages(profile.subscription_tier);
+      maxUploadMb = TierLimits[profile.subscription_tier].maxUploadSizeMb;
+    }
 
     const formData = await request.formData();
     const file = formData.get("file");
@@ -77,8 +106,7 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const maxUploadMb = TierLimits[SubscriptionTier.FREE].maxUploadSizeMb;
-    if (file.size > MAX_BYTES) {
+    if (file.size > maxUploadMb * 1024 * 1024) {
       return apiFail(
         ApiErrorCode.FILE_TOO_LARGE,
         `File must be ${maxUploadMb} MB or smaller.`,
@@ -89,15 +117,10 @@ export async function POST(request: Request): Promise<Response> {
     const buffer = await file.arrayBuffer();
     const extraction = await extractTextFromPdfBuffer(buffer);
 
-    const maxPages = PDF_EXTRACTION_TEST_MODE
-      ? TierLimits[SubscriptionTier.FREE].maxUploadPages
-      : TierLimits[SubscriptionTier.FREE].maxUploadPages;
-    // When re-enabling Supabase: use getMaxUploadPages(profile.subscription_tier)
-
     if (extraction.pageCount > maxPages) {
       return apiFail(
         ApiErrorCode.PAGE_LIMIT_EXCEEDED,
-        `This PDF has ${extraction.pageCount} pages. Max ${maxPages} pages (test mode: free tier).`,
+        `This PDF has ${extraction.pageCount} pages. Your plan allows up to ${maxPages} pages.`,
         400,
       );
     }
