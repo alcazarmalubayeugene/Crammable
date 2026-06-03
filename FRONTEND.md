@@ -198,6 +198,7 @@ changes everywhere automatically.
 |---|---|
 | v.01 | Initial frontend — landing, login, signup, dashboard, all app pages, proxy auth fix, version badge |
 | v.02 | Security hardening — user_id double-filter on Supabase queries, load timeouts, login redirect fix, referral input sanitization, sign-out confirmation, dashboard deck shortcut |
+| v.03 | DeepSeek flashcard generation live — merged prompt/AI-Gen branch, added openai package, full generate route (auth + Supabase persistence + credit deduction), PdfUploadFlow wired to callGenerate, PDF_EXTRACTION_TEST_MODE off, version badge moved to bottom-right |
 
 ---
 
@@ -206,26 +207,30 @@ changes everywhere automatically.
 **Last session: 2026-06-03**
 
 ### What happened
-- Team (John/Alcazar) pushed 80 files — full backend, all auth routes, DB layer, all app pages
-- Yujin's local had 3 merge conflicts after pull: `login/page.tsx`, `package.json`, `package-lock.json`
-- All resolved — team's version accepted for all three (correct approach)
-- Yujin's old `src/app/lib/supabase.ts` deleted — was pointing to wrong path, now obsolete
-- Correct Supabase browser client is `getSupabaseBrowserClient()` from `@/lib/supabase/browser`
-- `npm install` complete, `tsc --noEmit` passes (0 errors)
-- Login page uses `/api/auth/login` (John's route) — correct
-- Signup page uses `/api/auth/signup` — was already correct
-- `SUPABASE_SERVICE_ROLE_KEY` NOT in `.env.local` — but login still works (rate limit check is non-blocking try/catch)
-- App not yet tested end-to-end — Yujin was about to test at session end
+- Login tested and working — Yujin logged in with existing account (aerochrom2420@gmail.com)
+- Version badge moved from bottom-left to bottom-right (was covered by browser UI)
+- Discovered backend branch `prompt/AI-Gen` had full DeepSeek implementation ready
+- Merged `prompt/AI-Gen` into `FrontEnd` — clean merge, no conflicts
+- New files added: `src/lib/deepseek/client.ts`, `generate-cards.ts`, `index.ts`
+- `openai ^6.41.0` installed (DeepSeek uses OpenAI-compatible API)
+- `PDF_EXTRACTION_TEST_MODE` set to `false` — generation is now live
+- DeepSeek API key added to `.env.local` (`DEEPSEEK_API_KEY`)
+- Model set to `deepseek-v4-flash` in `.env.local`
+- `SUPABASE_SERVICE_ROLE_KEY` still missing — without it, cards generate but are NOT saved to DB (preview mode only). Full persistence needs this key from Alcazar.
+- Version bumped to v.03
 
 ### Pending
-- Test login/signup flow end-to-end (npm run dev → localhost:3000)
-- Get `SUPABASE_SERVICE_ROLE_KEY` from John/Alcazar for full rate-limit support
-- Confirm flashcard pages (/decks/[id], /decks/new, /quiz) work with real Supabase data
-- No new frontend changes needed yet — backend is now the active side
+- Get `SUPABASE_SERVICE_ROLE_KEY` from Alcazar — needed for deck/flashcard saves + credit deduction
+- Test full flow end-to-end with service role key: upload PDF → generate → save deck → redirect to `/decks/[id]`
+- Verify `/decks/[id]` and `/quiz/[deckId]` pages work with real saved data
 
 ### Key paths
+- DeepSeek lib: `src/lib/deepseek/` (client, generate-cards, index)
+- Generate route: `src/app/api/generate/route.ts`
+- Upload flow component: `src/components/upload/PdfUploadFlow.tsx`
+- Test mode flag: `src/lib/dev/pdf-test-mode.ts` — currently `false`
 - Supabase browser client: `@/lib/supabase/browser` → `getSupabaseBrowserClient()`
 - Auth routes: `/api/auth/login`, `/api/auth/signup`, `/api/auth/logout`
 - Contracts (source of truth): `src/lib/contracts.ts`
 - Route protection: `src/proxy.ts` (NOT middleware.ts — do not rename)
-- .env.local needs: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+- .env.local needs: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `DEEPSEEK_API_KEY`, `DEEPSEEK_MODEL`, `SUPABASE_SERVICE_ROLE_KEY`
