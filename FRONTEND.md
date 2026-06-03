@@ -198,3 +198,34 @@ changes everywhere automatically.
 |---|---|
 | v.01 | Initial frontend — landing, login, signup, dashboard, all app pages, proxy auth fix, version badge |
 | v.02 | Security hardening — user_id double-filter on Supabase queries, load timeouts, login redirect fix, referral input sanitization, sign-out confirmation, dashboard deck shortcut |
+
+---
+
+## For Claude (Session Lifeline)
+
+**Last session: 2026-06-03**
+
+### What happened
+- Team (John/Alcazar) pushed 80 files — full backend, all auth routes, DB layer, all app pages
+- Yujin's local had 3 merge conflicts after pull: `login/page.tsx`, `package.json`, `package-lock.json`
+- All resolved — team's version accepted for all three (correct approach)
+- Yujin's old `src/app/lib/supabase.ts` deleted — was pointing to wrong path, now obsolete
+- Correct Supabase browser client is `getSupabaseBrowserClient()` from `@/lib/supabase/browser`
+- `npm install` complete, `tsc --noEmit` passes (0 errors)
+- Login page uses `/api/auth/login` (John's route) — correct
+- Signup page uses `/api/auth/signup` — was already correct
+- `SUPABASE_SERVICE_ROLE_KEY` NOT in `.env.local` — but login still works (rate limit check is non-blocking try/catch)
+- App not yet tested end-to-end — Yujin was about to test at session end
+
+### Pending
+- Test login/signup flow end-to-end (npm run dev → localhost:3000)
+- Get `SUPABASE_SERVICE_ROLE_KEY` from John/Alcazar for full rate-limit support
+- Confirm flashcard pages (/decks/[id], /decks/new, /quiz) work with real Supabase data
+- No new frontend changes needed yet — backend is now the active side
+
+### Key paths
+- Supabase browser client: `@/lib/supabase/browser` → `getSupabaseBrowserClient()`
+- Auth routes: `/api/auth/login`, `/api/auth/signup`, `/api/auth/logout`
+- Contracts (source of truth): `src/lib/contracts.ts`
+- Route protection: `src/proxy.ts` (NOT middleware.ts — do not rename)
+- .env.local needs: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
