@@ -39,19 +39,21 @@ yet implemented by the backend; the UI will show an error gracefully until they 
 | `/api/auth/forgot-password` | POST | `/forgot-password` | ✅ Implemented |
 | `/api/auth/reset-password` | POST | `/settings?mode=reset-password` | ✅ Implemented |
 | `/api/upload` | POST | `/decks/new` | ✅ Implemented |
-| `/api/generate` | POST | `/decks/new` | ✅ Implemented (test mode) |
-| `/api/decks` | GET | `/dashboard` | ⚠️ Not yet — reads Supabase directly |
-| `/api/decks/[id]` | GET | `/decks/[id]` | ⚠️ Not yet — reads Supabase directly |
-| `/api/quiz/[id]` | POST | `/quiz/[deckId]` | ⚠️ Not yet — questions generated client-side |
-| `/api/quiz/result` | POST | `/quiz/[deckId]` | ⚠️ Not yet — results stored in sessionStorage |
-| `/api/referral/claim` | POST | `/rewards` | ⚠️ Not yet |
-| `/api/payment/submit` | POST | `/upgrade` | ⚠️ Not yet |
-| `/api/admin/payments` | GET | `/admin` | ⚠️ Not yet |
-| `/api/admin/payments/approve` | POST | `/admin` | ⚠️ Not yet |
-| `/api/admin/payments/reject` | POST | `/admin` | ⚠️ Not yet |
+| `/api/generate` | POST | `/decks/new` | ✅ Implemented (live; atomic deck-create + credit charge) |
+| `/api/decks` | GET | `/dashboard` | ✅ Implemented — dashboard migrated to it |
+| `/api/decks/[id]` | GET | `/decks/[id]` | ✅ Implemented — ⚠️ page still reads Supabase directly (migrate: TODO 6b) |
+| `/api/quiz/[id]` | POST | `/quiz/[deckId]` | ✅ Implemented — page migrated (server builds questions) |
+| `/api/quiz/result` | POST | `/quiz/[deckId]` | ✅ Implemented — atomic + idempotent; page migrated |
+| `/api/referral/claim` | POST | `/rewards` | ⚠️ Not yet (backend) |
+| `/api/payment/submit` | POST | `/upgrade` | ⚠️ Not yet (backend) |
+| `/api/admin/payments` | GET | `/admin` | ⚠️ Not yet (backend) |
+| `/api/admin/payments/approve` | POST | `/admin` | ⚠️ Not yet (backend) |
+| `/api/admin/payments/reject` | POST | `/admin` | ⚠️ Not yet (backend) |
 
 > **Note for teammates:** When you implement a route, remove the ⚠️ above and
 > update the corresponding page if it was reading from Supabase directly as a workaround.
+> **Outstanding FE migration:** `/decks/[id]` page still reads Supabase directly even though
+> `GET /api/decks/[id]` exists — see `docs/TODO.md` item 6b and `docs/HANDOFF.md`.
 
 ---
 
