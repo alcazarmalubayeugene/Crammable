@@ -15,21 +15,18 @@ import { toDbError } from "@/lib/db/errors";
 
 /**
  * deduct_credit(p_user_id): atomically decrement token_balance by 1.
- * Returns the post-decrement balance (use for GenerateResult.creditsRemaining).
+ * Returns the post-decrement balance.
  *
  * @throws {DbError} INSUFFICIENT_CREDITS (402) when the balance is already 0.
  *
- * ORDERING NOTE — supabase-js issues one HTTP request per call, so a deck
- * insert + flashcard insert + deductCredit() are three separate transactions,
- * not one. To keep "DeepSeek failure → no credit charged", call deductCredit()
- * LAST, after the deck and its cards have persisted successfully. If a later
- * step can still fail, compensate by deleting the deck (see
- * decks.createDeckWithCards). For true single-transaction atomicity, move the
- * whole sequence into a dedicated SECURITY DEFINER function.
- *
- * TODO(#5 generate): replace the deduct-last + compensating-delete pattern with
- * a single create_deck_with_cards_and_charge() SECURITY DEFINER RPC so the deck
- * insert, flashcard inserts, and credit deduction commit atomically.
+ * Standalone service-role primitive. The generation path no longer calls this
+ * directly — deck insert + card inserts + credit deduction now commit in ONE
+ * transaction via create_deck_with_cards_and_charge() (schema §4.14, wrapped by
+ * decks.createDeckWithCardsAndCharge), so a failed persist can't charge and a
+ * failed charge can't leave an orphan deck. Kept here for any future
+ * single-credit deduction that isn't bundled with a deck create. EXECUTE on
+ * deduct_credit is revoked from anon/authenticated (schema §4.15), so it must
+ * run through the service-role client.
  */
 export async function deductCredit(userId: string): Promise<number> {
   const admin = createAdminClient();

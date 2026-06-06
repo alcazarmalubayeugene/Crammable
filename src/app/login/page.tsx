@@ -1,17 +1,36 @@
 "use client";
 
 import { useState } from "react";
-import { Routes } from "@/lib/contracts";
+import { ApiPaths, Routes } from "@/lib/contracts";
 
 export default function LoginPage() {
   const [email, setEmail]       = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState("");
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState("");
+  const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent">("idle");
+
+  async function handleResend() {
+    if (resendStatus !== "idle") return;
+    setResendStatus("sending");
+    if (email.trim()) {
+      try {
+        await fetch(ApiPaths.authResendConfirmation, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: email.trim() }),
+        });
+      } catch {
+        // network error — safe "sent" message shown regardless
+      }
+    }
+    setResendStatus("sent");
+  }
 
   async function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault();
     setError("");
+    setResendStatus("idle");
 
     if (!email || !password) {
       setError("Please fill in all fields.");
@@ -20,7 +39,7 @@ export default function LoginPage() {
 
     setLoading(true);
 
-    const res = await fetch("/api/auth/login", {
+    const res = await fetch(ApiPaths.authLogin, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
@@ -87,8 +106,28 @@ export default function LoginPage() {
           <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 20, padding: 32 }}>
 
             {error && (
-              <div style={{ background: "#FEF0E0", border: "1px solid #E0C9A8", borderRadius: 10, padding: "10px 14px", marginBottom: 20, fontSize: 13, color: "#8B5E38" }}>
+              <div style={{ background: "#FEF0E0", border: "1px solid #E0C9A8", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: 13, color: "#8B5E38" }}>
                 {error}
+              </div>
+            )}
+
+            {/* Prominent resend prompt — surfaces after any failed login attempt */}
+            {error && resendStatus !== "sent" && (
+              <div style={{ background: "#F5F0E8", border: "1px solid #D4B896", borderRadius: 10, padding: "10px 14px", marginBottom: 20, fontSize: 13, color: "#6B4F2E" }}>
+                Haven&apos;t confirmed your email yet?{" "}
+                <button
+                  type="button"
+                  onClick={handleResend}
+                  disabled={resendStatus !== "idle"}
+                  style={{ background: "none", border: "none", color: "#C47A2E", fontWeight: 600, cursor: resendStatus === "idle" ? "pointer" : "default", padding: 0, fontSize: 13, fontFamily: "inherit", textDecoration: "underline" }}
+                >
+                  {resendStatus === "sending" ? "Sending…" : "Resend confirmation email"}
+                </button>
+              </div>
+            )}
+            {error && resendStatus === "sent" && (
+              <div style={{ background: "#F0F7F0", border: "1px solid #B8D8B8", borderRadius: 10, padding: "10px 14px", marginBottom: 20, fontSize: 13, color: "#3A6B3A" }}>
+                Sent! Check your inbox (and spam folder).
               </div>
             )}
 
@@ -121,7 +160,7 @@ export default function LoginPage() {
               </div>
 
               <div style={{ textAlign: "right", marginBottom: 24 }}>
-                <a href="/forgot-password" style={{ fontSize: 12, color: "#C47A2E", textDecoration: "none" }}>
+                <a href={Routes.forgotPassword} style={{ fontSize: 12, color: "#C47A2E", textDecoration: "none" }}>
                   Forgot password?
                 </a>
               </div>
@@ -147,6 +186,25 @@ export default function LoginPage() {
               <a href="/signup" style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>
                 Sign up free
               </a>
+            </p>
+
+            {/* Passive resend affordance — always visible so it doesn't signal account existence */}
+            <p style={{ textAlign: "center", fontSize: 12, color: "#A08060", marginTop: 12, marginBottom: 0 }}>
+              {resendStatus === "sent" && !error ? (
+                "Sent! Check your inbox (and spam folder)."
+              ) : (
+                <>
+                  Didn&apos;t receive a confirmation email?{" "}
+                  <button
+                    type="button"
+                    onClick={handleResend}
+                    disabled={resendStatus !== "idle"}
+                    style={{ background: "none", border: "none", color: "#C47A2E", cursor: resendStatus === "idle" ? "pointer" : "default", padding: 0, fontSize: 12, fontFamily: "inherit", textDecoration: "underline" }}
+                  >
+                    {resendStatus === "sending" ? "Sending…" : "Resend it"}
+                  </button>
+                </>
+              )}
             </p>
 
           </div>

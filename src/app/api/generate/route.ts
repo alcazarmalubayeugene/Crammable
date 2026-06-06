@@ -1,33 +1,30 @@
 import {
   ApiErrorCode,
   ApiPaths,
-  EnvKeys,
-  GenerationMode,
   PdfType,
   SubscriptionTier,
-  TableNames,
   TierLimits,
   UIMessages,
   type ApiResponse,
   type GenerateRequest,
   type GenerateResult,
 } from "@/lib/contracts";
-import { apiFail, genericInternalError } from "@/lib/api/errors";
-import { PDF_EXTRACTION_TEST_MODE } from "@/lib/dev/pdf-test-mode";
+import { apiFail, handleApiError } from "@/lib/api/errors";
 import {
   generateFlashcardsFromText,
   isDeepSeekConfigured,
 } from "@/lib/deepseek";
 import { isExtractedTextEmpty, truncateToMaxInputTokens } from "@/lib/text/truncate";
-import {
-  checkRateLimit,
-  createServiceClient,
-  getProfileForUser,
-  getUserFromRequest,
-} from "@/lib/supabase/server";
+import { checkRateLimit } from "@/lib/supabase/server";
+import { requireAuth } from "@/lib/auth/helpers";
+import { countDecksForUser, createDeckWithCardsAndCharge } from "@/lib/db/decks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// DeepSeek generation can take tens of seconds. Set the function budget
+// explicitly so the platform default (as low as 10s on some plans) doesn't kill
+// the request mid-call. Keep DEEPSEEK_REQUEST_TIMEOUT_MS comfortably under this.
+export const maxDuration = 60;
 
 const DEFAULT_MAX_CARDS = 20;
 
@@ -38,35 +35,7 @@ function maxCardsForTier(
   return limit === Infinity ? DEFAULT_MAX_CARDS : limit;
 }
 
-function isPersistenceEnabled(): boolean {
-  return Boolean(
-    process.env[EnvKeys.supabaseUrl]?.trim() &&
-      process.env[EnvKeys.supabaseServiceRoleKey]?.trim(),
-  );
-}
-
 export async function POST(request: Request): Promise<Response> {
-  if (PDF_EXTRACTION_TEST_MODE) {
-    let body: GenerateRequest | null = null;
-    try {
-      body = (await request.json()) as GenerateRequest;
-    } catch {
-      /* ignore */
-    }
-    const result: ApiResponse<GenerateResult> & {
-      _testMode: true;
-      note: string;
-    } = {
-      success: true,
-      _testMode: true,
-      note: "Generate disabled in PDF_EXTRACTION_TEST_MODE.",
-      deckId: "test-mode-no-deck",
-      cards: [],
-      creditsRemaining: 0,
-    };
-    return Response.json(result, { status: 200 });
-  }
-
   try {
     if (!isDeepSeekConfigured()) {
       return apiFail(ApiErrorCode.AI_UNAVAILABLE, UIMessages.aiUnavailable, 503);
@@ -93,48 +62,46 @@ export async function POST(request: Request): Promise<Response> {
       return apiFail(ApiErrorCode.VALIDATION_ERROR, "Invalid pdfType.", 400);
     }
 
-    const persist = isPersistenceEnabled();
-    let userId: string | null = null;
-    let maxCards = DEFAULT_MAX_CARDS;
-    let creditsRemaining = 0;
+    // Cookie/session auth + RLS (same pattern as decks/quiz). Throws AuthError
+    // (→ 401) when unauthenticated or the profile row is missing; the outer
+    // catch maps it via handleApiError.
+    const { user, profile } = await requireAuth();
 
-    if (persist) {
-      const user = await getUserFromRequest(request);
-      if (!user) {
-        return apiFail(
-          ApiErrorCode.UNAUTHORIZED,
-          "Please sign in to generate flashcards.",
-          401,
-        );
-      }
-      userId = user.id;
-
-      const profile = await getProfileForUser(user.id);
-      if (!profile) {
-        return apiFail(ApiErrorCode.UNAUTHORIZED, "Profile not found.", 401);
-      }
-
-      if (!profile.consent_deepseek) {
-        return apiFail(
-          ApiErrorCode.CONSENT_REQUIRED,
-          "You must consent to AI processing before generating cards.",
-          403,
-        );
-      }
-
-      const rate = await checkRateLimit(user.id, ApiPaths.generate);
-      if (!rate.allowed) {
-        return apiFail(ApiErrorCode.RATE_LIMITED, UIMessages.rateLimited, 429);
-      }
-
-      maxCards = maxCardsForTier(profile.subscription_tier);
-      creditsRemaining = profile.token_balance;
+    if (!profile.consent_deepseek) {
+      return apiFail(
+        ApiErrorCode.CONSENT_REQUIRED,
+        "You must consent to AI processing before generating cards.",
+        403,
+      );
     }
 
+    const rate = await checkRateLimit(user.id, ApiPaths.generate);
+    if (!rate.allowed) {
+      return apiFail(ApiErrorCode.RATE_LIMITED, UIMessages.rateLimited, 429);
+    }
+
+    // Fail fast before the DeepSeek call — deductCredit() enforces this atomically
+    // too, but checking here avoids burning an API call when balance is clearly 0.
+    if (profile.token_balance <= 0) {
+      return apiFail(ApiErrorCode.INSUFFICIENT_CREDITS, UIMessages.outOfCredits, 402);
+    }
+
+    const maxDecks = TierLimits[profile.subscription_tier].maxDecks;
+    if (maxDecks !== Infinity) {
+      const deckCount = await countDecksForUser(user.id);
+      if (deckCount >= maxDecks) {
+        return apiFail(ApiErrorCode.DECK_LIMIT_REACHED, UIMessages.deckLimitReached, 403);
+      }
+    }
+
+    const maxCards = maxCardsForTier(profile.subscription_tier);
+
     let cards: Awaited<ReturnType<typeof generateFlashcardsFromText>>["cards"];
+    let aiTitle: string | null = null;
     try {
       const result = await generateFlashcardsFromText(extractedText, maxCards);
       cards = result.cards;
+      aiTitle = result.title;
     } catch (err) {
       const message = err instanceof Error ? err.message : "";
       if (message === "DEEPSEEK_NOT_CONFIGURED") {
@@ -152,92 +119,34 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    if (!persist || !userId) {
-      const preview: ApiResponse<GenerateResult> = {
-        success: true,
-        deckId: `preview-${Date.now()}`,
-        cards,
-        creditsRemaining: 0,
-      };
-      return Response.json(preview, { status: 200 });
-    }
-
-    const supabase = createServiceClient();
     const title =
       body.title?.trim().slice(0, 100) ||
+      aiTitle?.slice(0, 100) ||
       `Deck ${new Date().toISOString().slice(0, 10)}`;
 
-    const { data: deck, error: deckError } = await supabase
-      .from(TableNames.decks)
-      .insert({
-        user_id: userId,
+    // Persist the deck + cards and charge one credit in a single transaction.
+    // On INSUFFICIENT_CREDITS the whole thing rolls back (no orphan deck, no
+    // charge) and surfaces as DbError(402) → handleApiError. The fail-fast
+    // balance check above already covers the common case before the DeepSeek
+    // call; this is the atomic guard against a concurrent spend.
+    const { deckId, creditsRemaining } = await createDeckWithCardsAndCharge(
+      {
+        userId: user.id,
         title,
-        card_count: cards.length,
-        generation_mode: body.generationMode ?? GenerationMode.STANDARD,
-        pdf_type: pdfType,
-      })
-      .select("id")
-      .single();
-
-    if (deckError || !deck) {
-      console.error("Deck insert failed:", deckError?.message);
-      return genericInternalError();
-    }
-
-    const flashcardRows = cards.map((card) => ({
-      deck_id: deck.id,
-      user_id: userId,
-      front: card.front,
-      back: card.back,
-      tags: card.tags,
-    }));
-
-    const { error: cardsError } = await supabase
-      .from(TableNames.flashcards)
-      .insert(flashcardRows);
-
-    if (cardsError) {
-      console.error("Flashcard insert failed:", cardsError.message);
-      await supabase.from(TableNames.decks).delete().eq("id", deck.id);
-      return genericInternalError();
-    }
-
-    const { data: creditRow, error: creditError } = await supabase.rpc("deduct_credit", {
-      p_user_id: userId,
-    });
-
-    if (creditError) {
-      const code = creditError.message?.includes("INSUFFICIENT_CREDITS")
-        ? ApiErrorCode.INSUFFICIENT_CREDITS
-        : ApiErrorCode.INTERNAL_ERROR;
-      await supabase.from(TableNames.decks).delete().eq("id", deck.id);
-      const status = code === ApiErrorCode.INSUFFICIENT_CREDITS ? 402 : 500;
-      return apiFail(
-        code,
-        code === ApiErrorCode.INSUFFICIENT_CREDITS
-          ? "You do not have enough credits to generate a deck."
-          : UIMessages.genericError,
-        status,
-      );
-    }
-
-    creditsRemaining =
-      typeof creditRow === "number"
-        ? creditRow
-        : Number(
-            (creditRow as { token_balance?: number })?.token_balance ??
-              creditsRemaining - 1,
-          );
+        generationMode: body.generationMode,
+        pdfType,
+      },
+      cards,
+    );
 
     const result: ApiResponse<GenerateResult> = {
       success: true,
-      deckId: deck.id,
+      deckId,
       cards,
       creditsRemaining,
     };
     return Response.json(result, { status: 200 });
   } catch (err) {
-    console.error("POST /api/generate failed:", err);
-    return genericInternalError();
+    return handleApiError(err);
   }
 }

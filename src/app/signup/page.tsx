@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Routes } from "@/lib/contracts";
 
 export default function SignupPage() {
   const [fullName, setFullName]   = useState("");
@@ -13,6 +14,8 @@ export default function SignupPage() {
   const [loading, setLoading]     = useState(false);
   const [error, setError]         = useState("");
   const [success, setSuccess]     = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendMsg, setResendMsg] = useState("");
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -44,8 +47,9 @@ export default function SignupPage() {
         email,
         password,
         fullName,
+        course,
         referralCode: referral || undefined,
-        consentDeeseek: consent,
+        consentDeepseek: consent,
       }),
     });
 
@@ -59,6 +63,28 @@ export default function SignupPage() {
 
     // Show email verification message
     setSuccess(true);
+  }
+
+  async function handleResend() {
+    setResendMsg("");
+    setResending(true);
+    try {
+      const res = await fetch(Routes.api.authResendConfirmation, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      // The endpoint is enumeration-safe and always returns the same message.
+      setResendMsg(
+        data.message ??
+          "If an account with that email needs confirming, we've sent a new link."
+      );
+    } catch {
+      setResendMsg("Couldn't resend right now. Please try again in a moment.");
+    } finally {
+      setResending(false);
+    }
   }
 
   const inputStyle = {
@@ -95,6 +121,25 @@ export default function SignupPage() {
             We sent a verification link to <strong style={{ color: "#2E1A0C" }}>{email}</strong>.
             Click the link in that email to activate your account.
           </p>
+          <div style={{ borderTop: "1px solid #E0C9A8", paddingTop: 20, marginBottom: 20 }}>
+            <p style={{ color: "#8A6E52", fontSize: 13, marginBottom: 12 }}>
+              Didn&apos;t get the email? Check your spam folder, or
+            </p>
+            <button
+              type="button"
+              onClick={handleResend}
+              disabled={resending}
+              style={{ padding: "10px 20px", background: resending ? "#A86826" : "#C47A2E", color: "#FAF2E4", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: resending ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+            >
+              {resending ? "Sending…" : "Resend confirmation email"}
+            </button>
+            {resendMsg && (
+              <p style={{ color: "#5A7A52", fontSize: 13, marginTop: 12, lineHeight: 1.6 }}>
+                {resendMsg}
+              </p>
+            )}
+          </div>
+
           <p style={{ color: "#8A6E52", fontSize: 13 }}>
             Already verified?{" "}
             <a href="/login" style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>
