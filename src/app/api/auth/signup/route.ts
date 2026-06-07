@@ -1,9 +1,10 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { createSessionClient } from "@/lib/supabase/server";
+import { createServiceClient, createSessionClient } from "@/lib/supabase/server";
 import {
   ApiErrorCode,
   EnvKeys,
+  TableNames,
   Validation,
   type ApiFailResponse,
 } from "@/lib/contracts";
@@ -51,12 +52,12 @@ export async function POST(request: NextRequest) {
       return validationErrorResponse(parsed.error.issues[0].message);
     }
 
-    const { email, password, fullName, referralCode } = parsed.data;
+    const { email, password, fullName, referralCode, consentDeeseek } = parsed.data;
     const supabase = await createSessionClient();
 
     const appUrl = process.env[EnvKeys.appUrl] ?? "http://localhost:3000";
 
-    const { error } = await supabase.auth.signUp({
+    const { data: signUpData, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -67,6 +68,15 @@ export async function POST(request: NextRequest) {
         },
       },
     });
+
+    // Save consent immediately — profile is created by DB trigger on signUp
+    if (!error && signUpData.user && consentDeeseek) {
+      const serviceClient = createServiceClient();
+      await serviceClient
+        .from(TableNames.profiles)
+        .update({ consent_deepseek: true })
+        .eq("id", signUpData.user.id);
+    }
 
     if (error) {
       // Log the real error server-side but never expose it.

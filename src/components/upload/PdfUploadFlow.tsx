@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   ApiErrorCode,
@@ -10,6 +10,7 @@ import {
   OcrThresholds,
   PdfType,
   Routes,
+  TableNames,
   UIMessages,
   type ApiResponse,
   type GeneratedCard,
@@ -20,6 +21,7 @@ import {
 import type { UploadTestDebug } from "@/app/api/upload/route";
 import { PDF_EXTRACTION_TEST_MODE } from "@/lib/dev/pdf-test-mode";
 import { authHeaders } from "@/lib/api/auth-headers";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { runOcrOnPages } from "@/lib/pdf/ocr-client";
 import { renderPdfPagesToCanvases } from "@/lib/pdf/render-pages-client";
 
@@ -54,6 +56,45 @@ export function PdfUploadFlow() {
   const [statusLine, setStatusLine] = useState("");
   const [layer1Payload, setLayer1Payload] = useState<unknown>(null);
   const [resultView, setResultView] = useState<ResultView | null>(null);
+
+  // ── AI consent gate ───────────────────────────────────────────────────────────
+  const [consentChecked, setConsentChecked] = useState(false);   // loading done
+  const [hasConsented, setHasConsented] = useState(false);
+  const [consentTicked, setConsentTicked] = useState(false);     // checkbox in consent card
+  const [consentSaving, setConsentSaving] = useState(false);
+  const [consentError, setConsentError] = useState("");
+
+  useEffect(() => {
+    async function checkConsent() {
+      const supabase = getSupabaseBrowserClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setConsentChecked(true); return; }
+      const { data } = await supabase
+        .from(TableNames.profiles)
+        .select("consent_deepseek")
+        .eq("id", user.id)
+        .single();
+      setHasConsented(data?.consent_deepseek === true);
+      setConsentChecked(true);
+    }
+    checkConsent();
+  }, []);
+
+  const handleGiveConsent = useCallback(async () => {
+    if (!consentTicked) { setConsentError("Please tick the checkbox to continue."); return; }
+    setConsentSaving(true);
+    setConsentError("");
+    const supabase = getSupabaseBrowserClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setConsentError("Session expired. Please log in again."); setConsentSaving(false); return; }
+    const { error } = await supabase
+      .from(TableNames.profiles)
+      .update({ consent_deepseek: true })
+      .eq("id", user.id);
+    if (error) { setConsentError("Failed to save. Please try again."); setConsentSaving(false); return; }
+    setHasConsented(true);
+    setConsentSaving(false);
+  }, [consentTicked]);
 
   const resetToIdle = useCallback(() => {
     setPhase("idle");
@@ -255,6 +296,67 @@ export function PdfUploadFlow() {
 
   const isBusy =
     phase === "uploading" || phase === "ocr_running" || phase === "generating";
+
+  // ── consent gate — show before anything else ─────────────────────────────────
+  if (!consentChecked) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
+          Checking account…
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasConsented) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <header>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Upload PDF</h2>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">One quick step before you continue.</p>
+        </header>
+        <div style={{ background: "#FBF0E0", border: "1.5px solid #E0C9A8", borderRadius: 12, padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+          <p style={{ fontSize: 15, fontWeight: 700, color: "#2E1A0C", margin: 0 }}>AI processing consent required</p>
+          <p style={{ fontSize: 13, color: "#4A2512", lineHeight: 1.6, margin: 0 }}>
+            {App.name} sends your uploaded documents to DeepSeek AI to generate flashcards.
+            Your documents are processed to extract text and create study cards — they are not stored by DeepSeek beyond the request.
+            Do not upload documents containing sensitive or confidential information.
+          </p>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={consentTicked}
+              onChange={(e) => { setConsentTicked(e.target.checked); setConsentError(""); }}
+              style={{ marginTop: 2, width: 16, height: 16, accentColor: "#C47A2E", flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 13, color: "#2E1A0C", lineHeight: 1.6 }}>
+              <strong>I understand and agree</strong> that my uploaded documents will be processed by DeepSeek AI to generate flashcards. I will not upload sensitive or confidential information.
+            </span>
+          </label>
+          {consentError && <p style={{ fontSize: 13, color: "#EF4444", margin: 0 }}>{consentError}</p>}
+          <button
+            type="button"
+            onClick={handleGiveConsent}
+            disabled={consentSaving}
+            style={{
+              alignSelf: "flex-start",
+              background: consentSaving ? "#C49A6C" : "#C47A2E",
+              color: "#FAF2E4",
+              border: "none",
+              borderRadius: 8,
+              padding: "10px 24px",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: consentSaving ? "not-allowed" : "pointer",
+              fontFamily: "var(--font-dm-sans, sans-serif)",
+            }}
+          >
+            {consentSaving ? "Saving…" : "Continue to upload"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
