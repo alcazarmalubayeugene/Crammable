@@ -2,80 +2,46 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   App,
+  ApiPaths,
   QuizType,
   Routes,
-  TableNames,
   UIMessages,
   type Deck,
-  type Flashcard,
   type QuizQuestion,
+  type SubmitQuizAnswer,
 } from "@/lib/contracts";
 
-// ── shared result shape (mirrored in result/page.tsx) ─────────────────────────
+// ── local types ───────────────────────────────────────────────────────────────
 
+// Stored in sessionStorage so result/page.tsx can display the review.
 export interface QuizResultData {
-  deckId: string;
-  deckTitle: string;
-  scorePercent: number;
-  correctCount: number;
+  deckId:         string;
+  deckTitle:      string;
+  scorePercent:   number;
+  correctCount:   number;
   totalQuestions: number;
   answers: Array<{
-    front: string;
-    back: string;
+    front:      string;
+    back:       string;
     userAnswer: string | null;
-    isCorrect: boolean;
+    isCorrect:  boolean;
   }>;
 }
 
 export const QUIZ_RESULT_KEY = "crammable_quiz_result";
 
-// ── local helpers ─────────────────────────────────────────────────────────────
-
-function shuffled<T>(arr: T[]): T[] {
-  return [...arr].sort(() => Math.random() - 0.5);
+// Tracks a single answered question locally until the session is submitted.
+interface LocalAnswer {
+  flashcardId: string;
+  front:       string;
+  back:        string;
+  userAnswer:  string;
+  isCorrect:   boolean;
 }
 
-function buildQuestions(cards: Flashcard[], quizType: QuizType): QuizQuestion[] {
-  return shuffled(cards).map((card): QuizQuestion => {
-    const canUseMC = cards.length >= 4;
-
-    let resolvedType: "multiple_choice" | "identification";
-    if (quizType === QuizType.MIXED) {
-      resolvedType =
-        canUseMC && Math.random() < 0.5
-          ? QuizType.MULTIPLE_CHOICE
-          : QuizType.IDENTIFICATION;
-    } else if (quizType === QuizType.MULTIPLE_CHOICE && canUseMC) {
-      resolvedType = QuizType.MULTIPLE_CHOICE;
-    } else {
-      resolvedType = QuizType.IDENTIFICATION;
-    }
-
-    if (resolvedType === QuizType.MULTIPLE_CHOICE) {
-      const distractors = shuffled(cards.filter((c) => c.id !== card.id))
-        .slice(0, 3)
-        .map((c) => c.back);
-      const options = shuffled([...distractors, card.back]);
-      return {
-        flashcardId: card.id,
-        questionText: card.front,
-        quizType: QuizType.MULTIPLE_CHOICE,
-        options,
-        correctAnswer: card.back,
-      };
-    }
-
-    return {
-      flashcardId: card.id,
-      questionText: card.front,
-      quizType: QuizType.IDENTIFICATION,
-      correctAnswer: card.back,
-    };
-  });
-}
+// ── helpers ───────────────────────────────────────────────────────────────────
 
 function looslyCorrect(user: string, correct: string): boolean {
   return user.trim().toLowerCase() === correct.trim().toLowerCase();
@@ -83,7 +49,7 @@ function looslyCorrect(user: string, correct: string): boolean {
 
 // ── page ──────────────────────────────────────────────────────────────────────
 
-type Phase = "loading" | "error" | "setup" | "quizzing";
+type Phase = "loading" | "error" | "setup" | "starting" | "quizzing" | "submitting";
 
 export default function QuizPage() {
   const params = useParams();
@@ -94,7 +60,6 @@ export default function QuizPage() {
 
   // ── data ──
   const [deck, setDeck] = useState<Deck | null>(null);
-  const [cards, setCards] = useState<Flashcard[]>([]);
   const [phase, setPhase] = useState<Phase>("loading");
   const [loadError, setLoadError] = useState("");
 
@@ -102,13 +67,16 @@ export default function QuizPage() {
   const [selectedType, setSelectedType] = useState<QuizType>(QuizType.MULTIPLE_CHOICE);
 
   // ── in-quiz ──
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [typedAnswer, setTypedAnswer] = useState("");
   const [hasAnswered, setHasAnswered] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
-  const [answers, setAnswers] = useState<QuizResultData["answers"]>([]);
+  const [answers, setAnswers] = useState<LocalAnswer[]>([]);
+
+  // ── load deck via API ──────────────────────────────────────────────────────
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -118,54 +86,63 @@ export default function QuizPage() {
 
     async function load() {
       try {
-      const supabase = getSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        window.location.replace(Routes.login);
-        return;
-      }
-
-      const [deckRes, cardsRes] = await Promise.all([
-        supabase.from(TableNames.decks).select("*").eq("id", deckId).eq("user_id", user.id).single(),
-        supabase
-          .from(TableNames.flashcards)
-          .select("*")
-          .eq("deck_id", deckId)
-          .eq("user_id", user.id)
-          .order("created_at"),
-      ]);
-
-      if (deckRes.error || !deckRes.data) {
-        setLoadError("Deck not found or you don't have access to it.");
+        const res = await fetch(ApiPaths.deck(deckId));
+        const data = await res.json() as { success: boolean; deck?: Deck; error?: { message: string } };
+        if (!data.success || !data.deck) {
+          setLoadError(data.error?.message ?? "Deck not found.");
+          setPhase("error");
+          return;
+        }
+        setDeck(data.deck);
+        setPhase("setup");
+      } catch {
+        setLoadError("Failed to load deck. Check your connection and try again.");
         setPhase("error");
-        return;
-      }
-
-      setDeck(deckRes.data as Deck);
-      setCards((cardsRes.data ?? []) as Flashcard[]);
-      setPhase("setup");
       } finally {
         clearTimeout(timeout);
       }
     }
+
     load();
     return () => clearTimeout(timeout);
   }, [deckId]);
 
-  // ── quiz actions ──────────────────────────────────────────────────────────────
+  // ── quiz actions ──────────────────────────────────────────────────────────
 
-  function startQuiz() {
-    const qs = buildQuestions(cards, selectedType);
-    setQuestions(qs);
-    setCurrentIdx(0);
-    setAnswers([]);
-    setSelectedOption(null);
-    setTypedAnswer("");
-    setHasAnswered(false);
-    setIsCorrect(false);
-    setPhase("quizzing");
+  async function startQuiz() {
+    setPhase("starting");
+    try {
+      const res = await fetch(ApiPaths.startQuiz(deckId), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ quizType: selectedType }),
+      });
+      const data = await res.json() as {
+        success: boolean;
+        sessionId?: string;
+        questions?: QuizQuestion[];
+        error?: { message: string };
+      };
+
+      if (!data.success || !data.sessionId || !data.questions) {
+        setLoadError(data.error?.message ?? "Failed to start quiz.");
+        setPhase("error");
+        return;
+      }
+
+      setSessionId(data.sessionId);
+      setQuestions(data.questions);
+      setCurrentIdx(0);
+      setAnswers([]);
+      setSelectedOption(null);
+      setTypedAnswer("");
+      setHasAnswered(false);
+      setIsCorrect(false);
+      setPhase("quizzing");
+    } catch {
+      setLoadError("Failed to start quiz. Check your connection and try again.");
+      setPhase("error");
+    }
   }
 
   function submitAnswer() {
@@ -188,43 +165,95 @@ export default function QuizPage() {
     setAnswers((prev) => [
       ...prev,
       {
-        front: q.questionText,
-        back: q.correctAnswer,
+        flashcardId: q.flashcardId,
+        front:       q.questionText,
+        back:        q.correctAnswer,
         userAnswer,
-        isCorrect: correct,
+        isCorrect:   correct,
       },
     ]);
     setIsCorrect(correct);
     setHasAnswered(true);
   }
 
-  function nextQuestion(currentAnswers: QuizResultData["answers"]) {
+  async function nextQuestion(currentAnswers: LocalAnswer[]) {
     const isLast = currentIdx === questions.length - 1;
-    if (isLast) {
-      const correctCount = currentAnswers.filter((a) => a.isCorrect).length;
-      const total = currentAnswers.length;
-      const result: QuizResultData = {
-        deckId,
-        deckTitle: deck?.title ?? "",
-        scorePercent: total > 0 ? Math.round((correctCount / total) * 100) : 0,
-        correctCount,
-        totalQuestions: total,
-        answers: currentAnswers,
-      };
-      sessionStorage.setItem(QUIZ_RESULT_KEY, JSON.stringify(result));
-      router.push(Routes.quizResult(deckId));
-    } else {
+
+    if (!isLast) {
       setCurrentIdx((i) => i + 1);
       setSelectedOption(null);
       setTypedAnswer("");
       setHasAnswered(false);
       setIsCorrect(false);
+      return;
+    }
+
+    // Last question — submit to the API.
+    if (!sessionId) return;
+    setPhase("submitting");
+
+    const submitPayload: SubmitQuizAnswer[] = currentAnswers.map((a) => ({
+      flashcardId: a.flashcardId,
+      userAnswer:  a.userAnswer,
+      isCorrect:   a.isCorrect,
+    }));
+
+    try {
+      const res = await fetch(ApiPaths.submitQuizResult, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, answers: submitPayload }),
+      });
+      const data = await res.json() as {
+        success: boolean;
+        scorePercent?: number;
+        correctCount?: number;
+        totalQuestions?: number;
+        error?: { message: string };
+      };
+
+      if (!data.success) {
+        setLoadError(data.error?.message ?? "Failed to save quiz results.");
+        setPhase("error");
+        return;
+      }
+
+      const result: QuizResultData = {
+        deckId,
+        deckTitle:      deck?.title ?? "",
+        scorePercent:   data.scorePercent ?? 0,
+        correctCount:   data.correctCount ?? 0,
+        totalQuestions: data.totalQuestions ?? currentAnswers.length,
+        answers:        currentAnswers.map((a) => ({
+          front:      a.front,
+          back:       a.back,
+          userAnswer: a.userAnswer,
+          isCorrect:  a.isCorrect,
+        })),
+      };
+
+      sessionStorage.setItem(QUIZ_RESULT_KEY, JSON.stringify(result));
+      router.push(Routes.quizResult(deckId));
+    } catch {
+      setLoadError("Failed to save quiz results. Check your connection and try again.");
+      setPhase("error");
     }
   }
 
-  // ── loading / error ──────────────────────────────────────────────────────────
+  // ── derived ───────────────────────────────────────────────────────────────
 
-  if (phase === "loading") {
+  const q = questions[currentIdx] ?? null;
+  const total = questions.length;
+  const progressPct = total > 0 ? ((currentIdx + (hasAnswered ? 1 : 0)) / total) * 100 : 0;
+  const canUseMC = (deck?.card_count ?? 0) >= 4;
+
+  // ── loading / error ───────────────────────────────────────────────────────
+
+  if (phase === "loading" || phase === "starting" || phase === "submitting") {
+    const msg =
+      phase === "starting"   ? "Setting up quiz…" :
+      phase === "submitting" ? "Saving your results…" :
+      "Loading…";
     return (
       <main
         style={{
@@ -236,7 +265,7 @@ export default function QuizPage() {
         }}
       >
         <p style={{ color: "#8A6E52", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
-          Loading…
+          {msg}
         </p>
       </main>
     );
@@ -267,11 +296,7 @@ export default function QuizPage() {
     );
   }
 
-  const q = questions[currentIdx] ?? null;
-  const total = questions.length;
-  const progressPct = total > 0 ? ((currentIdx + (hasAnswered ? 1 : 0)) / total) * 100 : 0;
-
-  // ── render ───────────────────────────────────────────────────────────────────
+  // ── render ─────────────────────────────────────────────────────────────────
 
   return (
     <main
@@ -355,11 +380,12 @@ export default function QuizPage() {
                 Quiz yourself
               </h1>
               <p style={{ color: "#8A6E52", fontSize: 14 }}>
-                {cards.length} {cards.length === 1 ? "card" : "cards"} · {deck?.title}
+                {deck?.card_count ?? 0}{" "}
+                {(deck?.card_count ?? 0) === 1 ? "card" : "cards"} · {deck?.title}
               </p>
             </div>
 
-            {cards.length === 0 ? (
+            {(deck?.card_count ?? 0) === 0 ? (
               <div
                 style={{
                   background: "#FFFCF7",
@@ -398,27 +424,27 @@ export default function QuizPage() {
                   {(
                     [
                       {
-                        type: QuizType.MULTIPLE_CHOICE,
-                        label: "Multiple Choice",
-                        icon: "🔘",
-                        desc: "Pick the correct answer from 4 options.",
-                        disabled: cards.length < 4,
+                        type:         QuizType.MULTIPLE_CHOICE,
+                        label:        "Multiple Choice",
+                        icon:         "🔘",
+                        desc:         "Pick the correct answer from 4 options.",
+                        disabled:     !canUseMC,
                         disabledNote: "Need at least 4 cards",
                       },
                       {
-                        type: QuizType.IDENTIFICATION,
-                        label: "Identification",
-                        icon: "✏️",
-                        desc: "Type the answer yourself from memory.",
-                        disabled: false,
+                        type:         QuizType.IDENTIFICATION,
+                        label:        "Identification",
+                        icon:         "✏️",
+                        desc:         "Type the answer yourself from memory.",
+                        disabled:     false,
                         disabledNote: "",
                       },
                       {
-                        type: QuizType.MIXED,
-                        label: "Mixed",
-                        icon: "🎲",
-                        desc: "A random mix of both types.",
-                        disabled: false,
+                        type:         QuizType.MIXED,
+                        label:        "Mixed",
+                        icon:         "🎲",
+                        desc:         "A random mix of both types.",
+                        disabled:     false,
                         disabledNote: "",
                       },
                     ] as const
@@ -431,19 +457,17 @@ export default function QuizPage() {
                         disabled={disabled}
                         onClick={() => !disabled && setSelectedType(type)}
                         style={{
-                          display: "flex",
+                          display:    "flex",
                           alignItems: "flex-start",
-                          gap: 14,
+                          gap:        14,
                           background: active ? "#4A2512" : "#FFFCF7",
-                          border: active
-                            ? "1.5px solid #C47A2E"
-                            : "1.5px solid #E0C9A8",
+                          border:     active ? "1.5px solid #C47A2E" : "1.5px solid #E0C9A8",
                           borderRadius: 14,
-                          padding: "16px 20px",
-                          cursor: disabled ? "not-allowed" : "pointer",
-                          opacity: disabled ? 0.45 : 1,
-                          textAlign: "left",
-                          width: "100%",
+                          padding:    "16px 20px",
+                          cursor:     disabled ? "not-allowed" : "pointer",
+                          opacity:    disabled ? 0.45 : 1,
+                          textAlign:  "left",
+                          width:      "100%",
                           fontFamily: "var(--font-dm-sans, sans-serif)",
                         }}
                       >
@@ -451,20 +475,15 @@ export default function QuizPage() {
                         <div>
                           <div
                             style={{
-                              fontSize: 15,
-                              fontWeight: 600,
-                              color: active ? "#FAF2E4" : "#2E1A0C",
+                              fontSize:    15,
+                              fontWeight:  600,
+                              color:       active ? "#FAF2E4" : "#2E1A0C",
                               marginBottom: 2,
                             }}
                           >
                             {label}
                           </div>
-                          <div
-                            style={{
-                              fontSize: 13,
-                              color: active ? "#C49A6C" : "#8A6E52",
-                            }}
-                          >
+                          <div style={{ fontSize: 13, color: active ? "#C49A6C" : "#8A6E52" }}>
                             {disabled ? disabledNote : desc}
                           </div>
                         </div>
@@ -472,9 +491,9 @@ export default function QuizPage() {
                           <span
                             style={{
                               marginLeft: "auto",
-                              fontSize: 16,
-                              color: "#C47A2E",
-                              alignSelf: "center",
+                              fontSize:   16,
+                              color:      "#C47A2E",
+                              alignSelf:  "center",
                             }}
                           >
                             ✓
@@ -490,15 +509,15 @@ export default function QuizPage() {
                     type="button"
                     onClick={startQuiz}
                     style={{
-                      background: "#C47A2E",
-                      color: "#FAF2E4",
-                      border: "none",
+                      background:  "#C47A2E",
+                      color:       "#FAF2E4",
+                      border:      "none",
                       borderRadius: 10,
-                      padding: "13px 40px",
-                      fontSize: 15,
-                      fontWeight: 600,
-                      cursor: "pointer",
-                      fontFamily: "var(--font-dm-sans, sans-serif)",
+                      padding:     "13px 40px",
+                      fontSize:    15,
+                      fontWeight:  600,
+                      cursor:      "pointer",
+                      fontFamily:  "var(--font-dm-sans, sans-serif)",
                     }}
                   >
                     🎯 Start Quiz
@@ -519,20 +538,20 @@ export default function QuizPage() {
             {/* Progress bar */}
             <div
               style={{
-                height: 4,
-                background: "#E0C9A8",
+                height:       4,
+                background:   "#E0C9A8",
                 borderRadius: 4,
                 marginBottom: 28,
-                overflow: "hidden",
+                overflow:     "hidden",
               }}
             >
               <div
                 style={{
-                  height: "100%",
-                  background: "#C47A2E",
+                  height:       "100%",
+                  background:   "#C47A2E",
                   borderRadius: 4,
-                  width: `${progressPct}%`,
-                  transition: "width 0.35s",
+                  width:        `${progressPct}%`,
+                  transition:   "width 0.35s",
                 }}
               />
             </div>
@@ -540,21 +559,21 @@ export default function QuizPage() {
             {/* Question card */}
             <div
               style={{
-                background: "#FFFCF7",
-                border: "1.5px solid #E0C9A8",
+                background:   "#FFFCF7",
+                border:       "1.5px solid #E0C9A8",
                 borderRadius: 20,
-                padding: "32px",
+                padding:      "32px",
                 marginBottom: 20,
               }}
             >
               <div
                 style={{
-                  fontSize: 11,
-                  fontWeight: 600,
+                  fontSize:      11,
+                  fontWeight:    600,
                   letterSpacing: "0.08em",
-                  color: "#C49A6C",
+                  color:         "#C49A6C",
                   textTransform: "uppercase",
-                  marginBottom: 14,
+                  marginBottom:  14,
                 }}
               >
                 {q.quizType === QuizType.MULTIPLE_CHOICE ? "Multiple Choice" : "Identification"} ·
@@ -563,12 +582,12 @@ export default function QuizPage() {
 
               <p
                 style={{
-                  fontFamily: "var(--font-lora, serif)",
-                  fontSize: 20,
-                  fontWeight: 600,
-                  color: "#2E1A0C",
-                  lineHeight: 1.5,
-                  margin: 0,
+                  fontFamily:  "var(--font-lora, serif)",
+                  fontSize:    20,
+                  fontWeight:  600,
+                  color:       "#2E1A0C",
+                  lineHeight:  1.5,
+                  margin:      0,
                 }}
               >
                 {q.questionText}
@@ -580,24 +599,18 @@ export default function QuizPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
                 {(q.options ?? []).map((option) => {
                   const isSelected = selectedOption === option;
-                  let bg = "#FFFCF7";
+                  let bg     = "#FFFCF7";
                   let border = "1.5px solid #E0C9A8";
-                  let color = "#2E1A0C";
+                  let color  = "#2E1A0C";
 
                   if (hasAnswered) {
                     if (option === q.correctAnswer) {
-                      bg = "#EDF5E4";
-                      border = "1.5px solid #5C7A35";
-                      color = "#3A5020";
+                      bg = "#EDF5E4"; border = "1.5px solid #5C7A35"; color = "#3A5020";
                     } else if (isSelected && !isCorrect) {
-                      bg = "#FEF2F2";
-                      border = "1.5px solid #EF4444";
-                      color = "#991B1B";
+                      bg = "#FEF2F2"; border = "1.5px solid #EF4444"; color = "#991B1B";
                     }
                   } else if (isSelected) {
-                    bg = "#4A2512";
-                    border = "1.5px solid #C47A2E";
-                    color = "#FAF2E4";
+                    bg = "#4A2512"; border = "1.5px solid #C47A2E"; color = "#FAF2E4";
                   }
 
                   return (
@@ -607,18 +620,18 @@ export default function QuizPage() {
                       disabled={hasAnswered}
                       onClick={() => !hasAnswered && setSelectedOption(option)}
                       style={{
-                        display: "flex",
+                        display:    "flex",
                         alignItems: "center",
-                        gap: 12,
+                        gap:        12,
                         background: bg,
                         border,
                         borderRadius: 12,
-                        padding: "14px 18px",
-                        cursor: hasAnswered ? "default" : "pointer",
-                        textAlign: "left",
-                        width: "100%",
+                        padding:    "14px 18px",
+                        cursor:     hasAnswered ? "default" : "pointer",
+                        textAlign:  "left",
+                        width:      "100%",
                         fontFamily: "var(--font-dm-sans, sans-serif)",
-                        fontSize: 14,
+                        fontSize:   14,
                         color,
                         fontWeight: isSelected ? 600 : 400,
                         transition: "all 0.15s",
@@ -653,51 +666,49 @@ export default function QuizPage() {
                   disabled={hasAnswered}
                   placeholder="Type your answer here…"
                   style={{
-                    width: "100%",
-                    boxSizing: "border-box",
-                    background: hasAnswered ? "#F5F0EA" : "#FFFCF7",
-                    border: "1.5px solid #E0C9A8",
+                    width:       "100%",
+                    boxSizing:   "border-box",
+                    background:  hasAnswered ? "#F5F0EA" : "#FFFCF7",
+                    border:      "1.5px solid #E0C9A8",
                     borderRadius: 12,
-                    padding: "14px 16px",
-                    fontSize: 14,
-                    color: "#2E1A0C",
-                    fontFamily: "var(--font-dm-sans, sans-serif)",
-                    resize: "vertical",
-                    outline: "none",
-                    lineHeight: 1.5,
+                    padding:     "14px 16px",
+                    fontSize:    14,
+                    color:       "#2E1A0C",
+                    fontFamily:  "var(--font-dm-sans, sans-serif)",
+                    resize:      "vertical",
+                    outline:     "none",
+                    lineHeight:  1.5,
                   }}
                 />
 
-                {/* Show correct answer after answering (ID questions) */}
                 {hasAnswered && (
                   <div
                     style={{
-                      marginTop: 12,
-                      background: isCorrect ? "#EDF5E4" : "#FFFCF7",
-                      border: `1.5px solid ${isCorrect ? "#5C7A35" : "#E0C9A8"}`,
+                      marginTop:    12,
+                      background:   isCorrect ? "#EDF5E4" : "#FFFCF7",
+                      border:       `1.5px solid ${isCorrect ? "#5C7A35" : "#E0C9A8"}`,
                       borderRadius: 10,
-                      padding: "12px 16px",
+                      padding:      "12px 16px",
                     }}
                   >
                     <p
                       style={{
-                        fontSize: 12,
-                        fontWeight: 600,
-                        color: "#8A6E52",
+                        fontSize:      12,
+                        fontWeight:    600,
+                        color:         "#8A6E52",
                         textTransform: "uppercase",
                         letterSpacing: "0.06em",
-                        marginBottom: 4,
-                        margin: "0 0 4px",
+                        margin:        "0 0 4px",
                       }}
                     >
                       Correct answer
                     </p>
                     <p
                       style={{
-                        fontSize: 14,
-                        color: "#2E1A0C",
+                        fontSize:   14,
+                        color:      "#2E1A0C",
                         lineHeight: 1.5,
-                        margin: 0,
+                        margin:     0,
                         fontFamily: "var(--font-lora, serif)",
                       }}
                     >
@@ -712,23 +723,23 @@ export default function QuizPage() {
             {hasAnswered && (
               <div
                 style={{
-                  background: isCorrect ? "#EDF5E4" : "#FEF2F2",
-                  border: `1.5px solid ${isCorrect ? "#5C7A35" : "#EF4444"}`,
+                  background:   isCorrect ? "#EDF5E4" : "#FEF2F2",
+                  border:       `1.5px solid ${isCorrect ? "#5C7A35" : "#EF4444"}`,
                   borderRadius: 12,
-                  padding: "14px 18px",
+                  padding:      "14px 18px",
                   marginBottom: 20,
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
+                  display:      "flex",
+                  alignItems:   "center",
+                  gap:          10,
                 }}
               >
                 <span style={{ fontSize: 18 }}>{isCorrect ? "✅" : "❌"}</span>
                 <p
                   style={{
-                    fontSize: 14,
+                    fontSize:   14,
                     fontWeight: 600,
-                    color: isCorrect ? "#3A5020" : "#991B1B",
-                    margin: 0,
+                    color:      isCorrect ? "#3A5020" : "#991B1B",
+                    margin:     0,
                   }}
                 >
                   {isCorrect ? "Correct!" : "Not quite."}
@@ -748,13 +759,13 @@ export default function QuizPage() {
                       : !typedAnswer.trim()
                   }
                   style={{
-                    background: "#C47A2E",
-                    color: "#FAF2E4",
-                    border: "none",
+                    background:  "#C47A2E",
+                    color:       "#FAF2E4",
+                    border:      "none",
                     borderRadius: 10,
-                    padding: "12px 28px",
-                    fontSize: 14,
-                    fontWeight: 600,
+                    padding:     "12px 28px",
+                    fontSize:    14,
+                    fontWeight:  600,
                     cursor:
                       (q.quizType === QuizType.MULTIPLE_CHOICE
                         ? !selectedOption
@@ -777,15 +788,15 @@ export default function QuizPage() {
                   type="button"
                   onClick={() => nextQuestion(answers)}
                   style={{
-                    background: "#C47A2E",
-                    color: "#FAF2E4",
-                    border: "none",
+                    background:  "#C47A2E",
+                    color:       "#FAF2E4",
+                    border:      "none",
                     borderRadius: 10,
-                    padding: "12px 28px",
-                    fontSize: 14,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    fontFamily: "var(--font-dm-sans, sans-serif)",
+                    padding:     "12px 28px",
+                    fontSize:    14,
+                    fontWeight:  600,
+                    cursor:      "pointer",
+                    fontFamily:  "var(--font-dm-sans, sans-serif)",
                   }}
                 >
                   {currentIdx === total - 1 ? "Finish Quiz" : "Next →"}

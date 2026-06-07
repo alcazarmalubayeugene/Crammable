@@ -3,7 +3,10 @@ import { EnvKeys } from "@/lib/contracts";
 
 export const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 export const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
-export const DEEPSEEK_REQUEST_TIMEOUT_MS = 120_000;
+// Kept under the generate route's maxDuration (60s) so a single attempt aborts
+// cleanly before the platform kills the function. Timeouts do NOT retry (see
+// completeChatWithRetry), so this is an effective per-request ceiling.
+export const DEEPSEEK_REQUEST_TIMEOUT_MS = 45_000;
 export const DEEPSEEK_MAX_RETRIES = 3;
 
 export function getDeepSeekApiKey(): string {

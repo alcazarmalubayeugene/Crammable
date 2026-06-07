@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { Routes, TableNames } from "@/lib/contracts";
 
 interface Profile {
   full_name: string | null;
@@ -11,31 +13,49 @@ interface Profile {
   course: string | null;
 }
 
+interface DeckListItem {
+  id: string;
+  title: string;
+  card_count: number;
+  created_at: string;
+  source_filename: string | null;
+}
+
 export default function DashboardPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [decks, setDecks] = useState<DeckListItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function loadProfile() {
+    async function loadDashboard() {
       const supabase = getSupabaseBrowserClient();
       const { data: { user } } = await supabase.auth.getUser();
 
       if (!user) {
-        window.location.href = "/login";
+        window.location.href = Routes.login;
         return;
       }
 
-      const { data } = await supabase
-        .from("profiles")
-        .select("full_name, email, token_balance, subscription_tier, course")
-        .eq("id", user.id)
-        .single();
+      // RLS scopes both reads to the signed-in user.
+      const [{ data: profileData }, { data: deckData }] = await Promise.all([
+        supabase
+          .from(TableNames.profiles)
+          .select("full_name, email, token_balance, subscription_tier, course")
+          .eq("id", user.id)
+          .single(),
+        supabase
+          .from(TableNames.decks)
+          .select("id, title, card_count, created_at, source_filename")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false }),
+      ]);
 
-      setProfile(data);
+      setProfile(profileData);
+      setDecks((deckData ?? []) as DeckListItem[]);
       setLoading(false);
     }
 
-    loadProfile();
+    loadDashboard();
   }, []);
 
   async function handleLogout() {
@@ -114,10 +134,10 @@ export default function DashboardPage() {
           <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16 }}>
             <div style={{ width: 44, height: 44, background: "#EDF5E4", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>📚</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: "var(--font-lora, serif)", fontSize: 20, fontWeight: 700, color: "#8A6E52", lineHeight: 1 }}>No active decks</div>
+              <div style={{ fontFamily: "var(--font-lora, serif)", fontSize: 26, fontWeight: 700, color: "#2E1A0C", lineHeight: 1 }}>{decks.length}</div>
               <div style={{ fontSize: 12, color: "#8A6E52", marginTop: 3 }}>Active decks</div>
             </div>
-            <a href="/decks/new" style={{ fontSize: 20, color: "#C47A2E", textDecoration: "none", fontWeight: 700, lineHeight: 1 }} title="Create a new deck">+</a>
+            <Link href={Routes.newDeck} style={{ fontSize: 20, color: "#C47A2E", textDecoration: "none", fontWeight: 700, lineHeight: 1 }} title="Create a new deck">+</Link>
           </div>
 
           <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16 }}>
@@ -131,22 +151,65 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Empty state */}
-        <div style={{ background: "#FFFCF7", border: "1.5px dashed #E0C9A8", borderRadius: 20, padding: "60px 24px", textAlign: "center" }}>
-          <div style={{ fontSize: 56, marginBottom: 16 }}>🦫</div>
-          <h2 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 20, fontWeight: 600, color: "#2E1A0C", marginBottom: 8 }}>
-            No decks yet
-          </h2>
-          <p style={{ color: "#8A6E52", fontSize: 14, marginBottom: 28, maxWidth: 360, margin: "0 auto 28px" }}>
-            Upload a PDF reviewer and Capy will turn it into a flashcard deck in seconds.
-          </p>
-          <a
-            href="/decks/new"
-            style={{ display: "inline-block", background: "#C47A2E", color: "#FAF2E4", padding: "12px 28px", borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: "none" }}
-          >
-            + Create your first deck
-          </a>
-        </div>
+        {decks.length === 0 ? (
+          /* Empty state */
+          <div style={{ background: "#FFFCF7", border: "1.5px dashed #E0C9A8", borderRadius: 20, padding: "60px 24px", textAlign: "center" }}>
+            <div style={{ fontSize: 56, marginBottom: 16 }}>🦫</div>
+            <h2 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 20, fontWeight: 600, color: "#2E1A0C", marginBottom: 8 }}>
+              No decks yet
+            </h2>
+            <p style={{ color: "#8A6E52", fontSize: 14, marginBottom: 28, maxWidth: 360, margin: "0 auto 28px" }}>
+              Upload a PDF reviewer and Capy will turn it into a flashcard deck in seconds.
+            </p>
+            <Link
+              href={Routes.newDeck}
+              style={{ display: "inline-block", background: "#C47A2E", color: "#FAF2E4", padding: "12px 28px", borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: "none" }}
+            >
+              + Create your first deck
+            </Link>
+          </div>
+        ) : (
+          <>
+            {/* Section header */}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+              <h2 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 20, fontWeight: 700, color: "#2E1A0C" }}>
+                Your decks
+              </h2>
+              <Link
+                href={Routes.newDeck}
+                style={{ display: "inline-block", background: "#C47A2E", color: "#FAF2E4", padding: "10px 20px", borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: "none" }}
+              >
+                + New deck
+              </Link>
+            </div>
+
+            {/* Deck grid */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+              {decks.map((deck) => (
+                <Link
+                  key={deck.id}
+                  href={Routes.deck(deck.id)}
+                  style={{ display: "flex", flexDirection: "column", gap: 12, background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 16, padding: "20px 22px", textDecoration: "none" }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
+                    <span style={{ fontSize: 26 }}>📚</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "#C49A6C", background: "rgba(196,122,46,0.12)", borderRadius: 12, padding: "3px 10px" }}>
+                      {deck.card_count} {deck.card_count === 1 ? "card" : "cards"}
+                    </span>
+                  </div>
+                  <div>
+                    <h3 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 17, fontWeight: 700, color: "#2E1A0C", lineHeight: 1.35, margin: 0 }}>
+                      {deck.title}
+                    </h3>
+                    <p style={{ fontSize: 12, color: "#8A6E52", marginTop: 6 }}>
+                      {new Date(deck.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </>
+        )}
 
       </div>
     </main>

@@ -1,60 +1,59 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("@/lib/supabase/server", () => ({ createSessionClient: vi.fn() }));
-vi.mock("@/lib/db/flashcards");
 
 import { createSessionClient } from "@/lib/supabase/server";
-import { insertFlashcards } from "@/lib/db/flashcards";
-import { createDeckWithCards, type NewDeckInput } from "@/lib/db/decks";
-import { PdfType, type Flashcard, type GeneratedCard } from "@/lib/contracts";
-import { queryBuilder, fakeClient, type QueryBuilderMock } from "./helpers/supabase-mock";
+import { createDeckWithCardsAndCharge, type NewDeckInput } from "@/lib/db/decks";
+import { ApiErrorCode, PdfType, type GeneratedCard } from "@/lib/contracts";
+import { queryBuilder, fakeClient, type QueryResult } from "./helpers/supabase-mock";
 
 const mockedCreateSession = vi.mocked(createSessionClient);
-const mockedInsertFlashcards = vi.mocked(insertFlashcards);
 
-const deckRow = { id: "deck-1", user_id: "u1", title: "Bio 101", card_count: 0 };
 const input: NewDeckInput = { userId: "u1", title: "Bio 101", pdfType: PdfType.TEXT };
 const cards: GeneratedCard[] = [
-  { front: "Q1", back: "A1", tags: [] },
-  { front: "Q2", back: "A2", tags: [] },
+  { front: "Q1", back: "A1", tags: [], category: "General" },
+  { front: "Q2", back: "A2", tags: [], category: "General" },
 ];
 
-function useBuilder(): QueryBuilderMock {
-  const builder = queryBuilder({ data: deckRow, error: null });
-  mockedCreateSession.mockResolvedValue(fakeClient(builder) as unknown as Awaited<ReturnType<typeof createSessionClient>>);
-  return builder;
+function clientWithRpc(rpcResult: QueryResult) {
+  const client = fakeClient(queryBuilder({ data: null, error: null }), rpcResult);
+  mockedCreateSession.mockResolvedValue(
+    client as unknown as Awaited<ReturnType<typeof createSessionClient>>,
+  );
+  return client;
 }
 
-beforeEach(() => {
-  mockedCreateSession.mockReset();
-  mockedInsertFlashcards.mockReset();
-});
+beforeEach(() => mockedCreateSession.mockReset());
 
-describe("createDeckWithCards", () => {
-  it("persists the deck, inserts cards, and syncs card_count on success", async () => {
-    const builder = useBuilder();
-    const inserted = cards.map((c, i) => ({ id: `c${i}`, ...c })) as unknown as Flashcard[];
-    mockedInsertFlashcards.mockResolvedValue(inserted);
+describe("createDeckWithCardsAndCharge", () => {
+  it("calls the atomic RPC and returns the new deck id + remaining credits", async () => {
+    const client = clientWithRpc({
+      data: [{ deck_id: "deck-1", credits_remaining: 2 }],
+      error: null,
+    });
 
-    const result = await createDeckWithCards(input, cards);
+    const result = await createDeckWithCardsAndCharge(input, cards);
 
-    expect(result.cards).toBe(inserted);
-    expect(result.deck.card_count).toBe(cards.length);
-    expect(builder.insert).toHaveBeenCalledOnce(); // the deck insert
-    expect(builder.update).toHaveBeenCalled(); // card_count sync
-    expect(builder.delete).not.toHaveBeenCalled(); // no compensation on success
+    expect(result).toEqual({ deckId: "deck-1", creditsRemaining: 2 });
+    expect(client.rpc).toHaveBeenCalledWith(
+      "create_deck_with_cards_and_charge",
+      expect.objectContaining({
+        p_user_id: "u1",
+        p_title: "Bio 101",
+        p_pdf_type: PdfType.TEXT,
+        p_cards: expect.arrayContaining([
+          expect.objectContaining({ front: "Q1", back: "A1", category: "General" }),
+        ]),
+      }),
+    );
   });
 
-  it("deletes the orphan deck (compensation) and rethrows when card insert fails", async () => {
-    const builder = useBuilder();
-    mockedInsertFlashcards.mockRejectedValue(new Error("card insert boom"));
+  it("translates an INSUFFICIENT_CREDITS RAISE into a typed DbError (no deck persisted)", async () => {
+    clientWithRpc({ data: null, error: { code: "P0001", message: "INSUFFICIENT_CREDITS" } });
 
-    await expect(createDeckWithCards(input, cards)).rejects.toThrow("card insert boom");
-
-    // compensating cleanup must have run against the created deck
-    expect(builder.delete).toHaveBeenCalledOnce();
-    expect(builder.eq).toHaveBeenCalledWith("id", deckRow.id);
-    // card_count must NOT be updated when the cards never landed
-    expect(builder.update).not.toHaveBeenCalled();
+    await expect(createDeckWithCardsAndCharge(input, cards)).rejects.toMatchObject({
+      code: ApiErrorCode.INSUFFICIENT_CREDITS,
+      status: 402,
+    });
   });
 });

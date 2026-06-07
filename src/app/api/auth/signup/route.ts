@@ -1,10 +1,9 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
-import { createServiceClient, createSessionClient } from "@/lib/supabase/server";
+import { createSessionClient } from "@/lib/supabase/server";
 import {
   ApiErrorCode,
   EnvKeys,
-  TableNames,
   Validation,
   type ApiFailResponse,
 } from "@/lib/contracts";
@@ -20,17 +19,21 @@ const signupSchema = z.object({
     .string()
     .max(Validation.profile.fullNameMaxLength, "Full name is too long.")
     .optional(),
+  course: z
+    .string()
+    .max(Validation.profile.courseMaxLength, "Course / program is too long.")
+    .optional(),
   referralCode: z
     .string()
     .length(Validation.referralCode.length, "Referral code must be 8 characters.")
     .optional(),
-  consentDeeseek: z.boolean().optional(),
+  consentDeepseek: z.boolean().optional(),
 });
 
 /**
  * POST /api/auth/signup
  *
- * Body: { email, password, fullName?, referralCode?, consentDeeseek? }
+ * Body: { email, password, fullName?, course?, referralCode?, consentDeepseek? }
  *
  * Always returns the same success message regardless of whether the email
  * is already registered — prevents user enumeration.
@@ -52,42 +55,46 @@ export async function POST(request: NextRequest) {
       return validationErrorResponse(parsed.error.issues[0].message);
     }
 
-    const { email, password, fullName, referralCode, consentDeeseek } = parsed.data;
+    const { email, password, fullName, course, referralCode, consentDeepseek } =
+      parsed.data;
     const supabase = await createSessionClient();
 
     const appUrl = process.env[EnvKeys.appUrl] ?? "http://localhost:3000";
 
-    const { data: signUpData, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: `${appUrl}/api/auth/callback`,
+        // These land in auth.users.raw_user_meta_data and are read by the
+        // handle_new_user() trigger to populate the profiles row.
         data: {
           full_name: fullName ?? null,
+          course: course ?? null,
+          consent_deepseek: consentDeepseek ?? false,
           referral_code_used: referralCode ?? null,
         },
       },
     });
 
-    // Save consent immediately — profile is created by DB trigger on signUp
-    if (!error && signUpData.user && consentDeeseek) {
-      const serviceClient = createServiceClient();
-      await serviceClient
-        .from(TableNames.profiles)
-        .update({ consent_deepseek: true })
-        .eq("id", signUpData.user.id);
-    }
-
     if (error) {
-      // Log the real error server-side but never expose it.
-      console.error("[auth/signup] Supabase signUp error:", error.message);
+      // Log the real error server-side.
+      console.error(
+        "[auth/signup] Supabase signUp error:",
+        error.code ?? error.status,
+        error.message,
+      );
 
-      // 422 / user_already_exists → return the same message as success to
-      // prevent enumeration. All other errors are internal.
+      const code = error.code ?? "";
+      const msg = error.message.toLowerCase();
+
+      // Account already exists → return the same message as success to prevent
+      // user enumeration. Must stay indistinguishable from a real signup.
       if (
         error.status === 422 ||
-        error.code === "user_already_exists" ||
-        error.message.toLowerCase().includes("already registered")
+        code === "user_already_exists" ||
+        code === "email_exists" ||
+        msg.includes("already registered")
       ) {
         return Response.json(
           {
@@ -99,6 +106,42 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      // Rate limiting from Supabase's mailer / auth endpoint.
+      if (
+        error.status === 429 ||
+        code === "over_email_send_rate_limit" ||
+        code === "over_request_rate_limit"
+      ) {
+        const body: ApiFailResponse = {
+          success: false,
+          error: {
+            code: ApiErrorCode.RATE_LIMITED,
+            message:
+              "Too many sign-up attempts. Please wait a few minutes and try again.",
+          },
+        };
+        return Response.json(body, { status: 429 });
+      }
+
+      // User-fixable input problems — surface a clear, non-sensitive reason
+      // instead of a generic 500 so the person knows what to correct.
+      if (code === "email_address_invalid" || msg.includes("email") && msg.includes("invalid")) {
+        return validationErrorResponse(
+          "That email address was rejected. Please use a real, valid email address.",
+        );
+      }
+      if (code === "weak_password" || msg.includes("password")) {
+        return validationErrorResponse(
+          "That password was rejected. Try a longer, less common password.",
+        );
+      }
+      if (code === "signup_disabled" || code === "email_provider_disabled") {
+        return validationErrorResponse(
+          "Sign-ups are currently disabled. Please contact support.",
+        );
+      }
+
+      // Anything else is a genuine server/config problem — keep it generic.
       return internalErrorResponse();
     }
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createMiddlewareClient } from "@/lib/supabase/middleware-client";
-import { Routes } from "@/lib/contracts";
+import { Routes, TableNames } from "@/lib/contracts";
 
 /**
  * Page-level route prefixes that require an active session.
@@ -52,7 +52,7 @@ export async function proxy(request: NextRequest) {
   // DB query is acceptable here — /admin is low-traffic by design.
   if (pathname.startsWith(Routes.admin) && user) {
     const { data: profile } = await supabase
-      .from("profiles")
+      .from(TableNames.profiles)
       .select("is_admin")
       .eq("id", user.id)
       .single();

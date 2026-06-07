@@ -51,11 +51,14 @@ export function PdfUploadFlow() {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [ocrMessage, setOcrMessage] = useState("");
   const [pageProgress, setPageProgress] = useState({ current: 0, total: 0 });
-  const [pastedText, setPastedText] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [statusLine, setStatusLine] = useState("");
-  const [layer1Payload, setLayer1Payload] = useState<unknown>(null);
-  const [resultView, setResultView] = useState<ResultView | null>(null);
+  const [pastedText, setPastedText]           = useState("");
+  const [errorMessage, setErrorMessage]       = useState("");
+  const [statusLine, setStatusLine]           = useState("");
+  const [layer1Payload, setLayer1Payload]     = useState<unknown>(null);
+  const [resultView, setResultView]           = useState<ResultView | null>(null);
+  // Populated when the upload returns path: "ocr" — used for selective page rendering.
+  const [imagePageNumbers, setImagePageNumbers] = useState<number[]>([]);
+  const [partialText, setPartialText]           = useState("");
 
   // ── AI consent gate ───────────────────────────────────────────────────────────
   const [consentChecked, setConsentChecked] = useState(false);   // loading done
@@ -106,6 +109,8 @@ export function PdfUploadFlow() {
     setStatusLine("");
     setLayer1Payload(null);
     setResultView(null);
+    setImagePageNumbers([]);
+    setPartialText("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
@@ -211,8 +216,17 @@ export function PdfUploadFlow() {
         return;
       }
 
+      const imgPages = data.imagePageNumbers;
+      setImagePageNumbers(imgPages);
+      setPartialText(data.partialText);
       setPdfFile(file);
-      setOcrMessage(data.message);
+      // Give a more specific prompt when we already have some good text and know exactly
+      // which pages need scanning.
+      const scanNote =
+        imgPages.length > 0
+          ? ` ${imgPages.length} page${imgPages.length === 1 ? "" : "s"} will be scanned${data.partialText ? " (other pages already extracted)" : ""}.`
+          : "";
+      setOcrMessage(data.message + scanNote);
       setLayer1Payload(data);
       setPhase("ocr_confirm");
     },
@@ -236,10 +250,18 @@ export function PdfUploadFlow() {
     setResultView(null);
 
     try {
-      const rendered = await renderPdfPagesToCanvases(pdfFile, (current, total) => {
-        setPageProgress({ current, total });
-        setStatusLine(UIMessages.ocrProgress(current, total));
-      });
+      // Only render pages the server flagged as sparse — skips pages that already
+      // have good embedded text, saving significant time on mixed PDFs.
+      const pagesToOcr = imagePageNumbers.length > 0 ? imagePageNumbers : undefined;
+
+      const rendered = await renderPdfPagesToCanvases(
+        pdfFile,
+        (current, total) => {
+          setPageProgress({ current, total });
+          setStatusLine(UIMessages.ocrProgress(current, total));
+        },
+        pagesToOcr,
+      );
 
       const ocrResult = await runOcrOnPages(rendered, (current, total) => {
         setPageProgress({ current, total });
@@ -248,8 +270,10 @@ export function PdfUploadFlow() {
 
       const debug = {
         path: PdfType.OCR,
+        scannedPageNumbers: pagesToOcr ?? "all",
         needsPasteFallback: ocrResult.needsPasteFallback,
         minTesseractConfidence: OcrThresholds.minTesseractConfidence,
+        hasPartialText: Boolean(partialText),
         pages: ocrResult.pages.map((p) => ({
           page: p.pageNumber,
           confidence: Math.round(p.confidence * 1000) / 1000,
@@ -257,26 +281,38 @@ export function PdfUploadFlow() {
         })),
       };
 
-      if (ocrResult.needsPasteFallback || !ocrResult.extractedText.trim()) {
+      // Merge server-extracted text (good pages) with OCR text (image pages).
+      // If OCR confidence was too low, fall back to the partial text alone rather
+      // than all the way to paste — partial text is better than nothing.
+      const ocrSucceeded = !ocrResult.needsPasteFallback && ocrResult.extractedText.trim();
+      const finalText = [
+        partialText,
+        ocrSucceeded ? ocrResult.extractedText : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n")
+        .trim();
+
+      if (!finalText) {
         setPhase("paste_fallback");
         setResultView({
-          label: "Layer 2 — low OCR confidence → paste fallback",
+          label: "Layer 2 — low OCR confidence, no partial text → paste fallback",
           debug,
         });
         return;
       }
 
       if (PDF_EXTRACTION_TEST_MODE) {
-        showExtractionPreview("Layer 2 — OCR success", debug, ocrResult.extractedText);
+        showExtractionPreview("Layer 2 — OCR success", debug, finalText);
         return;
       }
 
-      await callGenerate(ocrResult.extractedText, PdfType.OCR, debug);
+      await callGenerate(finalText, PdfType.OCR, debug);
     } catch (err) {
       setPhase("paste_fallback");
       setErrorMessage(err instanceof Error ? err.message : "OCR failed");
     }
-  }, [pdfFile, callGenerate, showExtractionPreview]);
+  }, [pdfFile, imagePageNumbers, partialText, callGenerate, showExtractionPreview]);
 
   const submitPaste = useCallback(async () => {
     const text = pastedText.trim();
