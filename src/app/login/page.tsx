@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { ApiPaths, Routes } from "@/lib/contracts";
 
 export default function LoginPage() {
@@ -76,16 +77,16 @@ export default function LoginPage() {
       {/* ── NAVBAR ── */}
       <nav style={{ background: "#2E1A0C", borderBottom: "1px solid #4A2512" }}>
         <div style={{ maxWidth: 1024, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <a href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
             <span style={{ fontSize: 24 }}>🦫</span>
             <span style={{ fontFamily: "var(--font-lora, serif)", fontWeight: 700, fontSize: 18, color: "#FAF2E4" }}>
               Crammable
             </span>
-          </a>
-          <a href="/signup" style={{ fontSize: 13, color: "#C49A6C", textDecoration: "none" }}>
+          </Link>
+          <Link href="/signup" style={{ fontSize: 13, color: "#C49A6C", textDecoration: "none" }}>
             No account yet?{" "}
             <span style={{ color: "#C47A2E", fontWeight: 600 }}>Sign up free</span>
-          </a>
+          </Link>
         </div>
       </nav>
 
@@ -160,9 +161,9 @@ export default function LoginPage() {
               </div>
 
               <div style={{ textAlign: "right", marginBottom: 24 }}>
-                <a href={Routes.forgotPassword} style={{ fontSize: 12, color: "#C47A2E", textDecoration: "none" }}>
+                <Link href={Routes.forgotPassword} style={{ fontSize: 12, color: "#C47A2E", textDecoration: "none" }}>
                   Forgot password?
-                </a>
+                </Link>
               </div>
 
               <button
@@ -183,9 +184,9 @@ export default function LoginPage() {
 
             <p style={{ textAlign: "center", fontSize: 13, color: "#8A6E52", margin: 0 }}>
               Don&apos;t have an account?{" "}
-              <a href="/signup" style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>
+              <Link href="/signup" style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>
                 Sign up free
-              </a>
+              </Link>
             </p>
 
             {/* Passive resend affordance — always visible so it doesn't signal account existence */}

@@ -14,8 +14,8 @@
 | `/` | `src/app/page.tsx` | ✅ Done | Landing page — hero, features, pricing |
 | `/login` | `src/app/login/page.tsx` | ✅ Done | Login form — wired to Supabase auth |
 | `/signup` | `src/app/signup/page.tsx` | ✅ Done | Signup form — wired to Supabase auth |
-| `/forgot-password` | `src/app/forgot-password/page.tsx` | ⚠️ Needed | Email form → triggers password reset email. **Backend ready.** See spec below. |
-| `/settings?mode=reset-password` | `src/app/settings/page.tsx` | ⚠️ Needed | Settings page must detect `?mode=reset-password` and render a new-password form. **Backend ready.** See spec below. |
+| `/forgot-password` | `src/app/forgot-password/page.tsx` | ✅ Done | Email form → triggers password reset email. Enumeration-safe, 60s resend cooldown, authed-user guard. |
+| `/settings?mode=reset-password` | `src/app/settings/page.tsx` | ✅ Done | Detects `?mode=reset-password`, renders new-password form (confirm field + show/hide), handles success/expired-link/validation cases. |
 | `/dashboard` | `src/app/dashboard/page.tsx` | ✅ Done | User dashboard — credits, plan, deck list |
 | `/decks/new` | `src/app/decks/new/page.tsx` | ✅ Done | PDF upload → AI generation flow (PdfUploadFlow) |
 | `/decks/[id]` | `src/app/decks/[id]/page.tsx` | ✅ Done | Deck detail — flip-card viewer, quiz CTA |
@@ -394,30 +394,27 @@ changes everywhere automatically.
 | v.01 | Initial frontend — landing, login, signup, dashboard, all app pages, proxy auth fix, version badge |
 | v.02 | Security hardening — user_id double-filter on Supabase queries, load timeouts, login redirect fix, referral input sanitization, sign-out confirmation, dashboard deck shortcut |
 | v.03 | DeepSeek flashcard generation live (frontend) — merged prompt/AI-Gen branch, added openai package, full generate route (auth + Supabase persistence + credit deduction), PdfUploadFlow wired to callGenerate, PDF_EXTRACTION_TEST_MODE off, version badge moved to bottom-right. Backend — registration fixes (error mapping, course/consent/name persistence via metadata-aware `handle_new_user` trigger) + stuck-confirmation recovery (self-serve resend-confirmation, self-healing profiles on login, admin auth runbook) |
+| v.04 | Merged Christian's `main` backend push (deck/auth fixes + atomic Supabase RPCs) into `FrontEnd`, AI-consent gate (signup persistence + upload checkbox screen). New: `/forgot-password` page + `/settings?mode=reset-password` flow (full spec implementation — enumeration-safe, cooldown, expired-link handling). Migrated `/dashboard` and `/decks/[id]` off direct Supabase reads onto `GET /api/decks` and `GET /api/decks/[id]` (#6b). Dashboard navbar brought in line with the master doc — added Rewards/Settings links, "Earn more →" / "Upgrade →" contextual CTAs, credits pill kept as a non-clickable status display (not a link, per §19/§9.1). Plus 6 small lint/cleanup fixes (`<a>` → `<Link>`, unescaped apostrophes, dead `shareUrl` var, lazy-init refactor on quiz-result to drop a cascading-render warning). All typecheck + lint clean. |
 
 ---
 
 ## For Claude (Session Lifeline)
 
-**Last session: 2026-06-03**
+**Last session: 2026-06-07**
 
 ### What happened
-- Login tested and working — Yujin logged in with existing account (aerochrom2420@gmail.com)
-- Version badge moved from bottom-left to bottom-right (was covered by browser UI)
-- Discovered backend branch `prompt/AI-Gen` had full DeepSeek implementation ready
-- Merged `prompt/AI-Gen` into `FrontEnd` — clean merge, no conflicts
-- New files added: `src/lib/deepseek/client.ts`, `generate-cards.ts`, `index.ts`
-- `openai ^6.41.0` installed (DeepSeek uses OpenAI-compatible API)
-- `PDF_EXTRACTION_TEST_MODE` set to `false` — generation is now live
-- DeepSeek API key added to `.env.local` (`DEEPSEEK_API_KEY`)
-- Model set to `deepseek-v4-flash` in `.env.local`
-- `SUPABASE_SERVICE_ROLE_KEY` still missing — without it, cards generate but are NOT saved to DB (preview mode only). Full persistence needs this key from Alcazar.
-- Version bumped to v.03
+- Merged Christian's `main` push (`6dc199f` deck/auth fixes + atomic Supabase RPCs, `3e4aa71` doc sync) into `FrontEnd` — resolved the `signup/route.ts` / `PdfUploadFlow.tsx` conflict by keeping his DB-trigger-based consent fix (typo-free, live-tested) and salvaging the frontend consent-gate UI
+- Built `/forgot-password` (new page) + `/settings?mode=reset-password` per the spec already written in this file — both fully wired to `ApiPaths.authForgotPassword` / `authResetPassword`, enumeration-safe, 60s resend cooldown, expired-link + validation states handled
+- Migrated `/dashboard` and `/decks/[id]` off direct Supabase table reads onto `GET /api/decks` / `GET /api/decks/[id]` (closes TODO #6b — profile reads stay direct since there's no profile API route)
+- Reworked dashboard navbar to match the master doc (§19 "credit bar = remaining + earn-more link", §9.1 "credits are a status element, not a button"): credits pill is a plain non-clickable display, Rewards/Settings are separate nav links, Credits/Plan stat cards got contextual "Earn more →" / "Upgrade →" CTAs
+- 6 small lint/cleanup fixes: `<a>` → `<Link>` on login/signup nav links, unescaped `'`/`’` → `&apos;` (admin, rewards, upgrade), dropped a dead `shareUrl` var in rewards, lazy-`useState`-init refactor on quiz-result to kill a cascading-render warning
+- `App.version` bumped `v.03` → `v.04`
+- Full `tsc --noEmit` pass clean, `eslint` clean on every touched file
 
 ### Pending
-- Get `SUPABASE_SERVICE_ROLE_KEY` from Alcazar — needed for deck/flashcard saves + credit deduction
-- Test full flow end-to-end with service role key: upload PDF → generate → save deck → redirect to `/decks/[id]`
-- Verify `/decks/[id]` and `/quiz/[deckId]` pages work with real saved data
+- **Tell Christian/backend:** Supabase's built-in dev email service caps at ~2 emails/hour — found while testing `/forgot-password` repeatedly. Either raise the dev-project rate limit or start planning custom SMTP (Resend/SendGrid) before launch; both forgot-password and signup-confirmation emails ride on it. Not urgent today, but a real pre-launch blocker (already flagged in the master doc's blocker list).
+- Everything assigned-and-unblocked for frontend is now done. Remaining frontend work (`/upgrade`, `/admin`, `/rewards` wiring, Living Deck UI) is blocked on backend routes that don't exist yet (`docs/TODO.md` #9, #10, #11, #8) — don't start, you'd be building against 404s.
+- Optional unassigned polish (deck-detail UX, quiz-flow progress bar, toasts/empty-states, mobile pass, shared design system) — real gaps, not urgent, Yujin's call when he wants to pick one up.
 
 ### Key paths
 - DeepSeek lib: `src/lib/deepseek/` (client, generate-cards, index)

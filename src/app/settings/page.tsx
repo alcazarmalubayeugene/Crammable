@@ -1,8 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
+  ApiErrorCode,
+  ApiPaths,
   App,
   Routes,
   SubscriptionTier,
@@ -19,7 +23,10 @@ interface MinProfile {
   referral_code: string;
 }
 
-export default function SettingsPage() {
+function SettingsContent() {
+  const searchParams = useSearchParams();
+  const isResetMode = searchParams.get("mode") === "reset-password";
+
   const [profile, setProfile] = useState<MinProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -35,7 +42,17 @@ export default function SettingsPage() {
   // logout state
   const [loggingOut, setLoggingOut] = useState(false);
 
+  // reset-password mode state (?mode=reset-password)
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetError, setResetError] = useState("");
+  const [resetExpired, setResetExpired] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
+
   useEffect(() => {
+    if (isResetMode) return; // reset mode renders its own form — no profile needed
     async function load() {
       const supabase = getSupabaseBrowserClient();
       const {
@@ -59,7 +76,7 @@ export default function SettingsPage() {
       setLoading(false);
     }
     load();
-  }, []);
+  }, [isResetMode]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -105,6 +122,149 @@ export default function SettingsPage() {
     const supabase = getSupabaseBrowserClient();
     await supabase.auth.signOut();
     window.location.replace(Routes.home);
+  }
+
+  async function handleResetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    setResetError("");
+    setResetExpired(false);
+
+    if (newPassword.length < 8) {
+      setResetError("Password must be at least 8 characters.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setResetError("Passwords don't match.");
+      return;
+    }
+
+    setResetLoading(true);
+    let data: { success: boolean; error?: { code: string; message: string } };
+    try {
+      const res = await fetch(ApiPaths.authResetPassword, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ newPassword }),
+      });
+      data = await res.json();
+    } catch {
+      setResetLoading(false);
+      setResetError("Something went wrong. Please try again.");
+      return;
+    }
+    setResetLoading(false);
+
+    if (data.success) {
+      setResetDone(true);
+      window.location.replace(Routes.dashboard);
+      return;
+    }
+
+    // Expired/used link → the POST comes back UNAUTHORIZED (session lacks reset scope).
+    if (data.error?.code === ApiErrorCode.UNAUTHORIZED) {
+      setResetExpired(true);
+      return;
+    }
+
+    // VALIDATION_ERROR (e.g. same as old password) surfaces its own message;
+    // anything else falls back to a generic line.
+    setResetError(data.error?.message ?? "Something went wrong. Please try again.");
+  }
+
+  // ── reset-password mode (?mode=reset-password) ─────────────────────────────────
+
+  if (isResetMode) {
+    return (
+      <main style={{ minHeight: "100vh", background: "#FAF2E4", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
+        {/* ── NAVBAR ── */}
+        <nav style={{ background: "#2E1A0C", borderBottom: "1px solid #4A2512" }}>
+          <div style={{ maxWidth: 1024, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 24 }}>🦫</span>
+            <span style={{ fontFamily: "var(--font-lora, serif)", fontWeight: 700, fontSize: 18, color: "#FAF2E4" }}>
+              {App.name}
+            </span>
+          </div>
+        </nav>
+
+        {/* ── RESET CARD ── */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 64px)", padding: "40px 24px" }}>
+          <div style={{ width: "100%", maxWidth: 420 }}>
+
+            <div style={{ textAlign: "center", marginBottom: 32 }}>
+              <div style={{ fontSize: 48, marginBottom: 12 }}>🦫</div>
+              <h1 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 26, fontWeight: 700, color: "#2E1A0C", marginBottom: 6 }}>
+                Set a new password
+              </h1>
+              <p style={{ color: "#8A6E52", fontSize: 14 }}>
+                You&apos;re almost in. Choose a new password for your account.
+              </p>
+            </div>
+
+            <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 20, padding: 32 }}>
+
+              {resetDone ? (
+                <p style={{ textAlign: "center", fontSize: 14, color: "#5C7A35", fontWeight: 600, margin: 0 }}>
+                  Password updated! Redirecting…
+                </p>
+              ) : resetExpired ? (
+                <div style={{ background: "#FEF0E0", border: "1px solid #E0C9A8", borderRadius: 10, padding: "14px 16px", fontSize: 13, color: "#8B5E38", lineHeight: 1.6 }}>
+                  Your reset link has expired.{" "}
+                  <Link href={Routes.forgotPassword} style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "underline" }}>
+                    Request a new one
+                  </Link>
+                  .
+                </div>
+              ) : (
+                <>
+                  {resetError && (
+                    <div style={{ background: "#FEF0E0", border: "1px solid #E0C9A8", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#8B5E38" }}>
+                      {resetError}
+                    </div>
+                  )}
+
+                  <form onSubmit={handleResetPassword}>
+                    <div style={{ marginBottom: 16 }}>
+                      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#2E1A0C", marginBottom: 6 }}>
+                        New password
+                      </label>
+                      <PasswordInput
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        placeholder="••••••••"
+                        show={showPassword}
+                        onToggle={() => setShowPassword((v) => !v)}
+                      />
+                    </div>
+
+                    <div style={{ marginBottom: 20 }}>
+                      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#2E1A0C", marginBottom: 6 }}>
+                        Confirm new password
+                      </label>
+                      <PasswordInput
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        placeholder="••••••••"
+                        show={showPassword}
+                        onToggle={() => setShowPassword((v) => !v)}
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={resetLoading}
+                      style={{ width: "100%", padding: "12px 0", background: resetLoading ? "#A86826" : "#C47A2E", color: "#FAF2E4", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: resetLoading ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                    >
+                      {resetLoading ? "Updating…" : "Update password"}
+                    </button>
+                  </form>
+                </>
+              )}
+
+            </div>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   // ── loading ───────────────────────────────────────────────────────────────────
@@ -388,7 +548,87 @@ export default function SettingsPage() {
   );
 }
 
+// useSearchParams must be wrapped in a Suspense boundary (Next.js requirement).
+export default function SettingsPage() {
+  return (
+    <Suspense
+      fallback={
+        <main style={{ minHeight: "100vh", background: "#FAF2E4", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <p style={{ color: "#8A6E52", fontFamily: "var(--font-dm-sans, sans-serif)" }}>Loading…</p>
+        </main>
+      }
+    >
+      <SettingsContent />
+    </Suspense>
+  );
+}
+
 // ── small helpers ─────────────────────────────────────────────────────────────
+
+function PasswordInput({
+  value,
+  onChange,
+  placeholder,
+  show,
+  onToggle,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  placeholder: string;
+  show: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div style={{ position: "relative" }}>
+      <input
+        type={show ? "text" : "password"}
+        placeholder={placeholder}
+        value={value}
+        onChange={onChange}
+        minLength={8}
+        style={{ ...inputStyle, paddingRight: 44 }}
+      />
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-label={show ? "Hide password" : "Show password"}
+        style={{
+          position: "absolute",
+          right: 6,
+          top: "50%",
+          transform: "translateY(-50%)",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: 8,
+          display: "flex",
+          alignItems: "center",
+          color: "#8A6E52",
+        }}
+      >
+        {show ? <EyeOffIcon /> : <EyeIcon />}
+      </button>
+    </div>
+  );
+}
+
+function EyeIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+      <circle cx="12" cy="12" r="3" />
+    </svg>
+  );
+}
+
+function EyeOffIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+      <line x1="1" y1="1" x2="23" y2="23" />
+    </svg>
+  );
+}
 
 function Row({
   label,
