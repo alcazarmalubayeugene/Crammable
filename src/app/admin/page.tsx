@@ -174,7 +174,7 @@ export default function AdminPage() {
     return (
       <main style={{ minHeight: "100vh", background: "#FAF2E4", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, fontFamily: "var(--font-dm-sans, sans-serif)" }}>
         <span style={{ fontSize: 48 }}>🔒</span>
-        <p style={{ color: "#8A6E52", fontSize: 15 }}>You don't have access to this page.</p>
+        <p style={{ color: "#8A6E52", fontSize: 15 }}>You don&apos;t have access to this page.</p>
         <a href={Routes.dashboard} style={{ color: "#C47A2E", fontWeight: 600, fontSize: 14, textDecoration: "none" }}>
           ← Back to Dashboard
         </a>

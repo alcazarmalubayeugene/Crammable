@@ -1,23 +1,27 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
-// import { useRouter } from "next/navigation";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
-  // ApiErrorCode,
+  ApiErrorCode,
   ApiPaths,
   App,
   MAX_UPLOAD_SIZE_MB,
   OcrThresholds,
   PdfType,
-  // Routes,
+  Routes,
+  TableNames,
   UIMessages,
   type ApiResponse,
+  type GeneratedCard,
+  type GenerateRequest,
+  type GenerateResult,
   type UploadResult,
 } from "@/lib/contracts";
 import type { UploadTestDebug } from "@/app/api/upload/route";
 import { PDF_EXTRACTION_TEST_MODE } from "@/lib/dev/pdf-test-mode";
-// Supabase auth headers — disabled for PDF test mode
-// import { authHeaders } from "@/lib/api/auth-headers";
+import { authHeaders } from "@/lib/api/auth-headers";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { runOcrOnPages } from "@/lib/pdf/ocr-client";
 import { renderPdfPagesToCanvases } from "@/lib/pdf/render-pages-client";
 
@@ -27,34 +31,73 @@ type FlowPhase =
   | "ocr_confirm"
   | "ocr_running"
   | "paste_fallback"
+  | "generating"
   | "result"
-  // | "generating"
   | "error";
 
-type TestOutput = {
+type ResultView = {
   label: string;
-  payload: unknown;
   extractedText?: string;
+  cards?: GeneratedCard[];
+  creditsRemaining?: number;
+  deckId?: string;
+  debug?: unknown;
 };
 
 export function PdfUploadFlow() {
-  // const router = useRouter();
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<FlowPhase>("idle");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [ocrMessage, setOcrMessage] = useState("");
   const [pageProgress, setPageProgress] = useState({ current: 0, total: 0 });
-  const [pastedText, setPastedText] = useState("");
-  const [errorMessage, setErrorMessage] = useState("");
-  const [statusLine, setStatusLine] = useState("");
-  const [testOutput, setTestOutput] = useState<TestOutput | null>(null);
-  const [layer1Payload, setLayer1Payload] = useState<unknown>(null);
+  const [pastedText, setPastedText]           = useState("");
+  const [errorMessage, setErrorMessage]       = useState("");
+  const [statusLine, setStatusLine]           = useState("");
+  const [layer1Payload, setLayer1Payload]     = useState<unknown>(null);
+  const [resultView, setResultView]           = useState<ResultView | null>(null);
+  // Populated when the upload returns path: "ocr" — used for selective page rendering.
+  const [imagePageNumbers, setImagePageNumbers] = useState<number[]>([]);
+  const [partialText, setPartialText]           = useState("");
 
-  const showTestResult = useCallback((label: string, payload: unknown, extractedText?: string) => {
-    setTestOutput({ label, payload, extractedText });
-    setPhase("result");
-    setStatusLine("");
+  // ── AI consent gate ───────────────────────────────────────────────────────────
+  const [consentChecked, setConsentChecked] = useState(false);   // loading done
+  const [hasConsented, setHasConsented] = useState(false);
+  const [consentTicked, setConsentTicked] = useState(false);     // checkbox in consent card
+  const [consentSaving, setConsentSaving] = useState(false);
+  const [consentError, setConsentError] = useState("");
+
+  useEffect(() => {
+    async function checkConsent() {
+      const supabase = getSupabaseBrowserClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setConsentChecked(true); return; }
+      const { data } = await supabase
+        .from(TableNames.profiles)
+        .select("consent_deepseek")
+        .eq("id", user.id)
+        .single();
+      setHasConsented(data?.consent_deepseek === true);
+      setConsentChecked(true);
+    }
+    checkConsent();
   }, []);
+
+  const handleGiveConsent = useCallback(async () => {
+    if (!consentTicked) { setConsentError("Please tick the checkbox to continue."); return; }
+    setConsentSaving(true);
+    setConsentError("");
+    const supabase = getSupabaseBrowserClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) { setConsentError("Session expired. Please log in again."); setConsentSaving(false); return; }
+    const { error } = await supabase
+      .from(TableNames.profiles)
+      .update({ consent_deepseek: true })
+      .eq("id", user.id);
+    if (error) { setConsentError("Failed to save. Please try again."); setConsentSaving(false); return; }
+    setHasConsented(true);
+    setConsentSaving(false);
+  }, [consentTicked]);
 
   const resetToIdle = useCallback(() => {
     setPhase("idle");
@@ -64,26 +107,93 @@ export function PdfUploadFlow() {
     setPastedText("");
     setErrorMessage("");
     setStatusLine("");
-    setTestOutput(null);
     setLayer1Payload(null);
+    setResultView(null);
+    setImagePageNumbers([]);
+    setPartialText("");
     if (fileInputRef.current) fileInputRef.current.value = "";
   }, []);
 
-  // ── Generate / credits / DeepSeek — disabled for PDF test mode ──────────────
-  // const callGenerate = useCallback(async (extractedText: string, pdfType: ...) => { ... }, [router]);
+  const showExtractionPreview = useCallback(
+    (label: string, payload: unknown, extractedText?: string) => {
+      setResultView({ label, debug: payload, extractedText });
+      setPhase("result");
+      setStatusLine("");
+    },
+    [],
+  );
+
+  const callGenerate = useCallback(
+    async (
+      extractedText: string,
+      pdfType: (typeof PdfType)[keyof typeof PdfType],
+      debug?: unknown,
+    ) => {
+      setPhase("generating");
+      setStatusLine("Sending to DeepSeek and generating flashcards…");
+      setErrorMessage("");
+
+      const payload: GenerateRequest = { extractedText, pdfType };
+      const headers = await authHeaders({ "Content-Type": "application/json" });
+      const res = await fetch(ApiPaths.generate, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await res.json()) as ApiResponse<GenerateResult>;
+      if (!data.success) {
+        if (data.error.code === ApiErrorCode.EXTRACTION_FAILED) {
+          setPhase("paste_fallback");
+          setErrorMessage("");
+          setResultView({
+            label: "Extraction too weak for AI",
+            debug: data.error,
+            extractedText,
+          });
+          return;
+        }
+        setPhase("error");
+        setErrorMessage(data.error.message);
+        return;
+      }
+
+      const isPreview = data.deckId.startsWith("preview-");
+
+      if (isPreview) {
+        setResultView({
+          label: "DeepSeek flashcards (preview — not saved to database)",
+          extractedText: extractedText.slice(0, 2000),
+          cards: data.cards,
+          creditsRemaining: data.creditsRemaining,
+          deckId: data.deckId,
+          debug,
+        });
+        setPhase("result");
+        setStatusLine("");
+        return;
+      }
+
+      setStatusLine(UIMessages.creditDeducted(data.creditsRemaining));
+      router.push(Routes.deck(data.deckId));
+    },
+    [router],
+  );
 
   const uploadPdf = useCallback(
     async (file: File) => {
       setPhase("uploading");
       setErrorMessage("");
-      setTestOutput(null);
+      setResultView(null);
       setStatusLine("Uploading and analyzing PDF (Layer 1)…");
 
       const formData = new FormData();
       formData.append("file", file);
 
+      const headers = await authHeaders();
       const res = await fetch(ApiPaths.upload, {
         method: "POST",
+        headers,
         body: formData,
       });
 
@@ -98,16 +208,29 @@ export function PdfUploadFlow() {
       }
 
       if (data.path === PdfType.TEXT) {
-        showTestResult("Layer 1 — text PDF (server)", data, data.extractedText);
+        if (PDF_EXTRACTION_TEST_MODE) {
+          showExtractionPreview("Layer 1 — text PDF", data, data.extractedText);
+          return;
+        }
+        await callGenerate(data.extractedText, PdfType.TEXT, data._debug ?? data);
         return;
       }
 
+      const imgPages = data.imagePageNumbers;
+      setImagePageNumbers(imgPages);
+      setPartialText(data.partialText);
       setPdfFile(file);
-      setOcrMessage(data.message);
+      // Give a more specific prompt when we already have some good text and know exactly
+      // which pages need scanning.
+      const scanNote =
+        imgPages.length > 0
+          ? ` ${imgPages.length} page${imgPages.length === 1 ? "" : "s"} will be scanned${data.partialText ? " (other pages already extracted)" : ""}.`
+          : "";
+      setOcrMessage(data.message + scanNote);
       setLayer1Payload(data);
       setPhase("ocr_confirm");
     },
-    [showTestResult],
+    [callGenerate, showExtractionPreview],
   );
 
   const onFileSelected = useCallback(
@@ -124,82 +247,174 @@ export function PdfUploadFlow() {
 
     setPhase("ocr_running");
     setErrorMessage("");
-    setTestOutput(null);
+    setResultView(null);
 
     try {
-      const rendered = await renderPdfPagesToCanvases(pdfFile, (current, total) => {
-        setPageProgress({ current, total });
-        setStatusLine(UIMessages.ocrProgress(current, total));
-      });
+      // Only render pages the server flagged as sparse — skips pages that already
+      // have good embedded text, saving significant time on mixed PDFs.
+      const pagesToOcr = imagePageNumbers.length > 0 ? imagePageNumbers : undefined;
+
+      const rendered = await renderPdfPagesToCanvases(
+        pdfFile,
+        (current, total) => {
+          setPageProgress({ current, total });
+          setStatusLine(UIMessages.ocrProgress(current, total));
+        },
+        pagesToOcr,
+      );
 
       const ocrResult = await runOcrOnPages(rendered, (current, total) => {
         setPageProgress({ current, total });
         setStatusLine(UIMessages.ocrProgress(current, total));
       });
 
-      const payload = {
+      const debug = {
         path: PdfType.OCR,
+        scannedPageNumbers: pagesToOcr ?? "all",
         needsPasteFallback: ocrResult.needsPasteFallback,
         minTesseractConfidence: OcrThresholds.minTesseractConfidence,
+        hasPartialText: Boolean(partialText),
         pages: ocrResult.pages.map((p) => ({
           page: p.pageNumber,
           confidence: Math.round(p.confidence * 1000) / 1000,
           charCount: p.text.replace(/\s/g, "").length,
-          textPreview: p.text.slice(0, 200),
         })),
-        extractedTextLength: ocrResult.extractedText.length,
       };
 
-      if (ocrResult.needsPasteFallback || !ocrResult.extractedText.trim()) {
+      // Merge server-extracted text (good pages) with OCR text (image pages).
+      // If OCR confidence was too low, fall back to the partial text alone rather
+      // than all the way to paste — partial text is better than nothing.
+      const ocrSucceeded = !ocrResult.needsPasteFallback && ocrResult.extractedText.trim();
+      const finalText = [
+        partialText,
+        ocrSucceeded ? ocrResult.extractedText : "",
+      ]
+        .filter(Boolean)
+        .join("\n\n")
+        .trim();
+
+      if (!finalText) {
         setPhase("paste_fallback");
-        setTestOutput({
-          label: "Layer 2 — OCR failed majority confidence → Layer 3",
-          payload,
+        setResultView({
+          label: "Layer 2 — low OCR confidence, no partial text → paste fallback",
+          debug,
         });
         return;
       }
 
-      showTestResult("Layer 2 — OCR success", payload, ocrResult.extractedText);
+      if (PDF_EXTRACTION_TEST_MODE) {
+        showExtractionPreview("Layer 2 — OCR success", debug, finalText);
+        return;
+      }
+
+      await callGenerate(finalText, PdfType.OCR, debug);
     } catch (err) {
       setPhase("paste_fallback");
       setErrorMessage(err instanceof Error ? err.message : "OCR failed");
-      setTestOutput({
-        label: "Layer 2 — OCR error",
-        payload: { error: String(err) },
-      });
     }
-  }, [pdfFile, showTestResult]);
+  }, [pdfFile, imagePageNumbers, partialText, callGenerate, showExtractionPreview]);
 
-  const submitPaste = useCallback(() => {
+  const submitPaste = useCallback(async () => {
     const text = pastedText.trim();
     if (!text) {
       setErrorMessage("Please paste your notes before continuing.");
       return;
     }
     setErrorMessage("");
-    showTestResult("Layer 3 — manual paste", { path: PdfType.PASTE, charCount: text.length }, text);
-  }, [pastedText, showTestResult]);
 
-  const isBusy = phase === "uploading" || phase === "ocr_running";
+    if (PDF_EXTRACTION_TEST_MODE) {
+      showExtractionPreview("Layer 3 — manual paste", { path: PdfType.PASTE }, text);
+      return;
+    }
+
+    await callGenerate(text, PdfType.PASTE);
+  }, [pastedText, callGenerate, showExtractionPreview]);
+
+  const isBusy =
+    phase === "uploading" || phase === "ocr_running" || phase === "generating";
+
+  // ── consent gate — show before anything else ─────────────────────────────────
+  if (!consentChecked) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <div className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900">
+          Checking account…
+        </div>
+      </div>
+    );
+  }
+
+  if (!hasConsented) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+        <header>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Upload PDF</h2>
+          <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">One quick step before you continue.</p>
+        </header>
+        <div style={{ background: "#FBF0E0", border: "1.5px solid #E0C9A8", borderRadius: 12, padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
+          <p style={{ fontSize: 15, fontWeight: 700, color: "#2E1A0C", margin: 0 }}>AI processing consent required</p>
+          <p style={{ fontSize: 13, color: "#4A2512", lineHeight: 1.6, margin: 0 }}>
+            {App.name} sends your uploaded documents to DeepSeek AI to generate flashcards.
+            Your documents are processed to extract text and create study cards — they are not stored by DeepSeek beyond the request.
+            Do not upload documents containing sensitive or confidential information.
+          </p>
+          <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={consentTicked}
+              onChange={(e) => { setConsentTicked(e.target.checked); setConsentError(""); }}
+              style={{ marginTop: 2, width: 16, height: 16, accentColor: "#C47A2E", flexShrink: 0 }}
+            />
+            <span style={{ fontSize: 13, color: "#2E1A0C", lineHeight: 1.6 }}>
+              <strong>I understand and agree</strong> that my uploaded documents will be processed by DeepSeek AI to generate flashcards. I will not upload sensitive or confidential information.
+            </span>
+          </label>
+          {consentError && <p style={{ fontSize: 13, color: "#EF4444", margin: 0 }}>{consentError}</p>}
+          <button
+            type="button"
+            onClick={handleGiveConsent}
+            disabled={consentSaving}
+            style={{
+              alignSelf: "flex-start",
+              background: consentSaving ? "#C49A6C" : "#C47A2E",
+              color: "#FAF2E4",
+              border: "none",
+              borderRadius: 8,
+              padding: "10px 24px",
+              fontSize: 14,
+              fontWeight: 600,
+              cursor: consentSaving ? "not-allowed" : "pointer",
+              fontFamily: "var(--font-dm-sans, sans-serif)",
+            }}
+          >
+            {consentSaving ? "Saving…" : "Continue to upload"}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
       <header>
-        <h1 className="text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
-          PDF extraction test
-        </h1>
+        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
+          Upload PDF
+        </h2>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
           {PDF_EXTRACTION_TEST_MODE ? (
             <>
-              <span className="font-medium text-amber-700 dark:text-amber-400">Test mode on</span>
+              <span className="font-medium text-amber-700 dark:text-amber-400">
+                Extraction test mode
+              </span>
               {" — "}
-              Supabase, credits, DeepSeek, and database are bypassed. Upload a PDF (max{" "}
-              {MAX_UPLOAD_SIZE_MB} MB) and inspect the output below.
+              DeepSeek generate is off. Set PDF_EXTRACTION_TEST_MODE to false in{" "}
+              <code className="text-xs">src/lib/dev/pdf-test-mode.ts</code>.
             </>
           ) : (
             <>
-              Upload a Philippine university handout (PDF, max {MAX_UPLOAD_SIZE_MB} MB).{" "}
-              {App.name} uses a 3-layer reader: fast text extraction, then OCR, then manual paste.
+              Upload a handout (max {MAX_UPLOAD_SIZE_MB} MB). {App.name} extracts text, then
+              sends it to DeepSeek to build flashcards. One credit is used only after cards
+              are generated successfully.
             </>
           )}
         </p>
@@ -220,7 +435,7 @@ export function PdfUploadFlow() {
         </label>
       )}
 
-      {phase === "uploading" && (
+      {(phase === "uploading" || phase === "generating") && (
         <div
           className="rounded-lg border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-300"
           role="status"
@@ -246,7 +461,7 @@ export function PdfUploadFlow() {
             <button
               type="button"
               onClick={runClientOcr}
-              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+              className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900"
             >
               Continue (Layer 2 OCR)
             </button>
@@ -256,14 +471,14 @@ export function PdfUploadFlow() {
                 setPhase("paste_fallback");
                 setStatusLine("");
               }}
-              className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-600 dark:text-zinc-300"
             >
-              Skip to Layer 3 (paste)
+              Paste text instead
             </button>
             <button
               type="button"
               onClick={resetToIdle}
-              className="rounded-lg px-4 py-2 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200"
+              className="rounded-lg px-4 py-2 text-sm text-zinc-600 hover:text-zinc-900 dark:text-zinc-400"
             >
               Start over
             </button>
@@ -320,7 +535,7 @@ export function PdfUploadFlow() {
               onClick={submitPaste}
               className="rounded-lg bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800 disabled:opacity-50 dark:bg-zinc-100 dark:text-zinc-900"
             >
-              Show paste output (Layer 3)
+              {PDF_EXTRACTION_TEST_MODE ? "Show paste output" : "Generate flashcards"}
             </button>
             <button
               type="button"
@@ -333,12 +548,12 @@ export function PdfUploadFlow() {
         </div>
       )}
 
-      {phase === "result" && testOutput && (
+      {phase === "result" && resultView && (
         <div className="flex flex-col gap-4 rounded-xl border border-emerald-200 bg-emerald-50/50 p-5 dark:border-emerald-900/50 dark:bg-emerald-950/20">
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
-              {testOutput.label}
-            </h2>
+            <h3 className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
+              {resultView.label}
+            </h3>
             <button
               type="button"
               onClick={resetToIdle}
@@ -348,25 +563,53 @@ export function PdfUploadFlow() {
             </button>
           </div>
 
-          {testOutput.extractedText !== undefined && (
-            <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
-                Extracted text
+          {resultView.cards && resultView.cards.length > 0 && (
+            <div className="flex flex-col gap-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Generated flashcards ({resultView.cards.length})
               </p>
-              <pre className="max-h-64 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 text-xs whitespace-pre-wrap text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
-                {testOutput.extractedText || "(empty)"}
-              </pre>
+              <ul className="flex max-h-96 flex-col gap-2 overflow-auto">
+                {resultView.cards.map((card, i) => (
+                  <li
+                    key={i}
+                    className="rounded-lg border border-zinc-200 bg-white p-3 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                  >
+                    <p className="font-medium text-zinc-900 dark:text-zinc-100">
+                      {card.front}
+                    </p>
+                    <p className="mt-1 text-zinc-600 dark:text-zinc-400">{card.back}</p>
+                    {card.tags.length > 0 && (
+                      <p className="mt-2 text-xs text-zinc-500">
+                        {card.tags.join(" · ")}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
 
-          <div>
-            <p className="mb-2 text-xs font-medium uppercase tracking-wide text-zinc-500">
-              API / pipeline JSON
-            </p>
-            <pre className="max-h-80 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 text-xs text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
-              {JSON.stringify(testOutput.payload, null, 2)}
-            </pre>
-          </div>
+          {resultView.extractedText !== undefined && (
+            <details>
+              <summary className="cursor-pointer text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Extracted text preview
+              </summary>
+              <pre className="mt-2 max-h-48 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 text-xs whitespace-pre-wrap text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
+                {resultView.extractedText || "(empty)"}
+              </pre>
+            </details>
+          )}
+
+          {resultView.debug != null && (
+            <details>
+              <summary className="cursor-pointer text-xs font-medium uppercase tracking-wide text-zinc-500">
+                Pipeline debug JSON
+              </summary>
+              <pre className="mt-2 max-h-48 overflow-auto rounded-lg border border-zinc-200 bg-white p-3 text-xs text-zinc-800 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200">
+                {JSON.stringify(resultView.debug, null, 2)}
+              </pre>
+            </details>
+          )}
         </div>
       )}
 
@@ -383,6 +626,10 @@ export function PdfUploadFlow() {
             Try again
           </button>
         </div>
+      )}
+
+      {!PDF_EXTRACTION_TEST_MODE && phase === "generating" && (
+        <p className="text-xs text-zinc-500">{UIMessages.aiDisclaimer}</p>
       )}
     </div>
   );

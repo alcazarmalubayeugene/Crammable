@@ -13,7 +13,7 @@ export interface PageOcrResult {
 export interface OcrRunResult {
   pages: PageOcrResult[];
   extractedText: string;
-  /** True when a majority of pages fall below minTesseractConfidence → Layer 3. */
+  /** True when a majority of OCR'd pages fall below minTesseractConfidence → Layer 3. */
   needsPasteFallback: boolean;
 }
 
@@ -23,13 +23,25 @@ function normaliseConfidence(raw: number): number {
 
 /**
  * Layer 2 — Tesseract.js OCR per rendered page with majority confidence gate.
+ *
+ * Uses OEM.LSTM_ONLY (neural-net engine, more accurate than the legacy engine)
+ * and PSM.AUTO (automatic page segmentation, handles mixed text/image layouts).
+ * Only processes the pages passed in — callers should pass imagePageNumbers from
+ * the upload response to skip pages that already have good embedded text.
  */
 export async function runOcrOnPages(
   renderedPages: RenderedPdfPage[],
   onProgress?: (current: number, total: number) => void,
 ): Promise<OcrRunResult> {
   const Tesseract = await import("tesseract.js");
-  const worker = await Tesseract.createWorker("eng");
+
+  // OEM 1 = LSTM_ONLY: neural network engine, notably more accurate on mixed layouts.
+  // PSM 3 = AUTO: fully automatic page segmentation — correct for handouts with varying layout.
+  const worker = await Tesseract.createWorker("eng", Tesseract.OEM.LSTM_ONLY);
+  await worker.setParameters({
+    tessedit_pageseg_mode: Tesseract.PSM.AUTO,
+  });
+
   const pages: PageOcrResult[] = [];
   const total = renderedPages.length;
 

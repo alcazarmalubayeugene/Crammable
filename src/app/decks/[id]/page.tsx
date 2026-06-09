@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
+  ApiPaths,
   App,
   Routes,
   TableNames,
@@ -46,35 +47,34 @@ export default function DeckDetailPage() {
         return;
       }
 
-      const [profileRes, deckRes, cardsRes] = await Promise.all([
+      // Profile stays a direct (RLS-scoped) read — no profile API route exists.
+      // Deck + cards now come from GET /api/decks/[id] (cookie-auth; the route
+      // enforces ownership server-side and 404s for non-owned/missing decks).
+      const [profileRes, deckRes] = await Promise.all([
         supabase
           .from(TableNames.profiles)
           .select("token_balance, full_name")
           .eq("id", user.id)
           .single(),
-        supabase
-          .from(TableNames.decks)
-          .select("*")
-          .eq("id", deckId)
-          .eq("user_id", user.id)
-          .single(),
-        supabase
-          .from(TableNames.flashcards)
-          .select("*")
-          .eq("deck_id", deckId)
-          .eq("user_id", user.id)
-          .order("created_at"),
+        fetch(ApiPaths.deck(deckId)),
       ]);
 
-      if (deckRes.error || !deckRes.data) {
+      const deckJson = (await deckRes.json()) as {
+        success: boolean;
+        deck?: Deck;
+        cards?: Flashcard[];
+        error?: { message: string };
+      };
+
+      if (!deckJson.success || !deckJson.deck) {
         setError("Deck not found or you don't have access to it.");
         setLoading(false);
         return;
       }
 
       setProfile(profileRes.data);
-      setDeck(deckRes.data as Deck);
-      setCards((cardsRes.data ?? []) as Flashcard[]);
+      setDeck(deckJson.deck);
+      setCards(deckJson.cards ?? []);
       setLoading(false);
       } finally {
         clearTimeout(timeout);

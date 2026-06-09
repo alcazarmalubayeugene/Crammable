@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
 import { App, Routes } from "@/lib/contracts";
 
@@ -39,19 +39,21 @@ export default function QuizResultPage() {
     ? params.deckId[0]
     : (params.deckId as string);
 
-  const [result, setResult] = useState<QuizResultData | null>(null);
-  const [showMissed, setShowMissed] = useState(false);
-
-  useEffect(() => {
+  // Parse the result during render (lazy init) rather than in an effect —
+  // avoids the cascading-render lint and reads sessionStorage exactly once.
+  // Guarded for SSR, where sessionStorage doesn't exist.
+  const [result] = useState<QuizResultData | null>(() => {
+    if (typeof window === "undefined") return null;
     const raw = sessionStorage.getItem(QUIZ_RESULT_KEY);
-    if (raw) {
-      try {
-        setResult(JSON.parse(raw) as QuizResultData);
-      } catch {
-        // malformed — just show the no-data state
-      }
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as QuizResultData;
+    } catch {
+      // malformed — just show the no-data state
+      return null;
     }
-  }, []);
+  });
+  const [showMissed, setShowMissed] = useState(false);
 
   // ── no result data ────────────────────────────────────────────────────────────
 

@@ -93,6 +93,24 @@ export function toDbError(
       "You're out of credits. Upgrade to Pro or earn more to keep generating."
     );
   }
+  if (msg.startsWith("SESSION_NOT_FOUND")) {
+    // submit_quiz_result(): the session id is missing or owned by another user.
+    // 404 (not the FORBIDDEN code's default 403) avoids leaking which session
+    // ids exist — matching the result route's previous apiFail(FORBIDDEN, 404).
+    return new DbError(ApiErrorCode.FORBIDDEN, 404, "Quiz session not found.");
+  }
+  if (msg.startsWith("ALREADY_SUBMITTED")) {
+    // submit_quiz_result(): the session was already completed (double-submit).
+    return new DbError(
+      ApiErrorCode.VALIDATION_ERROR,
+      409,
+      "This quiz session has already been submitted."
+    );
+  }
+  if (msg.startsWith("NO_ANSWERS")) {
+    // submit_quiz_result(): empty answers array reached the DB.
+    return dbError(ApiErrorCode.VALIDATION_ERROR, "At least one answer is required.");
+  }
   if (msg.startsWith("FORBIDDEN:")) {
     return dbError(ApiErrorCode.FORBIDDEN, "That change isn't allowed.");
   }

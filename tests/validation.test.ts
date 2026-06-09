@@ -44,7 +44,7 @@ describe("validate helpers", () => {
 });
 
 describe("insertFlashcards validation (M4)", () => {
-  const ok: GeneratedCard = { front: "Q", back: "A", tags: ["t"] };
+  const ok: GeneratedCard = { front: "Q", back: "A", tags: ["t"], category: "General" };
 
   it("rejects an over-length front before any DB call", async () => {
     const cards: GeneratedCard[] = [

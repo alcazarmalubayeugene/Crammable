@@ -7,6 +7,7 @@ import {
   AdminConfig,
   App,
   ApiPaths,
+  MAX_UPLOAD_SIZE_MB,
   PaymentMethod,
   PaymentStatus,
   Pricing,
@@ -40,14 +41,14 @@ interface LatestPayment {
 const FREE_FEATURES = [
   `${TierLimits.free.maxDecks} decks`,
   `${TierLimits.free.maxCardsPerDeck} cards per deck`,
-  `${TierLimits.free.maxUploadPages} pages per upload`,
+  `Unlimited pages per upload (max ${MAX_UPLOAD_SIZE_MB} MB)`,
   `${TierLimits.free.startingCredits} starting credits`,
 ];
 
 const PRO_FEATURES = [
   "Unlimited decks",
   "Unlimited cards per deck",
-  `${TierLimits.pro.maxUploadPages} pages per upload`,
+  `Unlimited pages per upload (max ${MAX_UPLOAD_SIZE_MB} MB)`,
   `${TierLimits.pro.monthlyCredits} credits every month`,
   "Deep Dive generation mode",
   "Living Decks (auto-refresh weak cards)",
@@ -271,7 +272,7 @@ export default function UpgradePage() {
               marginBottom: 8,
             }}
           >
-            You're already on Pro!
+            You&apos;re already on Pro!
           </h1>
           <p style={{ color: "#8A6E52", fontSize: 15, marginBottom: 28 }}>
             You have full access to all Pro features.

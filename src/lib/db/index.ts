@@ -41,7 +41,7 @@ export {
   countDecksForUser,
   updateDeckCardCount,
   deleteDeck,
-  createDeckWithCards,
+  createDeckWithCardsAndCharge,
   type NewDeckInput,
 } from "@/lib/db/decks";
 
@@ -57,8 +57,7 @@ export {
 export {
   createQuizSession,
   getQuizSessionById,
-  insertQuizAnswers,
-  completeQuizSession,
+  submitQuizResult,
   type NewQuizSessionInput,
 } from "@/lib/db/quiz";
 
