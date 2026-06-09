@@ -44,8 +44,9 @@ export default function SignupPage() {
         email,
         password,
         fullName,
+        course: course || undefined,
         referralCode: referral || undefined,
-        consentDeeseek: consent,
+        consentDeepseek: consent,
       }),
     });
 

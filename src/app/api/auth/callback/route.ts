@@ -55,15 +55,39 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // ── Email verification — process referral then go to dashboard ────────────
+  // ── Email verification — write profile fields + process referral ─────────
   const referralCodeUsed = user.user_metadata?.referral_code_used as
     | string
     | undefined;
 
-  if (type === "signup" && referralCodeUsed) {
-    await processSignupReferral(user.id, referralCodeUsed).catch((err) =>
-      console.error("[auth/callback] referral processing failed (non-fatal):", err)
-    );
+  if (type === "signup") {
+    const admin = createAdminClient();
+
+    // Write fields that the handle_new_user() trigger doesn't set.
+    // These values were stored in user_metadata at signup time.
+    const profilePatch: Record<string, unknown> = {};
+    if (user.user_metadata?.full_name)
+      profilePatch.full_name = user.user_metadata.full_name;
+    if (user.user_metadata?.course)
+      profilePatch.course = user.user_metadata.course;
+    if (typeof user.user_metadata?.consent_deepseek === "boolean")
+      profilePatch.consent_deepseek = user.user_metadata.consent_deepseek;
+
+    if (Object.keys(profilePatch).length > 0) {
+      await admin
+        .from(TableNames.profiles)
+        .update(profilePatch)
+        .eq("id", user.id)
+        .catch((err) =>
+          console.error("[auth/callback] profile patch failed (non-fatal):", err)
+        );
+    }
+
+    if (referralCodeUsed) {
+      await processSignupReferral(user.id, referralCodeUsed).catch((err) =>
+        console.error("[auth/callback] referral processing failed (non-fatal):", err)
+      );
+    }
   }
 
   return NextResponse.redirect(new URL(Routes.dashboard, appUrl));

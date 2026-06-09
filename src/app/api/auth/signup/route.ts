@@ -19,17 +19,21 @@ const signupSchema = z.object({
     .string()
     .max(Validation.profile.fullNameMaxLength, "Full name is too long.")
     .optional(),
+  course: z
+    .string()
+    .max(Validation.profile.courseMaxLength, "Course name is too long.")
+    .optional(),
   referralCode: z
     .string()
     .length(Validation.referralCode.length, "Referral code must be 8 characters.")
     .optional(),
-  consentDeeseek: z.boolean().optional(),
+  consentDeepseek: z.boolean().optional(),
 });
 
 /**
  * POST /api/auth/signup
  *
- * Body: { email, password, fullName?, referralCode?, consentDeeseek? }
+ * Body: { email, password, fullName?, course?, referralCode?, consentDeepseek? }
  *
  * Always returns the same success message regardless of whether the email
  * is already registered — prevents user enumeration.
@@ -51,7 +55,7 @@ export async function POST(request: NextRequest) {
       return validationErrorResponse(parsed.error.issues[0].message);
     }
 
-    const { email, password, fullName, referralCode } = parsed.data;
+    const { email, password, fullName, course, referralCode, consentDeepseek } = parsed.data;
     const supabase = await createSessionClient();
 
     const appUrl = process.env[EnvKeys.appUrl] ?? "http://localhost:3000";
@@ -62,8 +66,10 @@ export async function POST(request: NextRequest) {
       options: {
         emailRedirectTo: `${appUrl}/api/auth/callback`,
         data: {
-          full_name: fullName ?? null,
-          referral_code_used: referralCode ?? null,
+          full_name:           fullName ?? null,
+          course:              course ?? null,
+          consent_deepseek:    consentDeepseek ?? false,
+          referral_code_used:  referralCode ?? null,
         },
       },
     });

@@ -158,6 +158,14 @@ Whenever a bug is fixed, it **must** be documented here with three things:
 
 ---
 
+#### Signup consent + course + full name silently discarded
+- **What broke:** Users signing up had `consent_deepseek = false` permanently in the DB. `full_name` and `course` filled in at signup were also never saved to the profile. Uploading a PDF would always return `CONSENT_REQUIRED`.
+- **Why:** Three separate issues: (1) typo `consentDeeseek` in `page.tsx` and `signup/route.ts` (missing `p`); (2) `consentDeepseek` was validated by Zod but never destructured or used in the route handler; (3) `course` was collected on the form but never sent to the API. The `handle_new_user()` DB trigger always inserts `consent_deepseek = false` and doesn't write `full_name` or `course` at all.
+- **Fix:** Typo corrected everywhere. `course` added to the signup schema. All three fields (`full_name`, `course`, `consent_deepseek`) now stored in Supabase auth `user_metadata` at signup, then written to the profile by the callback route (`/api/auth/callback`) after email verification using the admin client.
+- **Watch out for:** The DB trigger still defaults `consent_deepseek = false` — the correct value only lands after the email verification callback runs. Never read `consent_deepseek` from the profile before a user has verified their email or the gate will always fail. Teammates have been notified to update the trigger.
+
+---
+
 #### Login broken after Next.js 16 upgrade (`middleware.ts` → `proxy.ts`)
 - **What broke:** Session cookies weren't being refreshed properly, causing logged-in users to get redirected back to `/login`.
 - **Why:** Next.js 16 deprecated `middleware.ts` and renamed it to `proxy.ts` with a new export name (`proxy` instead of `middleware`). Having both files at once caused double cookie writes that cancelled each other out.
@@ -198,3 +206,38 @@ changes everywhere automatically.
 |---|---|
 | v.01 | Initial frontend — landing, login, signup, dashboard, all app pages, proxy auth fix, version badge |
 | v.02 | Security hardening — user_id double-filter on Supabase queries, load timeouts, login redirect fix, referral input sanitization, sign-out confirmation, dashboard deck shortcut |
+| v.02 (cont.) | Bug fix — signup consent/course/full_name now correctly saved to profile via callback; version badge moved to bottom-right |
+
+---
+
+## For Claude
+
+**Session date:** 2026-06-03
+**Branch:** FrontEnd | **Version:** v.02 (no bump this session — fixes only)
+
+### What we did this session
+- Read and loaded `schema.sql`, `contracts.ts`, `CLAUDE.md`, `AGENTS.md`, `FRONTEND.md` as reference context. Always load these four at the start of every session.
+- Reviewed the full schema and identified frontend-relevant concerns.
+- Found and fixed a 3-part signup bug (see Bug Fix Documentation section for full details).
+- Moved version badge from bottom-left to bottom-right (was overlapped by browser avatar button).
+- Tested locally — dashboard loads, badge visible, signup flow confirmed working.
+
+### Files changed
+| File | What changed |
+|---|---|
+| `src/app/signup/page.tsx` | Fixed typo `consentDeeseek` → `consentDeepseek`; added `course` to the fetch body |
+| `src/app/api/auth/signup/route.ts` | Fixed typo in schema + comment; added `course` to Zod schema; destructured and passed `full_name`, `course`, `consent_deepseek` into Supabase auth `user_metadata` |
+| `src/app/api/auth/callback/route.ts` | After email verification (`type === "signup"`), now patches the profile with `full_name`, `course`, `consent_deepseek` from `user_metadata` using the admin client |
+| `src/app/layout.tsx` | Version badge position changed from `left: 14` to `right: 14` |
+| `FRONTEND.md` | Bug fix documented; For Claude section added |
+
+### Key decisions
+- Consent value is stored in `user_metadata` at signup, then written to the profile in the callback — safe because users can't log in before verifying email, so the consent gate is never hit in that window.
+- `course` and `full_name` follow the same pattern — DB trigger doesn't set them, callback does.
+- Version not bumped this session — only bug fixes, no new features.
+
+### Still pending / known open issues
+- Teammates notified to update `handle_new_user()` trigger to read `consent_deepseek` from `NEW.raw_user_meta_data` directly.
+- Pro subscription expiry: schema has `subscription_expires_at` but no auto-downgrade cron/trigger. Frontend should check both `subscription_tier` AND `subscription_expires_at` when gating Pro UI. Not fixed yet.
+- `apply_card_review()` RPC not wired up — difficulty scores and review counters are never written to DB. Living Decks won't work until this is done.
+- Several API routes still ⚠️ not implemented by backend (see API Routes table above).
