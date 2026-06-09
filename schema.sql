@@ -46,6 +46,20 @@
 --           atomic statement (was a lost-update race in the app layer)
 --   PR-M2 — approve_payment() now also grants the Pro monthly allotment (30)
 --           via grant_credits() in the same transaction
+--
+-- ATOMICITY & RPC-SURFACE HARDENING PASS (Phase 2)
+--   P2-1 — submit_quiz_result() makes quiz submission atomic + idempotent
+--          (locks the session FOR UPDATE, re-checks completed_at) so a
+--          double-submit can no longer double-apply card reviews
+--   P2-2 — create_deck_with_cards_and_charge() commits the deck insert, card
+--          inserts, card_count sync and credit deduction in one transaction
+--          (replaces the cross-HTTP deduct-last + compensating-delete pattern)
+--   P2-3 — SECURITY FIX: EXECUTE on the service-role-only SECURITY DEFINER
+--          functions (deduct_credit, grant_credits, check_rate_limit,
+--          check_referral_cap, approve_payment, reject_payment, ensure_profile)
+--          revoked from PUBLIC/anon/authenticated — they were callable directly
+--          via the PostgREST RPC surface (free credits / self-upgrade to Pro /
+--          drain another user's credits). See Section 4.15.
 -- =============================================================================
 
 
@@ -120,6 +134,7 @@ CREATE TABLE IF NOT EXISTS public.flashcards (
   front            TEXT        NOT NULL,
   back             TEXT        NOT NULL,
   tags             TEXT[]      NOT NULL DEFAULT '{}',
+  category         TEXT        NOT NULL DEFAULT '',
   is_reinforcement BOOLEAN     NOT NULL DEFAULT false,
   difficulty_score FLOAT       NOT NULL DEFAULT 0.5
                                CHECK (difficulty_score >= 0 AND difficulty_score <= 1),
@@ -369,6 +384,8 @@ BEGIN
   INSERT INTO public.profiles (
     id,
     email,
+    full_name,
+    course,
     referral_code,
     token_balance,
     consent_deepseek
@@ -376,9 +393,12 @@ BEGIN
   VALUES (
     NEW.id,
     NEW.email,
+    -- Pulled from auth.users.raw_user_meta_data, set in /api/auth/signup.
+    NULLIF(NEW.raw_user_meta_data->>'full_name', ''),
+    NULLIF(NEW.raw_user_meta_data->>'course', ''),
     public.generate_unique_referral_code(),
     3,      -- TierLimits.free.startingCredits
-    false   -- user must consent at signup
+    COALESCE((NEW.raw_user_meta_data->>'consent_deepseek')::boolean, false)
   )
   ON CONFLICT (referral_code) DO UPDATE
     SET referral_code = public.generate_unique_referral_code();
@@ -391,6 +411,39 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION public.handle_new_user();
+
+-- ---------------------------------------------------------------------------
+-- 4.3 ensure_profile(p_user_id)
+-- Self-heal: recreates a missing profiles row for an existing auth user.
+-- handle_new_user() provisions profiles on signup, but a profile can go missing
+-- (e.g. manual deletion during ops/testing) — leaving an orphaned auth user with
+-- no profile. The login route calls this when its profile fetch returns null.
+-- Mirrors handle_new_user()'s column values exactly; ON CONFLICT (id) DO NOTHING
+-- makes it idempotent and safe to call on every login.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.ensure_profile(p_user_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (
+    id, email, full_name, course, referral_code, token_balance, consent_deepseek
+  )
+  SELECT
+    u.id,
+    u.email,
+    NULLIF(u.raw_user_meta_data->>'full_name', ''),
+    NULLIF(u.raw_user_meta_data->>'course', ''),
+    public.generate_unique_referral_code(),
+    3,      -- TierLimits.free.startingCredits
+    COALESCE((u.raw_user_meta_data->>'consent_deepseek')::boolean, false)
+  FROM auth.users u
+  WHERE u.id = p_user_id
+  ON CONFLICT (id) DO NOTHING;
+END;
+$$;
 
 -- ---------------------------------------------------------------------------
 -- 4.3 set_updated_at()
@@ -807,6 +860,241 @@ AS $$
          last_reviewed_at = now()
   WHERE  id = p_card_id;
 $$;
+
+-- ---------------------------------------------------------------------------
+-- 4.13 submit_quiz_result(p_session_id, p_answers)
+-- Phase 2: atomic + idempotent quiz submission. Replaces the app-layer sequence
+-- (check completed_at → insert answers → N apply_card_review calls → complete
+-- session) which, under a double-submit race, could pass the completed_at check
+-- twice and double-apply card reviews — corrupting times_seen / difficulty_score
+-- (which drive Living Deck selection).
+--
+-- SECURITY INVOKER (default): every statement runs under the caller's RLS, so
+-- the session, its answers, and the card stat updates are all confined to the
+-- caller's own rows. Call through the SESSION client, never service-role.
+--
+-- p_answers is a JSONB array of:
+--   [{ "flashcardId": <uuid>, "userAnswer": <text|null>, "isCorrect": <bool> }, ...]
+--
+-- Idempotency: the session row is locked FOR UPDATE and re-checked inside the
+-- transaction. A concurrent second submit blocks on the lock, then sees
+-- completed_at set and raises ALREADY_SUBMITTED — so reviews apply exactly once.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.submit_quiz_result(
+  p_session_id UUID,
+  p_answers    JSONB
+)
+RETURNS TABLE (correct_count INTEGER, total_questions INTEGER, score_percent INTEGER)
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
+DECLARE
+  v_completed_at TIMESTAMPTZ;
+  v_correct      INTEGER;
+  v_total        INTEGER;
+  v_score        INTEGER;
+BEGIN
+  -- Lock the session. RLS confines this SELECT to the caller's own session, so
+  -- a missing OR not-owned id both yield NOT FOUND (no ownership leak).
+  SELECT qs.completed_at INTO v_completed_at
+  FROM   public.quiz_sessions qs
+  WHERE  qs.id = p_session_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'SESSION_NOT_FOUND'
+      USING HINT = 'No quiz session with that id is owned by the caller';
+  END IF;
+
+  IF v_completed_at IS NOT NULL THEN
+    RAISE EXCEPTION 'ALREADY_SUBMITTED'
+      USING HINT = 'This quiz session has already been submitted';
+  END IF;
+
+  -- Tally from the submitted answers.
+  SELECT COUNT(*)::int,
+         COUNT(*) FILTER (WHERE (a->>'isCorrect')::boolean)::int
+  INTO   v_total, v_correct
+  FROM   jsonb_array_elements(p_answers) AS a;
+
+  IF v_total = 0 THEN
+    RAISE EXCEPTION 'NO_ANSWERS'
+      USING HINT = 'At least one answer is required';
+  END IF;
+
+  v_score := round(v_correct * 100.0 / v_total);
+
+  -- Persist every answer in a single insert.
+  INSERT INTO public.quiz_answers (session_id, flashcard_id, user_answer, is_correct)
+  SELECT p_session_id,
+         (a->>'flashcardId')::uuid,
+         a->>'userAnswer',
+         (a->>'isCorrect')::boolean
+  FROM   jsonb_array_elements(p_answers) AS a;
+
+  -- Update each reviewed card's stats in one set-based statement. RLS confines
+  -- the UPDATE to the caller's own cards, so a foreign flashcardId is a no-op.
+  -- Difficulty nudge mirrors the previous app-layer formula exactly:
+  --   correct → GREATEST(0, score - 0.15);  wrong → LEAST(1, score + 0.25)
+  -- Answers are de-duplicated per card (a session shows each card once; the
+  -- GROUP BY also avoids UPDATE…FROM's undefined result on duplicate matches).
+  UPDATE public.flashcards f
+  SET    times_seen       = f.times_seen + 1,
+         times_correct    = f.times_correct + (CASE WHEN a.is_correct THEN 1 ELSE 0 END),
+         difficulty_score = CASE WHEN a.is_correct
+                                 THEN GREATEST(0, f.difficulty_score - 0.15)
+                                 ELSE LEAST(1, f.difficulty_score + 0.25)
+                            END,
+         last_reviewed_at = now()
+  FROM (
+    SELECT (a->>'flashcardId')::uuid           AS flashcard_id,
+           bool_or((a->>'isCorrect')::boolean) AS is_correct
+    FROM   jsonb_array_elements(p_answers) AS a
+    GROUP  BY (a->>'flashcardId')::uuid
+  ) a
+  WHERE  f.id = a.flashcard_id;
+
+  -- Finalise the session (Living Deck refresh is not wired yet → false).
+  UPDATE public.quiz_sessions
+  SET    correct_count                 = v_correct,
+         score_percent                 = v_score,
+         living_deck_refresh_triggered = false,
+         completed_at                  = now()
+  WHERE  id = p_session_id;
+
+  RETURN QUERY SELECT v_correct, v_total, v_score;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 4.14 create_deck_with_cards_and_charge(...)
+-- Phase 2: atomic generate persistence — deck insert + flashcard inserts +
+-- card_count sync + credit deduction in ONE transaction. Replaces the app-layer
+-- "insert deck → insert cards → deduct_credit() (separate HTTP calls) +
+-- compensating delete" pattern, which could leave an orphan deck or an uncharged
+-- generation if a step failed between calls.
+--
+-- SECURITY DEFINER (not INVOKER): it must call deduct_credit(), whose EXECUTE is
+-- revoked from anon/authenticated (§4.15). Running as the owner lets that nested
+-- call through. Because the inserts then bypass RLS, ownership is enforced
+-- explicitly: p_user_id must equal auth.uid(), and every row is written with
+-- that id — so a caller can only ever create its own deck/cards and spend its
+-- own credit. Called via the SESSION client (auth.uid() must be present); a
+-- service-role call has no auth.uid() and is rejected by the guard.
+--
+-- p_cards is a JSONB array of { front, back, tags (text[]), category }.
+-- If deduct_credit() raises INSUFFICIENT_CREDITS the whole transaction — deck
+-- and cards included — rolls back, so a failed charge never leaves a deck.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.create_deck_with_cards_and_charge(
+  p_user_id         UUID,
+  p_title           TEXT,
+  p_source_filename TEXT,
+  p_generation_mode TEXT,
+  p_pdf_type        TEXT,
+  p_cards           JSONB
+)
+RETURNS TABLE (deck_id UUID, credits_remaining INTEGER)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_deck_id    UUID;
+  v_card_count INTEGER;
+  v_remaining  INTEGER;
+BEGIN
+  -- Ownership guard: a DEFINER function bypasses RLS, so refuse to act for
+  -- anybody but the authenticated caller (and never for a service-role call,
+  -- where auth.uid() is NULL).
+  IF p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'FORBIDDEN: cannot create a deck for another user';
+  END IF;
+
+  INSERT INTO public.decks (user_id, title, source_filename, generation_mode, pdf_type)
+  VALUES (
+    p_user_id,
+    p_title,
+    NULLIF(p_source_filename, ''),
+    COALESCE(NULLIF(p_generation_mode, ''), 'standard'),
+    COALESCE(NULLIF(p_pdf_type, ''), 'text')
+  )
+  RETURNING id INTO v_deck_id;
+
+  INSERT INTO public.flashcards (deck_id, user_id, front, back, tags, category, is_reinforcement)
+  SELECT v_deck_id,
+         p_user_id,
+         c->>'front',
+         c->>'back',
+         COALESCE(
+           (SELECT array_agg(t) FROM jsonb_array_elements_text(c->'tags') AS t),
+           '{}'::text[]
+         ),
+         COALESCE(c->>'category', ''),
+         false
+  FROM   jsonb_array_elements(p_cards) AS c;
+
+  GET DIAGNOSTICS v_card_count = ROW_COUNT;
+
+  UPDATE public.decks SET card_count = v_card_count WHERE id = v_deck_id;
+
+  -- Deduct last: on INSUFFICIENT_CREDITS the whole tx (deck + cards) rolls back.
+  v_remaining := public.deduct_credit(p_user_id);
+
+  RETURN QUERY SELECT v_deck_id, v_remaining;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 4.15 EXECUTE-privilege lockdown for service-role-only functions
+-- SECURITY FIX (P2-3): CREATE FUNCTION grants EXECUTE to PUBLIC by default, and
+-- Supabase additionally grants it to anon + authenticated — which exposed these
+-- SECURITY DEFINER money/tier/audit functions on the PostgREST RPC surface. A
+-- logged-in (or anonymous) client could call e.g.
+--   rpc('grant_credits',   { p_user_id: <self>,   p_amount: 999999 })  → free credits
+--   rpc('approve_payment', { ... })                                    → self-upgrade to Pro
+--   rpc('deduct_credit',   { p_user_id: <victim> })                    → drain others' credits
+-- bypassing the credit/payment economy and the profile-guard triggers (which let
+-- the DEFINER owner through). These are only ever invoked server-side via the
+-- service-role client (or nested from other DEFINER fns), so EXECUTE is revoked
+-- from PUBLIC/anon/authenticated and kept for service_role.
+--
+-- NOT revoked (intentionally reachable by the authenticated role):
+--   is_current_user_admin()              RLS policies evaluate it as authenticated
+--   apply_card_review()                  SECURITY INVOKER, via the session client
+--   submit_quiz_result()                 SECURITY INVOKER, via the session client
+--   create_deck_with_cards_and_charge()  DEFINER but self-guarded; the session
+--                                        client calls it, and it calls
+--                                        deduct_credit() as its owner (which is
+--                                        precisely why deduct_credit can be locked)
+-- ---------------------------------------------------------------------------
+REVOKE EXECUTE ON FUNCTION public.deduct_credit(uuid)                            FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.grant_credits(uuid, integer)                   FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.check_rate_limit(uuid, text, integer, integer) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.check_referral_cap(uuid, text, text)           FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.approve_payment(uuid, uuid, text)              FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.reject_payment(uuid, uuid, text, text)         FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.ensure_profile(uuid)                           FROM PUBLIC, anon, authenticated;
+
+GRANT EXECUTE ON FUNCTION public.deduct_credit(uuid)                             TO service_role;
+GRANT EXECUTE ON FUNCTION public.grant_credits(uuid, integer)                    TO service_role;
+GRANT EXECUTE ON FUNCTION public.check_rate_limit(uuid, text, integer, integer)  TO service_role;
+GRANT EXECUTE ON FUNCTION public.check_referral_cap(uuid, text, text)            TO service_role;
+GRANT EXECUTE ON FUNCTION public.approve_payment(uuid, uuid, text)               TO service_role;
+GRANT EXECUTE ON FUNCTION public.reject_payment(uuid, uuid, text, text)          TO service_role;
+GRANT EXECUTE ON FUNCTION public.ensure_profile(uuid)                            TO service_role;
+
+-- The two Phase 2 RPCs (§4.13/§4.14) are invoked by the SESSION client, i.e. the
+-- authenticated role — so authenticated KEEPS EXECUTE. anon has no legitimate
+-- use: create_deck_with_cards_and_charge() self-guards on auth.uid() (NULL for
+-- anon → FORBIDDEN) and submit_quiz_result() is RLS-confined — but revoke anon
+-- anyway to shrink the RPC surface (also clears the anon SECURITY DEFINER linter
+-- finding on create_deck_with_cards_and_charge). The remaining "authenticated can
+-- execute a SECURITY DEFINER function" advisory for create_deck_with_cards_and_charge
+-- is INTENTIONAL: DEFINER is required so it can call the (locked-down)
+-- deduct_credit() as owner, and the auth.uid() guard makes it safe.
+REVOKE EXECUTE ON FUNCTION public.submit_quiz_result(uuid, jsonb)                                          FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.create_deck_with_cards_and_charge(uuid, text, text, text, text, jsonb)   FROM PUBLIC, anon;
 
 
 -- =============================================================================

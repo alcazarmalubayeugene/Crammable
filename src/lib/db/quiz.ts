@@ -1,7 +1,6 @@
 import { createSessionClient } from "@/lib/supabase/server";
 import {
   TableNames,
-  type QuizAnswer,
   type QuizSession,
   type QuizType,
   type SubmitQuizAnswer,
@@ -9,9 +8,11 @@ import {
 import { toDbError } from "@/lib/db/errors";
 
 /**
- * Quiz session + answer persistence through the session client.
+ * Quiz session reads/writes through the session client.
  * quiz_sessions is RLS-scoped by user_id; quiz_answers resolves ownership via
- * its parent session (schema §5), so answers only need a valid session_id.
+ * its parent session (schema §5). Finalising a quiz (answers + card stats +
+ * completion) goes through the atomic submitQuizResult() RPC below, not separate
+ * inserts/updates.
  */
 
 export interface NewQuizSessionInput {
@@ -21,7 +22,7 @@ export interface NewQuizSessionInput {
   totalQuestions: number;
 }
 
-/** Open a quiz session. Score/completed_at stay null until completeQuizSession. */
+/** Open a quiz session. Score/completed_at stay null until submitQuizResult. */
 export async function createQuizSession(
   input: NewQuizSessionInput
 ): Promise<QuizSession> {
@@ -54,50 +55,38 @@ export async function getQuizSessionById(
   return (data as QuizSession) ?? null;
 }
 
-/** Persist all answers for a session in one insert. */
-export async function insertQuizAnswers(
+/**
+ * Atomically + idempotently finalise a quiz via the submit_quiz_result() RPC
+ * (schema §4.13). In one transaction it locks the session, re-checks
+ * completed_at, inserts every answer, updates each reviewed card's stats, and
+ * marks the session complete — so a double-submit can't double-apply card
+ * reviews (which would corrupt times_seen / difficulty_score). Runs through the
+ * SESSION client: the function is SECURITY INVOKER, so RLS confines every write
+ * to the caller's own rows.
+ *
+ * @throws {DbError} FORBIDDEN (404) when the session is missing or not owned;
+ *   VALIDATION_ERROR (409) when it was already submitted.
+ */
+export async function submitQuizResult(
   sessionId: string,
   answers: SubmitQuizAnswer[]
-): Promise<QuizAnswer[]> {
-  if (answers.length === 0) return [];
-
+): Promise<{ correctCount: number; totalQuestions: number; scorePercent: number }> {
   const supabase = await createSessionClient();
-  const rows = answers.map((a) => ({
-    session_id: sessionId,
-    flashcard_id: a.flashcardId,
-    user_answer: a.userAnswer,
-    is_correct: a.isCorrect,
-  }));
+  const { data, error } = await supabase.rpc("submit_quiz_result", {
+    p_session_id: sessionId,
+    p_answers: answers.map((a) => ({
+      flashcardId: a.flashcardId,
+      userAnswer: a.userAnswer,
+      isCorrect: a.isCorrect,
+    })),
+  });
+  if (error) throw toDbError(error, "Failed to submit quiz.");
 
-  const { data, error } = await supabase
-    .from(TableNames.quizAnswers)
-    .insert(rows)
-    .select("*");
-  if (error) throw toDbError(error, "Failed to save quiz answers.");
-  return (data as QuizAnswer[]) ?? [];
-}
-
-/** Finalise a session: store score, mark completed, and the Living Deck flag. */
-export async function completeQuizSession(
-  sessionId: string,
-  result: {
-    correctCount: number;
-    scorePercent: number;
-    livingDeckRefreshTriggered: boolean;
-  }
-): Promise<QuizSession> {
-  const supabase = await createSessionClient();
-  const { data, error } = await supabase
-    .from(TableNames.quizSessions)
-    .update({
-      correct_count: result.correctCount,
-      score_percent: result.scorePercent,
-      living_deck_refresh_triggered: result.livingDeckRefreshTriggered,
-      completed_at: new Date().toISOString(),
-    })
-    .eq("id", sessionId)
-    .select("*")
-    .single();
-  if (error) throw toDbError(error, "Failed to finalise quiz.");
-  return data as QuizSession;
+  // submit_quiz_result RETURNS TABLE(...) → PostgREST yields an array of rows.
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    correctCount: Number(row?.correct_count ?? 0),
+    totalQuestions: Number(row?.total_questions ?? 0),
+    scorePercent: Number(row?.score_percent ?? 0),
+  };
 }

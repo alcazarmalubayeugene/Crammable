@@ -1,7 +1,44 @@
 import { ZodError } from "zod";
-import { ApiErrorCode, type ApiFailResponse, UIMessages } from "@/lib/contracts";
+import {
+  ApiErrorCode,
+  type ApiFailResponse,
+  type ApiResponse,
+  UIMessages,
+} from "@/lib/contracts";
 import { AuthError, authErrorResponse } from "@/lib/auth/errors";
 import { DbError } from "@/lib/db/errors";
+
+/** Build the standard ApiFailResponse body with the correct status code. */
+export function apiFail(
+  code: (typeof ApiErrorCode)[keyof typeof ApiErrorCode],
+  message: string,
+  status: number,
+): Response {
+  const body: ApiFailResponse = { success: false, error: { code, message } };
+  return Response.json(body, { status });
+}
+
+/** Alias kept for the auth/DB error-handling path that refers to failResponse(). */
+export const failResponse = apiFail;
+
+/**
+ * Build a success response matching ApiResponse<T>.
+ *
+ * The result payload `T` is spread alongside `success: true`, exactly as the
+ * contracts.ts ApiResponse<T> shape requires — so the client reads response
+ * fields directly (e.g. `res.deckId`), not a nested `data` object.
+ */
+export function apiSuccess<T extends object>(data: T, status: number = 200): Response {
+  return Response.json({ success: true, ...data }, { status });
+}
+
+export function jsonResponse<T>(body: ApiResponse<T>, status: number): Response {
+  return Response.json(body, { status });
+}
+
+export function genericInternalError(): Response {
+  return apiFail(ApiErrorCode.INTERNAL_ERROR, UIMessages.genericError, 500);
+}
 
 /**
  * Single catch-all for route handlers.
@@ -35,36 +72,15 @@ export function handleApiError(err: unknown): Response {
     if (err.status >= 500) {
       console.error("[handleApiError] DbError 5xx:", err.code, err.message);
     }
-    return failResponse(err.code, err.message, err.status);
+    return apiFail(err.code, err.message, err.status);
   }
 
   if (err instanceof ZodError) {
     const message = err.issues[0]?.message ?? "Invalid request.";
-    return failResponse(ApiErrorCode.VALIDATION_ERROR, message, 400);
+    return apiFail(ApiErrorCode.VALIDATION_ERROR, message, 400);
   }
 
   // Unknown / unexpected — log server-side, return an opaque 500.
   console.error("[handleApiError] Unhandled error:", err);
-  return failResponse(ApiErrorCode.INTERNAL_ERROR, UIMessages.genericError, 500);
-}
-
-/** Build the standard ApiFailResponse body with the correct status code. */
-export function failResponse(
-  code: ApiErrorCode,
-  message: string,
-  status: number
-): Response {
-  const body: ApiFailResponse = { success: false, error: { code, message } };
-  return Response.json(body, { status });
-}
-
-/**
- * Build a success response matching ApiResponse<T>.
- *
- * The result payload `T` is spread alongside `success: true`, exactly as the
- * contracts.ts ApiResponse<T> shape requires — so the client reads response
- * fields directly (e.g. `res.deckId`), not a nested `data` object.
- */
-export function apiSuccess<T extends object>(data: T, status: number = 200): Response {
-  return Response.json({ success: true, ...data }, { status });
+  return apiFail(ApiErrorCode.INTERNAL_ERROR, UIMessages.genericError, 500);
 }
