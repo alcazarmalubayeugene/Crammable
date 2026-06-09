@@ -15,8 +15,6 @@ const dmSans = DM_Sans({
   weight: ["400", "500", "600"],
 });
 
-import { App } from "@/lib/contracts";
-
 export const metadata: Metadata = {
   title: "Crammable — Turn any document into a flashcard deck",
   description:

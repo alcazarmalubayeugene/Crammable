@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   referral_code           TEXT         NOT NULL UNIQUE,
   referred_by             UUID         REFERENCES public.profiles(id) ON DELETE SET NULL,
   consent_deepseek        BOOLEAN      NOT NULL DEFAULT false,
+  credits_granted_at      TIMESTAMPTZ,                          -- last Pro monthly top-up; NULL = never granted
   created_at              TIMESTAMPTZ  NOT NULL DEFAULT now(),
   updated_at              TIMESTAMPTZ  NOT NULL DEFAULT now(),
 
@@ -630,6 +631,37 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 4.7b pro_monthly_credit_refresh()
+-- Called by the daily pg_cron job to top up Pro users who haven't received
+-- their monthly 30-credit allotment in the last 28 days and whose subscription
+-- is still active. 28 days avoids month-boundary drift (Jan 1 → Jan 29, not
+-- Feb 1). Idempotent: credits_granted_at prevents double-grants per period.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.pro_monthly_credit_refresh()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  r RECORD;
+BEGIN
+  FOR r IN
+    SELECT id FROM public.profiles
+    WHERE subscription_tier = 'pro'
+      AND subscription_expires_at > now()
+      AND (credits_granted_at IS NULL
+           OR credits_granted_at < now() - INTERVAL '28 days')
+  LOOP
+    PERFORM public.grant_credits(r.id, 30);
+    UPDATE public.profiles
+    SET    credits_granted_at = now()
+    WHERE  id = r.id;
+  END LOOP;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 4.8 check_referral_cap(p_referrer_id, p_event_type, p_month_key)
 -- Returns TRUE if allowed to earn credits, FALSE if a cap has been hit.
 -- Mirrors ReferralCaps in contracts.ts — keep both in sync when caps change.
@@ -784,9 +816,10 @@ BEGIN
   WHERE  id = v_user_id;
 
   -- M2: grant the Pro monthly allotment (contracts TierLimits.pro.monthlyCredits = 30)
-  -- in the same transaction. No monthly top-up cron exists yet, so approval is
-  -- currently the only place a Pro user receives their credits.
+  -- in the same transaction. credits_granted_at is stamped here so the daily
+  -- pg_cron top-up skips users who were just approved.
   PERFORM public.grant_credits(v_user_id, 30);
+  UPDATE public.profiles SET credits_granted_at = now() WHERE id = v_user_id;
 
   INSERT INTO public.admin_action_log (admin_id, payment_id, action, notes)
   VALUES (p_admin_id, p_payment_id, 'approved', p_notes);
@@ -1075,6 +1108,7 @@ REVOKE EXECUTE ON FUNCTION public.check_referral_cap(uuid, text, text)          
 REVOKE EXECUTE ON FUNCTION public.approve_payment(uuid, uuid, text)              FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.reject_payment(uuid, uuid, text, text)         FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.ensure_profile(uuid)                           FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.pro_monthly_credit_refresh()                   FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.deduct_credit(uuid)                             TO service_role;
 GRANT EXECUTE ON FUNCTION public.grant_credits(uuid, integer)                    TO service_role;
@@ -1083,6 +1117,7 @@ GRANT EXECUTE ON FUNCTION public.check_referral_cap(uuid, text, text)           
 GRANT EXECUTE ON FUNCTION public.approve_payment(uuid, uuid, text)               TO service_role;
 GRANT EXECUTE ON FUNCTION public.reject_payment(uuid, uuid, text, text)          TO service_role;
 GRANT EXECUTE ON FUNCTION public.ensure_profile(uuid)                            TO service_role;
+-- pro_monthly_credit_refresh is called by pg_cron (postgres role) — no service_role grant needed;
 
 -- The two Phase 2 RPCs (§4.13/§4.14) are invoked by the SESSION client, i.e. the
 -- authenticated role — so authenticated KEEPS EXECUTE. anon has no legitimate
@@ -1248,7 +1283,10 @@ CREATE POLICY "admin_action_log: admins insert"
 -- M1: Unschedule first so re-running this file does not create duplicate jobs.
 SELECT cron.unschedule(jobid)
 FROM   cron.job
-WHERE  jobname = 'crammable-cleanup-rate-limit-log';
+WHERE  jobname IN (
+  'crammable-cleanup-rate-limit-log',
+  'crammable-pro-monthly-refresh'
+);
 
 -- Delete rate_limit_log rows older than 24 hours (= 1440 min, the maximum
 -- window in RateLimits from contracts.ts). Runs every hour on the hour.
@@ -1259,6 +1297,15 @@ SELECT cron.schedule(
     DELETE FROM public.rate_limit_log
     WHERE requested_at < now() - INTERVAL '24 hours';
   $$
+);
+
+-- Grant 30 credits to active Pro users who haven't been topped up in 28 days.
+-- 28 days guards against month-boundary drift while staying within the 30-day
+-- subscription window. Runs daily at midnight UTC.
+SELECT cron.schedule(
+  'crammable-pro-monthly-refresh',
+  '0 0 * * *',
+  'SELECT public.pro_monthly_credit_refresh();'
 );
 
 
