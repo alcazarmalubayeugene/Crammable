@@ -15,6 +15,8 @@ const dmSans = DM_Sans({
   weight: ["400", "500", "600"],
 });
 
+import { App } from "@/lib/contracts";
+
 export const metadata: Metadata = {
   title: "Crammable — Turn any document into a flashcard deck",
   description:
@@ -37,7 +39,7 @@ export default function RootLayout({
           style={{
             position: "fixed",
             bottom: 12,
-            left: 14,
+            right: 14,
             zIndex: 40,
             fontSize: 11,
             fontWeight: 600,

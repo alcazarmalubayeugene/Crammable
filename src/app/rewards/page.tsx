@@ -185,7 +185,6 @@ export default function RewardsPage() {
     );
   }
 
-  const shareUrl = `${typeof window !== "undefined" ? window.location.origin : ""}${Routes.signup}?ref=${profile?.referral_code ?? ""}`;
 
   return (
     <main
@@ -444,7 +443,7 @@ export default function RewardsPage() {
               Got a referral code?
             </h2>
             <p style={{ fontSize: 13, color: "#8A6E52", marginBottom: 16, lineHeight: 1.5 }}>
-              Enter a classmate's code to give them credit for referring you.
+              Enter a classmate&apos;s code to give them credit for referring you.
             </p>
 
             {claimSuccess ? (

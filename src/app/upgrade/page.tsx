@@ -272,7 +272,7 @@ export default function UpgradePage() {
               marginBottom: 8,
             }}
           >
-            You're already on Pro!
+            You&apos;re already on Pro!
           </h1>
           <p style={{ color: "#8A6E52", fontSize: 15, marginBottom: 28 }}>
             You have full access to all Pro features.
