@@ -78,6 +78,7 @@ function eventLabel(type: string): string {
 export default function RewardsPage() {
   const [profile, setProfile] = useState<MinProfile | null>(null);
   const [history, setHistory] = useState<ReferralEvent[]>([]);
+  const [referrerName, setReferrerName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // claim form
@@ -114,8 +115,19 @@ export default function RewardsPage() {
           .limit(20),
       ]);
 
-      setProfile(profileRes.data as MinProfile);
+      const profileData = profileRes.data as MinProfile;
+      setProfile(profileData);
       setHistory((historyRes.data ?? []) as ReferralEvent[]);
+
+      if (profileData?.referred_by) {
+        const { data: referrer } = await supabase
+          .from(TableNames.profiles)
+          .select("full_name")
+          .eq("id", profileData.referred_by)
+          .single();
+        setReferrerName(referrer?.full_name ?? "a classmate");
+      }
+
       setLoading(false);
     }
     load();
@@ -524,7 +536,7 @@ export default function RewardsPage() {
           History
         </h2>
 
-        {history.length === 0 ? (
+        {history.length === 0 && !profile?.referred_by ? (
           <div
             style={{
               background: "#FFFCF7",
@@ -555,7 +567,7 @@ export default function RewardsPage() {
                   alignItems: "center",
                   justifyContent: "space-between",
                   padding: "14px 20px",
-                  borderBottom: i < history.length - 1 ? "1px solid #E0C9A8" : "none",
+                  borderBottom: (i < history.length - 1 || !!profile?.referred_by) ? "1px solid #E0C9A8" : "none",
                   gap: 12,
                 }}
               >
@@ -586,6 +598,30 @@ export default function RewardsPage() {
                 </span>
               </div>
             ))}
+
+            {profile?.referred_by && (
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  padding: "14px 20px",
+                  gap: 12,
+                }}
+              >
+                <div>
+                  <p style={{ fontSize: 14, fontWeight: 600, color: "#2E1A0C", margin: "0 0 2px" }}>
+                    Referred by {referrerName ?? "…"}
+                  </p>
+                  <p style={{ fontSize: 12, color: "#8A6E52", margin: 0 }}>
+                    Used a referral code at signup
+                  </p>
+                </div>
+                <span style={{ fontSize: 15, fontWeight: 700, color: "#5C7A35", whiteSpace: "nowrap" }}>
+                  +{ReferralCaps[ReferralEventType.SIGNUP].creditsAwarded} credits
+                </span>
+              </div>
+            )}
           </div>
         )}
       </div>
