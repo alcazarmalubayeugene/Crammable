@@ -67,7 +67,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Apply login rate limit via DB function (service-role bypasses RLS on rate_limit_log).
-    // Non-blocking: rate limit failure logs a warning but does not block a successful login.
+    //
+    // SCOPE: this runs only AFTER a successful signInWithPassword and is keyed by
+    // user_id, so it throttles repeated *successful* logins for one account — it is
+    // NOT brute-force protection (failed/unknown-email attempts never reach here and
+    // have no user_id to key on). Supabase GoTrue's built-in auth rate limits are the
+    // brute-force backstop; verify they're enabled in the dashboard. A per-IP throttle
+    // would need a schema change to rate_limit_log (tracked for a later pass).
+    //
+    // Non-blocking: a rate-limit *check failure* logs a warning but does not block login.
     try {
       const admin = createAdminClient();
       const loginRule = RateLimits[ApiPaths.authLogin];
@@ -92,13 +100,32 @@ export async function POST(request: NextRequest) {
     }
 
     // Fetch the profile for the session response.
-    const { data: profileData } = await supabase
+    const PROFILE_COLUMNS =
+      "subscription_tier, is_admin, token_balance, consent_deepseek, full_name";
+    let { data: profileData } = await supabase
       .from(TableNames.profiles)
-      .select(
-        "subscription_tier, is_admin, token_balance, consent_deepseek, full_name"
-      )
+      .select(PROFILE_COLUMNS)
       .eq("id", data.user.id)
-      .single();
+      .maybeSingle();
+
+    // Self-heal: an auth user can exist with no profiles row (orphan) — e.g. a
+    // profile deleted during ops. Recreate it via the SECURITY DEFINER RPC
+    // (which mirrors handle_new_user defaults) so login never lands a user with
+    // no profile, then re-fetch. Non-blocking: a failure still returns the login.
+    if (!profileData) {
+      try {
+        const admin = createAdminClient();
+        await admin.rpc("ensure_profile", { p_user_id: data.user.id });
+        const { data: healed } = await supabase
+          .from(TableNames.profiles)
+          .select(PROFILE_COLUMNS)
+          .eq("id", data.user.id)
+          .maybeSingle();
+        profileData = healed;
+      } catch (healErr) {
+        console.warn("[auth/login] ensure_profile self-heal failed:", healErr);
+      }
+    }
 
     return Response.json(
       {

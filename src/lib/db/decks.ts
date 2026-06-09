@@ -1,5 +1,6 @@
 import { createSessionClient } from "@/lib/supabase/server";
 import {
+  ApiErrorCode,
   TableNames,
   Validation,
   type Deck,
@@ -8,9 +9,8 @@ import {
   type GenerationMode,
   type PdfType,
 } from "@/lib/contracts";
-import { toDbError } from "@/lib/db/errors";
-import { ensureMaxLength } from "@/lib/db/validate";
-import { insertFlashcards } from "@/lib/db/flashcards";
+import { dbError, toDbError } from "@/lib/db/errors";
+import { ensureMaxItems, ensureMaxLength } from "@/lib/db/validate";
 
 /**
  * Deck CRUD through the session client — RLS scopes every query to the caller's
@@ -114,52 +114,72 @@ export async function updateDeckCardCount(
   if (error) throw toDbError(error, "Failed to update deck card count.");
 }
 
-/** Delete a deck (flashcards/quiz rows cascade via FK). */
-export async function deleteDeck(deckId: string): Promise<void> {
+/**
+ * Delete a deck (flashcards/quiz rows cascade via FK). Returns the number of
+ * rows deleted — 0 when the deck doesn't exist or isn't owned by the caller
+ * (RLS scopes the delete), so callers can map 0 to a 404 without a pre-check.
+ */
+export async function deleteDeck(deckId: string): Promise<number> {
   const supabase = await createSessionClient();
-  const { error } = await supabase
+  const { error, count } = await supabase
     .from(TableNames.decks)
-    .delete()
+    .delete({ count: "exact" })
     .eq("id", deckId);
   if (error) throw toDbError(error, "Failed to delete deck.");
+  return count ?? 0;
 }
 
 /**
- * Persist a generated deck and its cards together, then sync card_count.
+ * Persist a generated deck + its cards AND charge one credit, atomically, via
+ * the create_deck_with_cards_and_charge() RPC (schema §4.14). The deck insert,
+ * card inserts, card_count sync and deduct_credit() all commit in a single
+ * transaction: INSUFFICIENT_CREDITS (or any failure) rolls the whole thing back,
+ * so a persisted deck is always paid for and a failed charge never leaves an
+ * orphan deck. Replaces the old deduct-last + compensating-delete pattern.
  *
- * supabase-js can't wrap these inserts in one transaction, so on a card-insert
- * failure we compensate by deleting the just-created deck — leaving no orphan.
- * Credit deduction is intentionally NOT done here: call deductCredit() from the
- * route AFTER this resolves, so a persistence failure never charges the user.
+ * Validation mirrors the previous createDeck/insertFlashcards path (fail fast
+ * before the DB call). The RPC is SECURITY DEFINER but self-guarded to
+ * auth.uid(), so it's called through the SESSION client — never service-role.
  *
- * TODO(#5 generate): fold the deck + card inserts + deductCredit into one
- * create_deck_with_cards_and_charge() SECURITY DEFINER RPC for true atomicity;
- * the compensating delete below is the interim mitigation.
+ * @throws {DbError} INSUFFICIENT_CREDITS (402) when the balance is already 0.
  */
-export async function createDeckWithCards(
+export async function createDeckWithCardsAndCharge(
   deckInput: NewDeckInput,
   cards: GeneratedCard[]
-): Promise<{ deck: Deck; cards: Flashcard[] }> {
-  const deck = await createDeck(deckInput);
-
-  let inserted: Flashcard[];
-  try {
-    inserted = await insertFlashcards(deck.id, deckInput.userId, cards);
-  } catch (err) {
-    // Compensating cleanup — best effort. Log (don't swallow) a cleanup failure
-    // so an orphaned deck is observable, then surface the original error.
-    try {
-      await deleteDeck(deck.id);
-    } catch (cleanupErr) {
-      console.error(
-        "[createDeckWithCards] orphan deck cleanup failed for",
-        deck.id,
-        cleanupErr
-      );
+): Promise<{ deckId: string; creditsRemaining: number }> {
+  ensureMaxLength(deckInput.title, Validation.deck.titleMaxLength, "Deck title");
+  ensureMaxLength(deckInput.sourceFilename, Validation.deck.filenameMaxLength, "Filename");
+  for (const card of cards) {
+    ensureMaxLength(card.front, Validation.flashcard.frontMaxLength, "Card front");
+    ensureMaxLength(card.back, Validation.flashcard.backMaxLength, "Card back");
+    ensureMaxItems(card.tags, Validation.flashcard.maxTags, "Card tags");
+    for (const tag of card.tags) {
+      ensureMaxLength(tag, Validation.flashcard.tagMaxLength, "Tag");
     }
-    throw err;
   }
 
-  await updateDeckCardCount(deck.id, inserted.length);
-  return { deck: { ...deck, card_count: inserted.length }, cards: inserted };
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase.rpc("create_deck_with_cards_and_charge", {
+    p_user_id: deckInput.userId,
+    p_title: deckInput.title,
+    p_source_filename: deckInput.sourceFilename ?? null,
+    p_generation_mode: deckInput.generationMode ?? null,
+    p_pdf_type: deckInput.pdfType,
+    p_cards: cards.map((c) => ({
+      front: c.front,
+      back: c.back,
+      tags: c.tags,
+      category: c.category,
+    })),
+  });
+  if (error) throw toDbError(error, "Failed to save deck.");
+
+  // RETURNS TABLE(deck_id, credits_remaining) → PostgREST yields an array of rows.
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row?.deck_id) throw dbError(ApiErrorCode.INTERNAL_ERROR, "Failed to save deck.");
+
+  return {
+    deckId: String(row.deck_id),
+    creditsRemaining: Number(row.credits_remaining ?? 0),
+  };
 }

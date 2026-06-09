@@ -42,11 +42,12 @@ export async function insertFlashcards(
 
   const supabase = await createSessionClient();
   const rows = cards.map((card) => ({
-    deck_id: deckId,
-    user_id: userId,
-    front: card.front,
-    back: card.back,
-    tags: card.tags,
+    deck_id:          deckId,
+    user_id:          userId,
+    front:            card.front,
+    back:             card.back,
+    tags:             card.tags,
+    category:         card.category,
     is_reinforcement: isReinforcement,
   }));
 
