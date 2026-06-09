@@ -434,6 +434,7 @@ export interface Profile {
   referral_code:           string;            // unique — auto-generated on signup
   referred_by:             string | null;     // uuid FK → profiles.id
   consent_deepseek:        boolean;           // MUST be true before any PDF processing
+  credits_granted_at:      string | null;     // ISO 8601 timestamptz; last Pro monthly top-up, null = never
   created_at:              string;
   updated_at:              string;
 }
