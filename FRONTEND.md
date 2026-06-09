@@ -404,26 +404,30 @@ changes everywhere automatically.
 | v.02 (cont.) | Bug fix — signup consent/course/full_name now correctly saved to profile via callback; version badge moved to bottom-right |
 | v.03 | DeepSeek flashcard generation live (frontend) — merged prompt/AI-Gen branch, added openai package, full generate route (auth + Supabase persistence + credit deduction), PdfUploadFlow wired to callGenerate, PDF_EXTRACTION_TEST_MODE off, version badge moved to bottom-right. Backend — registration fixes (error mapping, course/consent/name persistence via metadata-aware `handle_new_user` trigger) + stuck-confirmation recovery (self-serve resend-confirmation, self-healing profiles on login, admin auth runbook) |
 | v.04 | Merged Christian’s `main` backend push (deck/auth fixes + atomic Supabase RPCs) into `FrontEnd`, AI-consent gate (signup persistence + upload checkbox screen). New: `/forgot-password` page + `/settings?mode=reset-password` flow (full spec implementation — enumeration-safe, cooldown, expired-link handling). Migrated `/dashboard` and `/decks/[id]` off direct Supabase reads onto `GET /api/decks` and `GET /api/decks/[id]` (#6b). Dashboard navbar brought in line with the master doc — added Rewards/Settings links, "Earn more →" / "Upgrade →" contextual CTAs, credits pill kept as a non-clickable status display (not a link, per §19/§9.1). Plus 6 small lint/cleanup fixes (`<a>` → `<Link>`, unescaped apostrophes, dead `shareUrl` var, lazy-init refactor on quiz-result to drop a cascading-render warning). All typecheck + lint clean. |
+| v.05 | Merged latest `main` (referral/claim route + schema.sql update). Fixed duplicate `App` import in `layout.tsx` (introduced by merge conflict). Removed erroneous `"extends": "expo/tsconfig.base"` from `tsconfig.json`. Added referred-by entry to `/rewards` History section — if `profile.referred_by` is set, fetches referrer’s `full_name` and shows "Referred by [name] · +10 credits" row. |
 
 ---
 
 ## For Claude (Session Lifeline)
 
-**Last session: 2026-06-07**
+**Last session: 2026-06-09**
 
 ### What happened
-- Merged Christian’s `main` push (`6dc199f` deck/auth fixes + atomic Supabase RPCs, `3e4aa71` doc sync) into `FrontEnd` — resolved the `signup/route.ts` / `PdfUploadFlow.tsx` conflict by keeping his DB-trigger-based consent fix (typo-free, live-tested) and salvaging the frontend consent-gate UI
-- Built `/forgot-password` (new page) + `/settings?mode=reset-password` per the spec already written in this file — both fully wired to `ApiPaths.authForgotPassword` / `authResetPassword`, enumeration-safe, 60s resend cooldown, expired-link + validation states handled
-- Migrated `/dashboard` and `/decks/[id]` off direct Supabase table reads onto `GET /api/decks` / `GET /api/decks/[id]` (closes TODO #6b — profile reads stay direct since there’s no profile API route)
-- Reworked dashboard navbar to match the master doc (§19 "credit bar = remaining + earn-more link", §9.1 "credits are a status element, not a button"): credits pill is a plain non-clickable display, Rewards/Settings are separate nav links, Credits/Plan stat cards got contextual "Earn more →" / "Upgrade →" CTAs
-- 6 small lint/cleanup fixes: `<a>` → `<Link>` on login/signup nav links, unescaped `’`/`’` → `&apos;` (admin, rewards, upgrade), dropped a dead `shareUrl` var in rewards, lazy-`useState`-init refactor on quiz-result to kill a cascading-render warning
-- `App.version` bumped `v.03` → `v.04`
-- Full `tsc --noEmit` pass clean, `eslint` clean on every touched file
+- Pulled latest `FrontEnd` from remote (was 2 versions behind on Mom’s PC)
+- Merged `origin/main` — brought in `src/app/api/referral/claim/route.ts`, updated `schema.sql`, one addition to `contracts.ts`
+- Fixed duplicate `App` import in `layout.tsx` (introduced by the merge)
+- Removed `"extends": "expo/tsconfig.base"` from `tsconfig.json` — wrong config for a Next.js project, would break builds
+- Resolved merge conflicts on `FRONTEND.md`, `signup/route.ts`, `signup/page.tsx` — remote won on all code
+- Added referred-by history entry to `/rewards`: if `profile.referred_by !== null`, fetches referrer’s `full_name` from profiles and renders "Referred by [name] · +10 credits" at the bottom of the History list. Falls back to "a classmate" if name is not set.
+- `App.version` bumped `v.04` → `v.05`
+
+### Bug found (backend fix needed — tell Christian)
+- Referral claim route (`/api/referral/claim`) requires `SUPABASE_SERVICE_ROLE_KEY` in `.env.local`. If missing, it crashes at `checkRateLimit` with a generic 500 before any referral logic runs. This caused a data consistency issue: `referred_by` was set on a profile but credits were never awarded. **CJ needs to reset `referred_by = null` on the affected profile row and manually verify the `referral_events` table.**
 
 ### Pending
-- **Tell Christian/backend:** Supabase’s built-in dev email service caps at ~2 emails/hour — found while testing `/forgot-password` repeatedly. Either raise the dev-project rate limit or start planning custom SMTP (Resend/SendGrid) before launch; both forgot-password and signup-confirmation emails ride on it. Not urgent today, but a real pre-launch blocker (already flagged in the master doc’s blocker list).
-- Everything assigned-and-unblocked for frontend is now done. Remaining frontend work (`/upgrade`, `/admin`, `/rewards` wiring, Living Deck UI) is blocked on backend routes that don’t exist yet (`docs/TODO.md` #9, #10, #11, #8) — don’t start, you’d be building against 404s.
-- Optional unassigned polish (deck-detail UX, quiz-flow progress bar, toasts/empty-states, mobile pass, shared design system) — real gaps, not urgent, Yujin’s call when he wants to pick one up.
+- **Tell Christian/backend:** Supabase’s built-in dev email service caps at ~2 emails/hour — found while testing `/forgot-password`. Real pre-launch blocker (already flagged in the master doc).
+- Remaining frontend work (`/upgrade`, `/admin`, `/rewards` wiring, Living Deck UI) is blocked on backend routes that don’t exist yet (`docs/TODO.md` #9, #10, #11, #8).
+- Optional polish: deck-detail UX, quiz-flow progress bar, toasts/empty-states, mobile pass, shared design system.
 
 ### Key paths
 - DeepSeek lib: `src/lib/deepseek/` (client, generate-cards, index)
