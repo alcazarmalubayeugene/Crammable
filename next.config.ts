@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
+  serverExternalPackages: ["pdfjs-dist", "@napi-rs/canvas"],
+  turbopack: {},
   turbopack: {
     // Pin the workspace root to this project. A stray package-lock.json in the
     // parent folder otherwise makes Next infer the parent dir as the root, which
