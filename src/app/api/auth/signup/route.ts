@@ -33,7 +33,7 @@ const signupSchema = z.object({
 /**
  * POST /api/auth/signup
  *
- * Body: { email, password, fullName?, referralCode?, consentDeeseek? }
+ * Body: { email, password, fullName?, course?, referralCode?, consentDeepseek? }
  *
  * Always returns the same success message regardless of whether the email
  * is already registered — prevents user enumeration.

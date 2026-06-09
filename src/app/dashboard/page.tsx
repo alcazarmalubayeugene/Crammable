@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { Routes, TableNames } from "@/lib/contracts";
+import { ApiPaths, Routes, SubscriptionTier, TableNames } from "@/lib/contracts";
 
 interface Profile {
   full_name: string | null;
@@ -36,22 +36,24 @@ export default function DashboardPage() {
         return;
       }
 
-      // RLS scopes both reads to the signed-in user.
-      const [{ data: profileData }, { data: deckData }] = await Promise.all([
+      // Profile stays a direct (RLS-scoped) read — there is no profile API route.
+      // Decks now come from GET /api/decks (cookie-auth) instead of a direct query.
+      const [{ data: profileData }, decksRes] = await Promise.all([
         supabase
           .from(TableNames.profiles)
           .select("full_name, email, token_balance, subscription_tier, course")
           .eq("id", user.id)
           .single(),
-        supabase
-          .from(TableNames.decks)
-          .select("id, title, card_count, created_at, source_filename")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false }),
+        fetch(ApiPaths.decks),
       ]);
 
+      const decksJson = (await decksRes.json()) as {
+        success: boolean;
+        decks?: DeckListItem[];
+      };
+
       setProfile(profileData);
-      setDecks((deckData ?? []) as DeckListItem[]);
+      setDecks(decksJson.success && decksJson.decks ? decksJson.decks : []);
       setLoading(false);
     }
 
@@ -73,6 +75,7 @@ export default function DashboardPage() {
   }
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
+  const isPro = profile?.subscription_tier === SubscriptionTier.PRO;
 
   return (
     <main style={{ minHeight: "100vh", background: "#FAF2E4", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
@@ -87,12 +90,23 @@ export default function DashboardPage() {
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#4A2512", border: "1px solid rgba(196,122,46,0.3)", borderRadius: 20, padding: "5px 14px" }}>
+            {/* Credit balance — status display only (the doc's "remaining"); the
+                "earn-more link" is the Rewards item beside it + the Credits card. */}
+            <div
+              title="Credits remaining"
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "#4A2512", border: "1px solid rgba(196,122,46,0.3)", borderRadius: 20, padding: "5px 14px" }}
+            >
               <span style={{ fontSize: 14 }}>🪙</span>
               <span style={{ fontSize: 13, fontWeight: 600, color: "#D4954A" }}>
                 {profile?.token_balance ?? 0} credits
               </span>
             </div>
+            <Link href={Routes.rewards} style={{ fontSize: 13, color: "#C49A6C", textDecoration: "none" }}>
+              Rewards
+            </Link>
+            <Link href={Routes.settings} style={{ fontSize: 13, color: "#C49A6C", textDecoration: "none" }}>
+              Settings
+            </Link>
             <span style={{ fontSize: 13, color: "#C49A6C" }}>
               {profile?.full_name ?? profile?.email}
             </span>
@@ -121,15 +135,16 @@ export default function DashboardPage() {
 
         {/* Stats row */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 40 }}>
-          <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16 }}>
+          <Link href={Routes.rewards} style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16, textDecoration: "none" }}>
             <div style={{ width: 44, height: 44, background: "#FBF0E0", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🪙</div>
-            <div>
+            <div style={{ flex: 1 }}>
               <div style={{ fontFamily: "var(--font-lora, serif)", fontSize: 26, fontWeight: 700, color: "#2E1A0C", lineHeight: 1 }}>
                 {profile?.token_balance ?? 0}
               </div>
               <div style={{ fontSize: 12, color: "#8A6E52", marginTop: 3 }}>Credits remaining</div>
             </div>
-          </div>
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#C47A2E", whiteSpace: "nowrap" }}>Earn more →</span>
+          </Link>
 
           <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16 }}>
             <div style={{ width: 44, height: 44, background: "#EDF5E4", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>📚</div>
@@ -140,15 +155,16 @@ export default function DashboardPage() {
             <Link href={Routes.newDeck} style={{ fontSize: 20, color: "#C47A2E", textDecoration: "none", fontWeight: 700, lineHeight: 1 }} title="Create a new deck">+</Link>
           </div>
 
-          <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16 }}>
+          <Link href={Routes.upgrade} style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16, textDecoration: "none" }}>
             <div style={{ width: 44, height: 44, background: "#F8EBE0", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🎯</div>
-            <div>
+            <div style={{ flex: 1 }}>
               <div style={{ fontFamily: "var(--font-lora, serif)", fontSize: 26, fontWeight: 700, color: "#2E1A0C", lineHeight: 1 }}>
-                {profile?.subscription_tier === "pro" ? "Pro" : "Free"}
+                {isPro ? "Pro" : "Free"}
               </div>
               <div style={{ fontSize: 12, color: "#8A6E52", marginTop: 3 }}>Current plan</div>
             </div>
-          </div>
+            {!isPro && <span style={{ fontSize: 12, fontWeight: 600, color: "#C47A2E", whiteSpace: "nowrap" }}>Upgrade →</span>}
+          </Link>
         </div>
 
         {decks.length === 0 ? (

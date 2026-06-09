@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Routes } from "@/lib/contracts";
 
 export default function SignupPage() {
@@ -142,9 +143,9 @@ export default function SignupPage() {
 
           <p style={{ color: "#8A6E52", fontSize: 13 }}>
             Already verified?{" "}
-            <a href="/login" style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>
+            <Link href="/login" style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>
               Log in
-            </a>
+            </Link>
           </p>
         </div>
       </main>
@@ -157,16 +158,16 @@ export default function SignupPage() {
       {/* ── NAVBAR ── */}
       <nav style={{ background: "#2E1A0C", borderBottom: "1px solid #4A2512" }}>
         <div style={{ maxWidth: 1024, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <a href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
+          <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
             <span style={{ fontSize: 24 }}>🦫</span>
             <span style={{ fontFamily: "var(--font-lora, serif)", fontWeight: 700, fontSize: 18, color: "#FAF2E4" }}>
               Crammable
             </span>
-          </a>
-          <a href="/login" style={{ fontSize: 13, color: "#C49A6C", textDecoration: "none" }}>
+          </Link>
+          <Link href="/login" style={{ fontSize: 13, color: "#C49A6C", textDecoration: "none" }}>
             Already have an account?{" "}
             <span style={{ color: "#C47A2E", fontWeight: 600 }}>Log in</span>
-          </a>
+          </Link>
         </div>
       </nav>
 
@@ -246,7 +247,7 @@ export default function SignupPage() {
 
             <p style={{ textAlign: "center", fontSize: 13, color: "#8A6E52", marginTop: 20, marginBottom: 0 }}>
               Already have an account?{" "}
-              <a href="/login" style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>Log in</a>
+              <Link href="/login" style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>Log in</Link>
             </p>
 
           </div>

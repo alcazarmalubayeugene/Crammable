@@ -39,7 +39,7 @@ export default function RootLayout({
           style={{
             position: "fixed",
             bottom: 12,
-            left: 14,
+            right: 14,
             zIndex: 40,
             fontSize: 11,
             fontWeight: 600,
