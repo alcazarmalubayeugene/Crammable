@@ -60,6 +60,11 @@
 --          revoked from PUBLIC/anon/authenticated — they were callable directly
 --          via the PostgREST RPC surface (free credits / self-upgrade to Pro /
 --          drain another user's credits). See Section 4.15.
+--
+-- GAP-FIX PASS (2026-06-10)
+--   E3 — downgrade_expired_pro(): daily pg_cron job flips lapsed Pro
+--        subscriptions (subscription_expires_at <= now()) back to 'free'.
+--        Previously nothing enforced expiry — once Pro, always Pro.
 -- =============================================================================
 
 
@@ -671,6 +676,32 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 4.7c downgrade_expired_pro()
+-- E3: Called by the daily pg_cron job to flip lapsed Pro subscriptions back to
+-- 'free' once subscription_expires_at has passed. Without this, feature gates
+-- that check subscription_tier (not the expiry date) would treat a user as Pro
+-- forever after their last payment. SECURITY DEFINER + postgres-owned so it can
+-- write subscription_tier / subscription_expires_at past the
+-- block_privilege_escalation / protect_immutable_profile_fields triggers, which
+-- only allow service_role/postgres/supabase_admin through.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.downgrade_expired_pro()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE public.profiles
+  SET    subscription_tier       = 'free',
+         subscription_expires_at = NULL
+  WHERE  subscription_tier = 'pro'
+    AND  subscription_expires_at IS NOT NULL
+    AND  subscription_expires_at <= now();
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 4.8 check_referral_cap(p_referrer_id, p_event_type, p_month_key)
 -- Returns TRUE if allowed to earn credits, FALSE if a cap has been hit.
 -- Mirrors ReferralCaps in contracts.ts — keep both in sync when caps change.
@@ -1224,6 +1255,7 @@ REVOKE EXECUTE ON FUNCTION public.approve_payment(uuid, uuid, text)             
 REVOKE EXECUTE ON FUNCTION public.reject_payment(uuid, uuid, text, text)         FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.ensure_profile(uuid)                           FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.pro_monthly_credit_refresh()                   FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.downgrade_expired_pro()                        FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.claim_referral(uuid, uuid, text, text, integer) FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.deduct_credit(uuid)                             TO service_role;
@@ -1234,7 +1266,8 @@ GRANT EXECUTE ON FUNCTION public.approve_payment(uuid, uuid, text)              
 GRANT EXECUTE ON FUNCTION public.reject_payment(uuid, uuid, text, text)          TO service_role;
 GRANT EXECUTE ON FUNCTION public.ensure_profile(uuid)                            TO service_role;
 GRANT EXECUTE ON FUNCTION public.claim_referral(uuid, uuid, text, text, integer)  TO service_role;
--- pro_monthly_credit_refresh is called by pg_cron (postgres role) — no service_role grant needed;
+-- pro_monthly_credit_refresh / downgrade_expired_pro are called by pg_cron
+-- (postgres role) — no service_role grant needed;
 
 -- The two Phase 2 RPCs (§4.13/§4.14) are invoked by the SESSION client, i.e. the
 -- authenticated role — so authenticated KEEPS EXECUTE. anon has no legitimate
@@ -1402,7 +1435,8 @@ SELECT cron.unschedule(jobid)
 FROM   cron.job
 WHERE  jobname IN (
   'crammable-cleanup-rate-limit-log',
-  'crammable-pro-monthly-refresh'
+  'crammable-pro-monthly-refresh',
+  'crammable-pro-expiry-downgrade'
 );
 
 -- Delete rate_limit_log rows older than 24 hours (= 1440 min, the maximum
@@ -1423,6 +1457,17 @@ SELECT cron.schedule(
   'crammable-pro-monthly-refresh',
   '0 0 * * *',
   'SELECT public.pro_monthly_credit_refresh();'
+);
+
+-- E3: Flip lapsed Pro subscriptions (subscription_expires_at in the past) back
+-- to 'free'. Runs daily at midnight UTC, just before the monthly-refresh job —
+-- order matters: refresh's `subscription_expires_at > now()` filter already
+-- excludes expired rows, but running the downgrade first keeps the two jobs'
+-- intent (top up active Pros / demote lapsed Pros) cleanly separated.
+SELECT cron.schedule(
+  'crammable-pro-expiry-downgrade',
+  '0 0 * * *',
+  'SELECT public.downgrade_expired_pro();'
 );
 
 

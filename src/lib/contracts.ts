@@ -33,7 +33,7 @@ export const App = {
   tagline:      "Turn any document into a flashcard deck — in seconds.",
   supportEmail: "support@crammable.ph",  // update once domain is live
   gcashName:    "Crammable",             // name displayed in GCash payment screen
-  gcashNumber:  "",                      // TODO: fill in before launch
+  gcashNumber:  "09691816930",
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,7 +219,9 @@ export const TierLimits = {
   [SubscriptionTier.PRO]: {
     monthlyCredits:   30,
     maxDecks:         Infinity,   // NOTE: Infinity serialises to null in JSON — compare with === Infinity in logic
-    maxCardsPerDeck:  Infinity,
+    // Finite (not Infinity) on purpose: bounds DeepSeek cost/latency and the
+    // O(n^2) quiz distractor selection. Still far above the free cap.
+    maxCardsPerDeck:  60,
     maxUploadPages:   Infinity,   // no page cap — the 10 MB file size is the only upload limit
     maxUploadSizeMb:  MAX_UPLOAD_SIZE_MB,
     deepDive:         true,

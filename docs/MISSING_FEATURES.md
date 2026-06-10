@@ -86,7 +86,7 @@ there's no make-public toggle, no public deck viewer, and no share link. Blocks 
 
 ## C. Pro features silently NOT delivered (real bug)
 
-### C1. [P0] "Unlimited cards per deck" is capped at 20 for everyone
+### C1. [P0] [DONE] "Unlimited cards per deck" is capped at 20 for everyone
 `TierLimits.pro.maxCardsPerDeck` is `Infinity` and `/upgrade` advertises "Unlimited
 cards per deck," but `generate/route.ts` does:
 ```ts
@@ -101,6 +101,9 @@ So **Pro users get the same 20-card cap as free users**, and DeepSeek is even to
 - **Effort:** Small — raise the Pro cap to a sane finite ceiling (e.g. 50–60, to
   bound DeepSeek cost/latency) instead of silently reusing the free cap, and update
   the `/upgrade` copy to match reality.
+- **Resolution:** `TierLimits.pro.maxCardsPerDeck` raised from `Infinity` to `60`
+  in `contracts.ts`; `maxCardsForTier()` in `generate/route.ts` now returns the
+  tier limit directly (the `Infinity` → 20 fallback is gone).
 
 ---
 
@@ -145,17 +148,25 @@ revisit `/upgrade` to learn if they were approved/rejected.
 - **Effort:** Small-Medium — a Supabase Realtime subscription on the user's payment
   row + a toast/badge.
 
-### E2. [P0] Can't actually pay — `App.gcashNumber` is blank
+### E2. [P0] [DONE] Can't actually pay — `App.gcashNumber` is blank
 `contracts.ts` `App.gcashNumber = ""`, so `/upgrade` can't show a number and tells
 users to email support instead. Real payments can't flow until this is filled in.
 - **Effort:** Trivial (set the value) — but it's a hard launch blocker.
+- **Resolution:** `App.gcashNumber` set to `"09691816930"` in `contracts.ts`.
 
-### E3. [P1] No Pro expiry enforcement
+### E3. [P1] [DONE] No Pro expiry enforcement
 `subscription_expires_at` is set (+30 days, renewals stack) but **nothing downgrades
 a lapsed Pro back to `free`**, and feature gates check `subscription_tier`, not the
 expiry date. Once Pro, always Pro until an admin changes it.
 - **Effort:** Small — a daily `pg_cron` job (or a check) that flips expired Pros to
   `free`, mirroring the existing `pro_monthly_credit_refresh` cron.
+- **Resolution:** Added `public.downgrade_expired_pro()` (SECURITY DEFINER,
+  §4.7c in `schema.sql`) that sets `subscription_tier = 'free'` and clears
+  `subscription_expires_at` for Pro profiles whose `subscription_expires_at`
+  has passed. Scheduled as the `crammable-pro-expiry-downgrade` daily pg_cron
+  job (midnight UTC), alongside the existing `pro_monthly_credit_refresh` job.
+  **Requires re-running `schema.sql` against the live Supabase project** to
+  install the function and cron job.
 
 ### E4. [P1] No admin tooling beyond payments
 The admin dashboard only approves/rejects payments. There is no UI for: verifying
