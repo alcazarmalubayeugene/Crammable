@@ -10,6 +10,7 @@ import {
   PaymentStatus,
   Pricing,
   Routes,
+  TableNames,
   UIMessages,
   Validation,
   type AdminPaymentRow,
@@ -55,7 +56,7 @@ export default function AdminPage() {
       if (!user) { window.location.href = Routes.login; return; }
 
       const { data: profileData } = await supabase
-        .from("profiles")
+        .from(TableNames.profiles)
         .select("is_admin, full_name")
         .eq("id", user.id)
         .single();

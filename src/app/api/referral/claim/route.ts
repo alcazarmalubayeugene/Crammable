@@ -3,7 +3,6 @@ import {
   ApiPaths,
   ReferralCaps,
   ReferralEventType,
-  TableNames,
   UIMessages,
   Validation,
   toMonthKey,
@@ -11,18 +10,20 @@ import {
   type ClaimReferralResult,
 } from "@/lib/contracts";
 import { apiFail, apiSuccess, handleApiError } from "@/lib/api/errors";
+import { assertSameOrigin } from "@/lib/api/csrf";
 import { requireAuth } from "@/lib/auth/helpers";
 import { checkRateLimit } from "@/lib/supabase/server";
 import { getProfileIdByReferralCode } from "@/lib/db/profiles";
-import { grantCredits, checkReferralCap } from "@/lib/db/rpc";
-import { logReferralEvent } from "@/lib/db/referrals";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { claimReferral } from "@/lib/db/rpc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    const csrf = assertSameOrigin(request);
+    if (csrf) return csrf;
+
     let body: ClaimReferralRequest;
     try {
       body = (await request.json()) as ClaimReferralRequest;
@@ -32,6 +33,8 @@ export async function POST(request: Request): Promise<Response> {
 
     const { user, profile } = await requireAuth();
 
+    // Fast UX pre-check; claim_referral() re-checks this atomically under a row
+    // lock, so this is advisory only and can't be raced into a double-award.
     if (profile.referred_by !== null) {
       return apiFail(ApiErrorCode.VALIDATION_ERROR, "You have already used a referral code.", 400);
     }
@@ -51,34 +54,22 @@ export async function POST(request: Request): Promise<Response> {
       return apiFail(ApiErrorCode.INVALID_REFERRAL_CODE, "Invalid referral code.", 400);
     }
 
-    if (referrerId === user.id) {
-      return apiFail(ApiErrorCode.SELF_REFERRAL, "You can't use your own referral code.", 400);
-    }
-
-    const monthKey = toMonthKey(new Date());
-    const capAllowed = await checkReferralCap(referrerId, ReferralEventType.SIGNUP, monthKey);
-    if (!capAllowed) {
-      return apiFail(ApiErrorCode.REFERRAL_CAP_REACHED, "This referrer has reached their monthly referral limit.", 409);
-    }
-
     const credits = ReferralCaps[ReferralEventType.SIGNUP].creditsAwarded;
 
-    await Promise.all([
-      grantCredits(referrerId, credits),
-      createAdminClient()
-        .from(TableNames.profiles)
-        .update({ referred_by: referrerId })
-        .eq("id", user.id),
-      logReferralEvent({
-        referrerId,
-        referredId: user.id,
-        eventType: ReferralEventType.SIGNUP,
-        creditsAwarded: credits,
-        monthKey,
-        verified: true,
-      }),
-    ]);
+    // Single atomic attribution: lock → re-check referred_by/self/cap → insert
+    // ledger → credit referrer → set referred_by (schema §4.14b). Self-referral,
+    // already-referred, and cap-reached all surface as typed DbErrors here.
+    await claimReferral(
+      user.id,
+      referrerId,
+      ReferralEventType.SIGNUP,
+      toMonthKey(new Date()),
+      credits,
+    );
 
+    // The signup referral credits the REFERRER, not the caller — so the caller's
+    // own balance is unchanged. We echo it back as-is and the toast copy makes
+    // clear who was credited (UIMessages.referralClaimThanks).
     return apiSuccess<ClaimReferralResult>({
       creditsAwarded: credits,
       newBalance: profile.token_balance,

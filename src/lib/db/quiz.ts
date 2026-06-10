@@ -41,20 +41,6 @@ export async function createQuizSession(
   return data as QuizSession;
 }
 
-/** Fetch a session by id (RLS: own sessions only). null if not found. */
-export async function getQuizSessionById(
-  sessionId: string
-): Promise<QuizSession | null> {
-  const supabase = await createSessionClient();
-  const { data, error } = await supabase
-    .from(TableNames.quizSessions)
-    .select("*")
-    .eq("id", sessionId)
-    .maybeSingle();
-  if (error) throw toDbError(error, "Failed to load quiz session.");
-  return (data as QuizSession) ?? null;
-}
-
 /**
  * Atomically + idempotently finalise a quiz via the submit_quiz_result() RPC
  * (schema §4.13). In one transaction it locks the session, re-checks

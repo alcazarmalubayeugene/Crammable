@@ -8,6 +8,7 @@ import {
   type StartQuizResult,
 } from "@/lib/contracts";
 import { handleApiError, apiSuccess, apiFail } from "@/lib/api/errors";
+import { assertSameOrigin } from "@/lib/api/csrf";
 import { requireAuth } from "@/lib/auth/helpers";
 import { getDeckById } from "@/lib/db/decks";
 import { getFlashcardsForDeck } from "@/lib/db/flashcards";
@@ -18,12 +19,27 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ id: string }> };
 
+/** In-place Fisher–Yates — unbiased and O(n), unlike sort(() => 0.5 - random). */
 function shuffled<T>(arr: T[]): T[] {
-  return [...arr].sort(() => Math.random() - 0.5);
+  const out = [...arr];
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [out[i], out[j]] = [out[j]!, out[i]!];
+  }
+  return out;
 }
 
 function buildQuestions(cards: Flashcard[], quizType: QuizType): QuizQuestion[] {
   const canUseMC = cards.length >= 4;
+
+  // Pre-bucket cards by category ONCE so distractor selection is O(n) overall
+  // instead of filtering+shuffling the whole deck per card (O(n^2)).
+  const byCategory = new Map<string, Flashcard[]>();
+  for (const c of cards) {
+    const bucket = byCategory.get(c.category);
+    if (bucket) bucket.push(c);
+    else byCategory.set(c.category, [c]);
+  }
 
   return shuffled(cards).map((card): QuizQuestion => {
     let resolvedType: "multiple_choice" | "identification";
@@ -42,7 +58,7 @@ function buildQuestions(cards: Flashcard[], quizType: QuizType): QuizQuestion[] 
       // Same-category distractors first for pedagogically coherent options;
       // fall back to cards from other categories if the category is too small.
       const sameCat = shuffled(
-        cards.filter((c) => c.id !== card.id && c.category === card.category),
+        (byCategory.get(card.category) ?? []).filter((c) => c.id !== card.id),
       );
       const otherCat = shuffled(
         cards.filter((c) => c.id !== card.id && c.category !== card.category),
@@ -69,6 +85,9 @@ function buildQuestions(cards: Flashcard[], quizType: QuizType): QuizQuestion[] 
 
 export async function POST(req: NextRequest, { params }: Ctx): Promise<Response> {
   try {
+    const csrf = assertSameOrigin(req);
+    if (csrf) return csrf;
+
     const { user } = await requireAuth();
     const { id: deckId } = await params;
 

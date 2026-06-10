@@ -9,6 +9,7 @@ import {
   type SubmitPaymentResult,
 } from "@/lib/contracts";
 import { apiFail, apiSuccess, handleApiError } from "@/lib/api/errors";
+import { assertSameOrigin } from "@/lib/api/csrf";
 import { requireAuth } from "@/lib/auth/helpers";
 import { enforceRateLimit } from "@/lib/supabase/server";
 import { createPaymentSubmission } from "@/lib/db/payments";
@@ -18,6 +19,9 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    const csrf = assertSameOrigin(request);
+    if (csrf) return csrf;
+
     let body: SubmitPaymentRequest;
     try {
       body = (await request.json()) as SubmitPaymentRequest;

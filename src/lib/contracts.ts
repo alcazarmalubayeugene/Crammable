@@ -166,6 +166,7 @@ export const ApiPaths = {
   adminPayments:       "/api/admin/payments",
   adminApprovePayment: "/api/admin/payments/approve",
   adminRejectPayment:  "/api/admin/payments/reject",
+  authSignup:             "/api/auth/signup",
   authLogin:              "/api/auth/login",
   authResendConfirmation: "/api/auth/resend-confirmation",
   authForgotPassword:     "/api/auth/forgot-password",
@@ -401,6 +402,8 @@ export const UIMessages = {
 
   // Referral
   referralCredited:  (name: string, credits: number) => `+${credits} credits — ${name} signed up with your link!`,
+  // Shown to the person ENTERING a code: the referrer (not the claimer) is credited.
+  referralClaimThanks: (credits: number) => `Thanks! Your referrer earned +${credits} credits for referring you.`,
 
   // AI disclaimer — REQUIRED on every generated deck page (non-negotiable)
   aiDisclaimer:      "AI-generated content may contain errors. Always verify against your official course materials and textbooks. Do not rely on these cards as your sole study source.",

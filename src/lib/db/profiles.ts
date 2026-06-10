@@ -23,18 +23,6 @@ export type EditableProfileFields = Partial<
   Pick<Profile, "full_name" | "course" | "consent_deepseek">
 >;
 
-/** Fetch a profile by id through the session client (RLS: own row only). */
-export async function getProfileById(userId: string): Promise<Profile | null> {
-  const supabase = await createSessionClient();
-  const { data, error } = await supabase
-    .from(TableNames.profiles)
-    .select("*")
-    .eq("id", userId)
-    .maybeSingle();
-  if (error) throw toDbError(error, "Failed to load profile.");
-  return (data as Profile) ?? null;
-}
-
 /** Update the caller's own profile (editable columns only). Returns the new row. */
 export async function updateOwnProfile(
   userId: string,
@@ -81,21 +69,4 @@ export async function getProfileIdByReferralCode(
     .maybeSingle();
   if (error) throw toDbError(error, "Failed to look up referral code.");
   return (data as { id: string } | null)?.id ?? null;
-}
-
-/**
- * Set referred_by on signup (write-once; the protect_immutable_profile_fields
- * trigger only lets the service role write it). No-op intent: call exactly once
- * during the signup/referral flow.
- */
-export async function setReferredBy(
-  userId: string,
-  referrerId: string
-): Promise<void> {
-  const admin = createAdminClient();
-  const { error } = await admin
-    .from(TableNames.profiles)
-    .update({ referred_by: referrerId })
-    .eq("id", userId);
-  if (error) throw toDbError(error, "Failed to record referrer.");
 }

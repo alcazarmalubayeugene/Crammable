@@ -123,6 +123,18 @@ export function toDbError(
     // grant_credits() rejects a non-positive amount — a caller bug, surfaced as 400.
     return dbError(ApiErrorCode.VALIDATION_ERROR, "Invalid credit amount.");
   }
+  if (msg.startsWith("SELF_REFERRAL")) {
+    // claim_referral(): referrer == referred.
+    return dbError(ApiErrorCode.SELF_REFERRAL, "You can't use your own referral code.");
+  }
+  if (msg.startsWith("ALREADY_REFERRED")) {
+    // claim_referral(): the referred user already has a referrer attributed.
+    return dbError(ApiErrorCode.VALIDATION_ERROR, "You have already used a referral code.");
+  }
+  if (msg.startsWith("REFERRAL_CAP_REACHED")) {
+    // claim_referral(): the referrer has hit their monthly/lifetime cap.
+    return dbError(ApiErrorCode.REFERRAL_CAP_REACHED, "This referrer has reached their referral limit.");
+  }
   if (msg.startsWith("USER_NOT_FOUND")) {
     // grant_credits() target row missing — a server-side inconsistency, not user error.
     return internalError(error, "Account not found.");
@@ -145,6 +157,10 @@ export function toDbError(
           ApiErrorCode.VALIDATION_ERROR,
           "This GCash reference number has already been submitted."
         );
+      }
+      if (raw.includes("ux_referral_signup_once_per_referred")) {
+        // AUDIT 2.1: duplicate signup attribution caught by the partial unique index.
+        return dbError(ApiErrorCode.VALIDATION_ERROR, "You have already used a referral code.");
       }
       return dbError(ApiErrorCode.VALIDATION_ERROR, "That record already exists.");
     }

@@ -5,6 +5,7 @@ import {
   type ApprovePaymentResult,
 } from "@/lib/contracts";
 import { apiFail, apiSuccess, handleApiError } from "@/lib/api/errors";
+import { assertSameOrigin } from "@/lib/api/csrf";
 import { requireAdmin } from "@/lib/auth/helpers";
 import { approvePayment } from "@/lib/db/admin";
 
@@ -13,6 +14,9 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    const csrf = assertSameOrigin(request);
+    if (csrf) return csrf;
+
     let body: ApprovePaymentRequest;
     try {
       body = (await request.json()) as ApprovePaymentRequest;

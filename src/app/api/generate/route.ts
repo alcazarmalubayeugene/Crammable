@@ -10,6 +10,7 @@ import {
   type GenerateResult,
 } from "@/lib/contracts";
 import { apiFail, handleApiError } from "@/lib/api/errors";
+import { assertSameOrigin } from "@/lib/api/csrf";
 import {
   generateFlashcardsFromText,
   isDeepSeekConfigured,
@@ -37,6 +38,9 @@ function maxCardsForTier(
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    const csrf = assertSameOrigin(request);
+    if (csrf) return csrf;
+
     if (!isDeepSeekConfigured()) {
       return apiFail(ApiErrorCode.AI_UNAVAILABLE, UIMessages.aiUnavailable, 503);
     }

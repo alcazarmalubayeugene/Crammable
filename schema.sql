@@ -302,6 +302,15 @@ CREATE INDEX IF NOT EXISTS idx_referral_events_cap_check
 CREATE INDEX IF NOT EXISTS idx_referral_events_referred_id
   ON public.referral_events (referred_id);
 
+-- AUDIT 2.1: at most ONE 'signup' attribution may ever exist per referred user.
+-- Hard DB backstop against the double-award race — even if app logic slips, a
+-- second signup credit for the same referred_id raises unique_violation.
+-- Partial (event_type = 'signup') so deck_share/app_review/profile_complete are
+-- unaffected; NULL referred_id rows (referred user deleted) are exempt.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_referral_signup_once_per_referred
+  ON public.referral_events (referred_id)
+  WHERE event_type = 'signup' AND referred_id IS NOT NULL;
+
 -- rate_limit_log: hot-path — every rate-checked request hits this
 CREATE INDEX IF NOT EXISTS idx_rate_limit_log
   ON public.rate_limit_log (user_id, endpoint, requested_at DESC);
@@ -944,11 +953,31 @@ BEGIN
       USING HINT = 'This quiz session has already been submitted';
   END IF;
 
-  -- Tally from the submitted answers.
+  -- SECURITY (audit 3.1): correctness is re-derived HERE from the canonical
+  -- flashcard.back, NOT trusted from the client's isCorrect flag. A client can
+  -- send any isCorrect it likes; the authoritative score must come from the DB.
+  -- Matching mirrors the client's grading: case-insensitive, whitespace-trimmed
+  -- equality (works for both identification typing and multiple-choice, where
+  -- the selected option text equals the card back when correct). RLS confines
+  -- the join to the caller's own cards, so a foreign/unknown flashcardId
+  -- resolves to no row → graded incorrect and earns no score. The grading join
+  -- is inlined per statement (rather than a temp table) so the function is safe
+  -- to call more than once within a single transaction.
+
+  -- Tally from the server-derived grade.
   SELECT COUNT(*)::int,
-         COUNT(*) FILTER (WHERE (a->>'isCorrect')::boolean)::int
+         COUNT(*) FILTER (WHERE g.is_correct)::int
   INTO   v_total, v_correct
-  FROM   jsonb_array_elements(p_answers) AS a;
+  FROM (
+    SELECT COALESCE(
+             a->>'userAnswer' IS NOT NULL
+             AND f.back IS NOT NULL
+             AND lower(btrim(a->>'userAnswer')) = lower(btrim(f.back)),
+             false
+           ) AS is_correct
+    FROM   jsonb_array_elements(p_answers) AS a
+    LEFT   JOIN public.flashcards f ON f.id = (a->>'flashcardId')::uuid
+  ) g;
 
   IF v_total = 0 THEN
     RAISE EXCEPTION 'NO_ANSWERS'
@@ -957,13 +986,19 @@ BEGIN
 
   v_score := round(v_correct * 100.0 / v_total);
 
-  -- Persist every answer in a single insert.
+  -- Persist every answer in a single insert (server-derived is_correct).
   INSERT INTO public.quiz_answers (session_id, flashcard_id, user_answer, is_correct)
   SELECT p_session_id,
          (a->>'flashcardId')::uuid,
          a->>'userAnswer',
-         (a->>'isCorrect')::boolean
-  FROM   jsonb_array_elements(p_answers) AS a;
+         COALESCE(
+           a->>'userAnswer' IS NOT NULL
+           AND f.back IS NOT NULL
+           AND lower(btrim(a->>'userAnswer')) = lower(btrim(f.back)),
+           false
+         )
+  FROM   jsonb_array_elements(p_answers) AS a
+  LEFT   JOIN public.flashcards f ON f.id = (a->>'flashcardId')::uuid;
 
   -- Update each reviewed card's stats in one set-based statement. RLS confines
   -- the UPDATE to the caller's own cards, so a foreign flashcardId is a no-op.
@@ -980,9 +1015,17 @@ BEGIN
                             END,
          last_reviewed_at = now()
   FROM (
-    SELECT (a->>'flashcardId')::uuid           AS flashcard_id,
-           bool_or((a->>'isCorrect')::boolean) AS is_correct
+    SELECT (a->>'flashcardId')::uuid AS flashcard_id,
+           bool_or(
+             COALESCE(
+               a->>'userAnswer' IS NOT NULL
+               AND fc.back IS NOT NULL
+               AND lower(btrim(a->>'userAnswer')) = lower(btrim(fc.back)),
+               false
+             )
+           ) AS is_correct
     FROM   jsonb_array_elements(p_answers) AS a
+    LEFT   JOIN public.flashcards fc ON fc.id = (a->>'flashcardId')::uuid
     GROUP  BY (a->>'flashcardId')::uuid
   ) a
   WHERE  f.id = a.flashcard_id;
@@ -1079,6 +1122,78 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 4.14b claim_referral(p_referred_id, p_referrer_id, p_event_type, p_month_key, p_credits)
+-- SECURITY FIX (audit 2.1/A2): atomic, single-source referral attribution.
+-- Previously TWO non-transactional code paths (auth/callback auto-processing and
+-- the /api/referral/claim form) each did check→grant→log→set-referred_by as
+-- separate statements, so they could double-award credits to a referrer for one
+-- referred user (TOCTOU on referred_by, plus no unique constraint). This function
+-- folds the whole attribution into one transaction:
+--   1. lock the referred profile row (FOR UPDATE) so concurrent claims serialise
+--   2. re-check referred_by IS NULL          → ALREADY_REFERRED
+--   3. reject self-referral                  → SELF_REFERRAL
+--   4. re-check the monthly/lifetime cap      → REFERRAL_CAP_REACHED
+--   5. insert the referral_events ledger row (backed by the partial unique index
+--      ux_referral_signup_once_per_referred, §2, as a hard duplicate backstop)
+--   6. grant_credits() to the REFERRER (atomic)
+--   7. stamp referred_by on the referred profile
+-- SECURITY DEFINER so the nested grant_credits()/insert run as the owner (their
+-- EXECUTE/INSERT are locked down for authenticated). Called ONLY via the
+-- service-role client from both referral paths.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.claim_referral(
+  p_referred_id UUID,
+  p_referrer_id UUID,
+  p_event_type  TEXT,
+  p_month_key   TEXT,
+  p_credits     INTEGER
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_referred_by UUID;
+BEGIN
+  IF p_referrer_id = p_referred_id THEN
+    RAISE EXCEPTION 'SELF_REFERRAL'
+      USING HINT = 'A user cannot refer themselves';
+  END IF;
+
+  SELECT referred_by INTO v_referred_by
+  FROM   public.profiles
+  WHERE  id = p_referred_id
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'USER_NOT_FOUND: no profile with id %', p_referred_id;
+  END IF;
+
+  IF v_referred_by IS NOT NULL THEN
+    RAISE EXCEPTION 'ALREADY_REFERRED'
+      USING HINT = 'This user has already been attributed to a referrer';
+  END IF;
+
+  IF NOT public.check_referral_cap(p_referrer_id, p_event_type, p_month_key) THEN
+    RAISE EXCEPTION 'REFERRAL_CAP_REACHED'
+      USING HINT = 'Referrer has hit the monthly/lifetime cap for this event type';
+  END IF;
+
+  INSERT INTO public.referral_events
+    (referrer_id, referred_id, event_type, credits_awarded, verified, month_key)
+  VALUES
+    (p_referrer_id, p_referred_id, p_event_type, p_credits, true, p_month_key);
+
+  PERFORM public.grant_credits(p_referrer_id, p_credits);
+
+  UPDATE public.profiles
+  SET    referred_by = p_referrer_id
+  WHERE  id = p_referred_id;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 4.15 EXECUTE-privilege lockdown for service-role-only functions
 -- SECURITY FIX (P2-3): CREATE FUNCTION grants EXECUTE to PUBLIC by default, and
 -- Supabase additionally grants it to anon + authenticated — which exposed these
@@ -1109,6 +1224,7 @@ REVOKE EXECUTE ON FUNCTION public.approve_payment(uuid, uuid, text)             
 REVOKE EXECUTE ON FUNCTION public.reject_payment(uuid, uuid, text, text)         FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.ensure_profile(uuid)                           FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.pro_monthly_credit_refresh()                   FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.claim_referral(uuid, uuid, text, text, integer) FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.deduct_credit(uuid)                             TO service_role;
 GRANT EXECUTE ON FUNCTION public.grant_credits(uuid, integer)                    TO service_role;
@@ -1117,6 +1233,7 @@ GRANT EXECUTE ON FUNCTION public.check_referral_cap(uuid, text, text)           
 GRANT EXECUTE ON FUNCTION public.approve_payment(uuid, uuid, text)               TO service_role;
 GRANT EXECUTE ON FUNCTION public.reject_payment(uuid, uuid, text, text)          TO service_role;
 GRANT EXECUTE ON FUNCTION public.ensure_profile(uuid)                            TO service_role;
+GRANT EXECUTE ON FUNCTION public.claim_referral(uuid, uuid, text, text, integer)  TO service_role;
 -- pro_monthly_credit_refresh is called by pg_cron (postgres role) — no service_role grant needed;
 
 -- The two Phase 2 RPCs (§4.13/§4.14) are invoked by the SESSION client, i.e. the
