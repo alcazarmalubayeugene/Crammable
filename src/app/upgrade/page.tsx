@@ -47,7 +47,7 @@ const FREE_FEATURES = [
 
 const PRO_FEATURES = [
   "Unlimited decks",
-  "Unlimited cards per deck",
+  `${TierLimits.pro.maxCardsPerDeck} cards per deck`,
   `Unlimited pages per upload (max ${MAX_UPLOAD_SIZE_MB} MB)`,
   `${TierLimits.pro.monthlyCredits} credits every month`,
   "Deep Dive generation mode",

@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createSessionClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getProfileIdByReferralCode } from "@/lib/db/profiles";
+import { claimReferral } from "@/lib/db/rpc";
 import {
   EnvKeys,
   Routes,
-  TableNames,
   ReferralCaps,
   ReferralEventType,
   toMonthKey,
@@ -71,59 +71,23 @@ export async function GET(request: NextRequest) {
 
 /**
  * Records the referral relationship and awards credits to the referrer.
- * All writes use the service-role client (bypasses RLS for cross-user updates).
- * Non-fatal: errors are caught by the caller and logged, not surfaced to user.
+ * Delegates to the single atomic claim_referral() RPC (schema §4.14b) — the SAME
+ * path the /api/referral/claim form uses — so the two can't double-award (audit
+ * 2.1/A4). Non-fatal: errors (invalid code, self-referral, already-referred,
+ * cap-reached) are caught by the caller and logged, not surfaced to the user.
  */
 async function processSignupReferral(
   newUserId: string,
   referralCode: string
 ): Promise<void> {
-  const admin = createAdminClient();
+  const referrerId = await getProfileIdByReferralCode(referralCode.trim().toUpperCase());
+  if (!referrerId) return; // invalid code
 
-  // 1. Resolve referral code → referrer profile id
-  const { data: referrer } = await admin
-    .from(TableNames.profiles)
-    .select("id")
-    .eq("referral_code", referralCode)
-    .single();
-
-  if (!referrer || referrer.id === newUserId) return; // invalid code or self-referral
-
-  const monthKey = toMonthKey(new Date());
-
-  // 2. Check monthly cap (mirrors check_referral_cap DB function)
-  const { data: capAllowed } = await admin.rpc("check_referral_cap", {
-    p_referrer_id: referrer.id,
-    p_event_type: ReferralEventType.SIGNUP,
-    p_month_key: monthKey,
-  });
-
-  if (!capAllowed) return;
-
-  const credits = ReferralCaps[ReferralEventType.SIGNUP].creditsAwarded;
-
-  // 3. Set referred_by on the new user's profile
-  await admin
-    .from(TableNames.profiles)
-    .update({ referred_by: referrer.id })
-    .eq("id", newUserId);
-
-  // 4. Award credits atomically and log the event in parallel.
-  // grant_credits() is a SECURITY DEFINER function that increments both
-  // token_balance and lifetime_credits_earned in a single UPDATE — no race condition.
-  await Promise.all([
-    admin.rpc("grant_credits", {
-      p_user_id: referrer.id,
-      p_amount: credits,
-    }),
-
-    admin.from(TableNames.referralEvents).insert({
-      referrer_id: referrer.id,
-      referred_id: newUserId,
-      event_type: ReferralEventType.SIGNUP,
-      credits_awarded: credits,
-      verified: true,
-      month_key: monthKey,
-    }),
-  ]);
+  await claimReferral(
+    newUserId,
+    referrerId,
+    ReferralEventType.SIGNUP,
+    toMonthKey(new Date()),
+    ReferralCaps[ReferralEventType.SIGNUP].creditsAwarded,
+  );
 }

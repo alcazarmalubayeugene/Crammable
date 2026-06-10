@@ -1,0 +1,350 @@
+===============================================================================
+CRAMMABLE — SECURITY AUDIT
+Date:    2026-06-10
+Scope:   Authn/authz, RLS, secrets, injection, CSRF, rate limiting, payments,
+         referral fraud, data privacy (RA 10173), DoS, headers.
+Method:  Manual review of every route handler, the data-access layer, the
+         Supabase clients, schema.sql (RLS + SECURITY DEFINER functions), and
+         the client pages. Cross-checked against CLAUDE.md security rules.
+===============================================================================
+
+OVERALL POSTURE: Strong on the money/tier path. The credit economy, payment
+approval, and privilege-escalation defenses are genuinely well-built — atomic
+SECURITY DEFINER functions, RLS deny-by-default, profile-column triggers, and a
+locked-down RPC surface (schema §4.15). The weak spots are (1) referral
+attribution being non-atomic across two code paths, (2) the upload endpoint
+silently dropping all auth when the service-role env var is absent, (3) quiz
+scoring fully trusting the client, (4) CSRF exposure on the multipart upload
+endpoint, and (5) no security response headers. None of (3)–(5) touch money;
+(1) and (2) are the ones to fix before launch.
+
+Severity: [CRITICAL] exploit → money/account impact · [HIGH] fix before launch ·
+[MED] should fix · [LOW] hardening / defense-in-depth.
+
+
+===============================================================================
+1. AUTHENTICATION & AUTHORIZATION
+===============================================================================
+
+-------------------------------------------------------------------------------
+1.1 [HIGH] /api/upload drops ALL auth when the service-role key is unset
+-------------------------------------------------------------------------------
+File: src/app/api/upload/route.ts:46-71
+The entire auth block — requireAuth(), consent gate, rate limit, tier limits —
+is wrapped in:
+    if (!PDF_EXTRACTION_TEST_MODE && isPersistenceEnabled()) { ...auth... }
+where isPersistenceEnabled() is true only when BOTH NEXT_PUBLIC_SUPABASE_URL and
+SUPABASE_SERVICE_ROLE_KEY are present. If the service-role key is missing or
+misconfigured in an environment, the endpoint still runs: it parses the uploaded
+PDF and returns extracted text to ANY unauthenticated caller, with no consent
+check and no rate limit. That's:
+  - an unauthenticated, unbounded PDF-parsing endpoint (CPU/memory DoS vector),
+  - a consent bypass for the RA-10173 gate (text extraction with no consent),
+  - a silent failure mode keyed on an env var, which is exactly the kind of
+    fragile gate that breaks in staging/preview deployments.
+Fix: auth/consent/rate-limit should NEVER be conditional on persistence config.
+Always requireAuth() + consent + rate-limit first; only the optional DB-backed
+tier lookups should depend on env. Gate test-only behavior behind an explicit,
+non-production flag, not behind "did we happen to configure the service key."
+
+-------------------------------------------------------------------------------
+1.2 [LOW] Login rate-limit is not brute-force protection (documented, but real)
+-------------------------------------------------------------------------------
+File: src/app/api/auth/login/route.ts:69-100
+The check_rate_limit() call runs only AFTER a successful signInWithPassword and
+is keyed by user_id. Failed/unknown-email attempts never reach it and have no
+key. So password brute-force is entirely dependent on Supabase GoTrue's built-in
+auth rate limits. The code comments acknowledge this. Action: confirm GoTrue
+auth rate limits + CAPTCHA are enabled in the Supabase dashboard, and consider a
+per-IP throttle (needs an IP column on rate_limit_log). Until then this is an
+accepted risk, not a mitigated one.
+
+-------------------------------------------------------------------------------
+1.3 [OK] Session validation uses getUser(), not getSession()
+-------------------------------------------------------------------------------
+auth/helpers.getCurrentUser() and proxy.ts both call supabase.auth.getUser(),
+which verifies the JWT against the auth server rather than trusting the cookie.
+Correct and immune to forged/expired cookie tokens. Good.
+
+-------------------------------------------------------------------------------
+1.4 [OK] Admin gating is enforced server-side AND in the proxy
+-------------------------------------------------------------------------------
+requireAdmin() (helpers) re-checks profile.is_admin on every admin API call via
+the RLS session client; proxy.ts independently checks is_admin for /admin pages.
+is_current_user_admin() (SECURITY DEFINER, STABLE) backs the admin RLS policies.
+The client-side isAdmin check in admin/page.tsx is cosmetic only — the API is
+the real gate. Layered correctly.
+
+
+===============================================================================
+2. REFERRAL / CREDIT FRAUD
+===============================================================================
+
+-------------------------------------------------------------------------------
+2.1 [HIGH] Referral attribution is non-atomic across two code paths (double-award)
+-------------------------------------------------------------------------------
+Files: src/app/api/referral/claim/route.ts:33-80
+       src/app/api/auth/callback/route.ts:63-128
+Two separate flows award a signup referral:
+  (a) auth/callback auto-processes raw_user_meta_data.referral_code_used on
+      email verification.
+  (b) /api/referral/claim handles the manual code-entry form on /rewards.
+Both perform "check referred_by null → check_referral_cap → grant_credits →
+insert referral_event → set referred_by" as discrete, NON-transactional steps.
+The only guard against a repeat is `profile.referred_by !== null`, read at
+requireAuth() time (a classic TOCTOU). There is NO unique constraint stopping a
+second 'signup' event for the same referred_id (the index on referred_id is
+non-unique). Consequences:
+  - A user who signed up with a code (path a) can ALSO submit a code on /rewards
+    (path b) before/around verification and trigger a second grant_credits to a
+    referrer.
+  - Two concurrent claim requests can both pass the null check and double-award.
+Each grant_credits is real credits = real value (credits unlock DeepSeek
+generations). This is the highest-value fraud vector in the app.
+Fix (also in CODE_AUDIT A2): one SECURITY DEFINER claim_referral() that locks
+the referred profile row, re-checks referred_by IS NULL and the cap, inserts the
+event, grants credits, and sets referred_by in a single transaction; have BOTH
+paths call only it. Add:
+    CREATE UNIQUE INDEX ux_referral_signup_once_per_referred
+      ON referral_events (referred_id) WHERE event_type = 'signup';
+so the DB makes a duplicate signup award impossible even if app logic slips.
+
+-------------------------------------------------------------------------------
+2.2 [OK] referral_events has no client INSERT policy
+-------------------------------------------------------------------------------
+schema §5 (fix C2) removed the INSERT policy; all writes go through the
+service-role client after server-side cap checks. The credits_awarded CHECK
+constraint pins values to (3,5,10,15). check_referral_cap() and grant_credits()
+EXECUTE are revoked from anon/authenticated (§4.15). Good — a client can't forge
+a referral event directly. The remaining risk is purely the app-layer race in
+2.1.
+
+-------------------------------------------------------------------------------
+2.3 [OK] Self-referral is blocked at three layers
+-------------------------------------------------------------------------------
+no_self_referral CHECK constraint (schema §1.1), the claim route's
+referrerId === user.id check, and the callback's referrer.id === newUserId
+check. Belt and suspenders. Good.
+
+
+===============================================================================
+3. QUIZ INTEGRITY (client-trusted scoring)
+===============================================================================
+
+-------------------------------------------------------------------------------
+3.1 [MED] Server trusts client-supplied isCorrect; correct answers are sent to client
+-------------------------------------------------------------------------------
+Files: src/app/api/quiz/[id]/route.ts (StartQuizResult includes correctAnswer
+       for every question)  +  src/app/api/quiz/result/route.ts → submit_quiz_result
+The start-quiz response ships `correctAnswer` for every card to the browser, and
+submit_quiz_result tallies score_percent purely from the client's isCorrect
+booleans — the DB never re-derives correctness from flashcard.back. A user can
+POST arbitrary isCorrect=true for a 100% score, and inversely can drive
+difficulty_score up/down at will, which feeds Living Deck selection. No money is
+involved (quizzes don't award credits), so impact is limited to self-deception
+and polluted study analytics. Still, it means quiz results are not trustworthy
+as a data source.
+Fix (defense-in-depth): re-evaluate correctness server-side inside
+submit_quiz_result by joining quiz_answers.flashcard_id → flashcards.back and
+comparing, rather than trusting the supplied flag. At minimum, don't send
+correctAnswer for identification questions until after the answer is submitted.
+
+-------------------------------------------------------------------------------
+3.2 [OK] submit_quiz_result is RLS-confined and idempotent
+-------------------------------------------------------------------------------
+The RPC is SECURITY INVOKER, locks the session FOR UPDATE, re-checks
+completed_at (blocks double-submit), and confines every write to the caller's
+own rows. A foreign flashcardId is a harmless no-op. The atomicity work here is
+solid; the only gap is the trust model in 3.1.
+
+
+===============================================================================
+4. CSRF
+===============================================================================
+
+-------------------------------------------------------------------------------
+4.1 [MED] Multipart /api/upload is CSRF-reachable
+-------------------------------------------------------------------------------
+Auth on the API routes is cookie-based (createSessionClient reads the Supabase
+SSR cookies; the Authorization: Bearer header added by authHeaders() is not what
+the server reads). JSON endpoints are largely shielded because a cross-site
+fetch with Content-Type: application/json triggers a CORS preflight the attacker
+can't satisfy. BUT /api/upload accepts multipart/form-data, which is a CORS
+"simple request" — an attacker page can auto-submit a hidden <form
+enctype="multipart/form-data" action="https://app/api/upload"> with the victim's
+cookies attached, no preflight. Impact is bounded (it consumes the victim's
+upload rate-limit and CPU, and could create a deck if chained — though generate
+is a separate JSON call), so this is MED not HIGH. Once 1.1 is fixed the
+endpoint at least requires a valid session, but session ≠ CSRF protection.
+Fix: add an origin/referer check (or a CSRF token, or require a custom header
+that forces a preflight) on state-changing routes, especially the multipart one.
+Next.js does not add CSRF tokens automatically.
+
+-------------------------------------------------------------------------------
+4.2 [OK] Logout is POST-only
+-------------------------------------------------------------------------------
+auth/logout is POST and documents the CSRF rationale (no GET logout via <img>).
+Good.
+
+
+===============================================================================
+5. SECRETS & CLIENT/SERVER BOUNDARY
+===============================================================================
+
+-------------------------------------------------------------------------------
+5.1 [OK] Service-role key never crosses to the client
+-------------------------------------------------------------------------------
+createAdminClient() (service role) is imported only by server files:
+supabase/admin.ts, db/rpc, db/rate-limit, db/referrals, db/profiles, db/admin,
+and the upload/referral/login/callback route handlers. No "use client" file
+imports it. The browser client (browser.ts) uses only NEXT_PUBLIC_* anon creds.
+contracts.ts is imported on the client but only exposes EnvKeys as string names,
+never reads process.env values. DEEPSEEK_API_KEY / model are read only in
+deepseek/client.ts (server). Boundary is respected — matches CLAUDE.md §6.
+
+-------------------------------------------------------------------------------
+5.2 [LOW] App.gcashNumber is blank and support email is a placeholder
+-------------------------------------------------------------------------------
+contracts.App.gcashNumber = "" (TODO before launch) and supportEmail =
+support@crammable.ph. Not a vuln, but the upgrade page falls back to "contact us
+at <email>" — make sure the launch values are set so users aren't misrouted.
+
+
+===============================================================================
+6. INJECTION
+===============================================================================
+
+-------------------------------------------------------------------------------
+6.1 [OK] No SQL injection surface
+-------------------------------------------------------------------------------
+Every DB access uses the Supabase query builder or parameterized .rpc() calls;
+no string-concatenated SQL anywhere. listReferralEventsForCurrentUser relies on
+RLS rather than interpolating a user id. The SECURITY DEFINER functions take
+typed params. Good.
+
+-------------------------------------------------------------------------------
+6.2 [OK] No obvious XSS sink
+-------------------------------------------------------------------------------
+No dangerouslySetInnerHTML in the codebase; all dynamic text (card fronts/backs,
+filenames, emails) is rendered as React text nodes, which auto-escape. DeepSeek
+output is rendered as text, not HTML. Good. (See 8.1 re: a CSP as defense in
+depth, since AI-generated content is shown verbatim.)
+
+-------------------------------------------------------------------------------
+6.3 [OK] DeepSeek prompt-injection blast radius is small
+-------------------------------------------------------------------------------
+Document text is wrapped in DOCUMENT START/END markers and the system prompt
+constrains output to a fixed JSON shape that the parser then validates field by
+field (front/back/tags trimmed, capped, non-empty filtered). A malicious
+document can at worst produce junk cards, not escape into code or other users'
+data. Reasonable.
+
+
+===============================================================================
+7. DATA PRIVACY (RA 10173 / DeepSeek cross-border transfer)
+===============================================================================
+
+-------------------------------------------------------------------------------
+7.1 [OK] Consent gate present on the server before any DeepSeek call
+-------------------------------------------------------------------------------
+generate/route.ts refuses with CONSENT_REQUIRED when profile.consent_deepseek is
+false, BEFORE calling DeepSeek. upload/route.ts also gates on consent (when auth
+runs — but see 1.1, where that gate is skippable). Only extracted document text
+is forwarded; no profile PII is included in the prompt. Matches CLAUDE.md §4.
+
+-------------------------------------------------------------------------------
+7.2 [OK] Source PDF is never persisted to Storage
+-------------------------------------------------------------------------------
+CLAUDE.md §4 says "delete the source PDF from Storage after extraction." In
+practice the PDF is parsed in-memory from the request buffer
+(extractTextFromPdfBuffer) and never written to Supabase Storage at all, so
+there is nothing to delete and no at-rest copy of the student's document. This
+is actually the stronger posture. Good — just note the CLAUDE.md instruction is
+moot for the current implementation.
+
+-------------------------------------------------------------------------------
+7.3 [LOW] Consent can be toggled client-side via the browser client
+-------------------------------------------------------------------------------
+PdfUploadFlow.tsx updates profiles.consent_deepseek = true directly through the
+RLS-scoped browser client. That's allowed (own row, not a privileged column) and
+the server re-checks on every generate, so it's fine functionally. For an
+auditable consent trail (useful under RA 10173) consider recording consent
+grant/revocation with a timestamp server-side rather than only a boolean flag.
+
+
+===============================================================================
+8. TRANSPORT / HEADERS / DoS
+===============================================================================
+
+-------------------------------------------------------------------------------
+8.1 [MED] No security response headers (CSP, X-Frame-Options, etc.)
+-------------------------------------------------------------------------------
+next.config.ts defines no headers() block and there's no CSP. The app renders
+AI-generated content and is a payments-adjacent app, so at minimum add:
+  - Content-Security-Policy (even a report-only baseline),
+  - X-Frame-Options: DENY / frame-ancestors 'none' (clickjacking on the payment
+    + admin pages),
+  - Referrer-Policy: strict-origin-when-cross-origin,
+  - X-Content-Type-Options: nosniff.
+Add via next.config headers() or the proxy. Low effort, broad benefit.
+
+-------------------------------------------------------------------------------
+8.2 [LOW] Upload body is fully buffered before the size check
+-------------------------------------------------------------------------------
+upload/route.ts validates file.size only AFTER request.formData() has parsed the
+whole multipart body into memory, and arrayBuffer() then copies it again. The
+10 MB intent (MAX_UPLOAD_SIZE_MB) isn't enforced at the transport layer, so a
+client can stream a much larger body before the check rejects it. Combined with
+1.1 (possible no-auth) this is a memory-pressure DoS. Consider enforcing a body
+size limit at the platform/route config level, and rejecting on Content-Length
+before reading.
+
+-------------------------------------------------------------------------------
+8.3 [OK] AI endpoints are rate-limited and time-boxed
+-------------------------------------------------------------------------------
+generate 2/hr, upload 5/hr, payment 2/24h, referral 5/24h (RateLimits), enforced
+through the advisory-locked check_rate_limit() that closes the TOCTOU window.
+DeepSeek calls are bounded by maxDuration=60s and a 45s client timeout with
+capped retries. Reasonable abuse controls — provided 1.1 is fixed so upload
+actually reaches the limiter.
+
+
+===============================================================================
+9. PAYMENTS (well-hardened — noted for completeness)
+===============================================================================
+
+[OK] amount is server-validated against Pricing.pro.amountPhp; reference number
+     is a server-checked 13-digit pattern AND a DB CHECK + UNIQUE constraint;
+     one-pending-per-user enforced by a partial unique index.
+[OK] Only approve_payment() (SECURITY DEFINER, status='pending' guard) flips
+     subscription_tier → pro, extends expiry from GREATEST(current, now), grants
+     the 30-credit allotment, and writes admin_action_log — all atomically. A
+     second admin acting on the same row gets ALREADY_PROCESSED.
+[OK] prevent_privilege_escalation() + protect_immutable_profile_fields() triggers
+     block any client write to is_admin, subscription_tier, token_balance,
+     subscription_expires_at, referral_code, lifetime_credits_earned, referred_by.
+[OK] EXECUTE on the money/tier/audit SECURITY DEFINER functions is revoked from
+     PUBLIC/anon/authenticated (schema §4.15) — they're not callable from the
+     PostgREST RPC surface. This closes the "free credits / self-upgrade /
+     drain another user" class entirely.
+This is the strongest part of the system; no action required beyond keeping the
+§4.15 revokes in sync whenever a new SECURITY DEFINER money function is added.
+
+
+===============================================================================
+10. PRIORITIZED REMEDIATION
+===============================================================================
+[ ] 1.1  Always enforce auth/consent/rate-limit on /api/upload (no env gate).  HIGH
+[ ] 2.1  Atomic single-path referral claim + unique signup index.             HIGH
+[ ] 8.1  Add CSP + X-Frame-Options + nosniff + Referrer-Policy headers.        MED
+[ ] 4.1  Add origin/referer (or CSRF token) check on state-changing routes,
+         especially multipart /api/upload.                                     MED
+[ ] 3.1  Re-derive quiz correctness server-side; stop trusting client isCorrect.MED
+[ ] 8.2  Enforce upload body-size limit before buffering.                      LOW
+[ ] 1.2  Confirm Supabase GoTrue brute-force limits + CAPTCHA are on.          LOW
+[ ] 7.3  Persist an auditable consent timestamp (RA 10173).                    LOW
+[ ] 5.2  Fill in App.gcashNumber / real support email before launch.           LOW
+
+===============================================================================
+END OF SECURITY AUDIT
+===============================================================================

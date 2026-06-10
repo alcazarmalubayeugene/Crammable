@@ -153,9 +153,7 @@ export default function RewardsPage() {
         setClaimError(data.error.message);
         return;
       }
-      setClaimSuccess(
-        UIMessages.referralCredited("your referrer", data.creditsAwarded),
-      );
+      setClaimSuccess(UIMessages.referralClaimThanks(data.creditsAwarded));
       setProfile((p) => p ? { ...p, token_balance: data.newBalance, referred_by: "claimed" } : p);
       setClaimCode("");
     } catch {

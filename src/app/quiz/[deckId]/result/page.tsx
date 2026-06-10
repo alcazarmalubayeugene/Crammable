@@ -3,24 +3,7 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { App, Routes } from "@/lib/contracts";
-
-// ── mirrored from quiz/[deckId]/page.tsx ─────────────────────────────────────
-
-interface QuizResultData {
-  deckId: string;
-  deckTitle: string;
-  scorePercent: number;
-  correctCount: number;
-  totalQuestions: number;
-  answers: Array<{
-    front: string;
-    back: string;
-    userAnswer: string | null;
-    isCorrect: boolean;
-  }>;
-}
-
-const QUIZ_RESULT_KEY = "crammable_quiz_result";
+import { QUIZ_RESULT_KEY, type QuizResultData } from "@/app/quiz/[deckId]/page";
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

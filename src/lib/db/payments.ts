@@ -45,17 +45,3 @@ export async function createPaymentSubmission(
   if (error) throw toDbError(error, "Failed to submit payment.");
   return data as PaymentSubmission;
 }
-
-/** A user's own payment history, newest first. */
-export async function listUserPayments(
-  userId: string
-): Promise<PaymentSubmission[]> {
-  const supabase = await createSessionClient();
-  const { data, error } = await supabase
-    .from(TableNames.paymentSubmissions)
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-  if (error) throw toDbError(error, "Failed to load payments.");
-  return (data as PaymentSubmission[]) ?? [];
-}

@@ -1,0 +1,345 @@
+===============================================================================
+CRAMMABLE — CODE AUDIT (optimization · redundancy · fixes)
+Date:      2026-06-10
+Scope:     src/**, schema.sql, contracts.ts, next.config.ts, package.json
+Method:    Full read of every route handler, lib module, page/component, plus
+           `tsc --noEmit`, `eslint`, and `vitest run`.
+Baseline:  tsc → 2 errors (next.config.ts). eslint → 1 warning. tests → 60 pass.
+===============================================================================
+
+This file covers correctness bugs, redundant/dead code, and optimization. A
+separate SECURITY_AUDIT.txt covers the security posture. Findings are ranked
+within each section. Severity: [HIGH] act before launch · [MED] should fix ·
+[LOW] cleanup / nice-to-have.
+
+NOTE ON CONVENTIONS: Per CLAUDE.md, contracts.ts is the single source of truth
+and schema.sql is canonical. Several findings below are flagged precisely
+because code drifts from those two documents.
+
+
+===============================================================================
+SECTION A — CORRECTNESS BUGS
+===============================================================================
+
+-------------------------------------------------------------------------------
+A1. [HIGH] next.config.ts has duplicate object keys — TS compile fails
+-------------------------------------------------------------------------------
+File: next.config.ts:9-18
+`turbopack` is declared twice (lines 9 and 10) and `serverExternalPackages` is
+declared twice (lines 8 and 18). This is the ONLY reason `npm run typecheck`
+fails today (TS1117 ×2). The later declaration silently wins, so:
+  - serverExternalPackages effectively = ["pdfjs-dist"]  (the "@napi-rs/canvas"
+    entry on line 8 is dropped).
+  - turbopack effectively = { root: projectRoot }  (the empty {} is dropped).
+
+Fix: collapse to one of each key. Likely intended:
+    serverExternalPackages: ["pdfjs-dist", "@napi-rs/canvas"],
+    turbopack: { root: projectRoot },
+Decide whether @napi-rs/canvas actually needs to be external (it's not in
+package.json dependencies — see C2) and keep the single correct value.
+Because `tsc` is part of the Definition-of-Done gate (CLAUDE.md §7), this must
+be fixed first or every typecheck run is red.
+
+-------------------------------------------------------------------------------
+A2. [HIGH] Referral can be claimed AFTER consuming a credit / duplicate award
+-------------------------------------------------------------------------------
+Files: src/app/api/referral/claim/route.ts  +  src/app/api/auth/callback/route.ts
+There are TWO independent code paths that award a signup referral and set
+referred_by:
+  (1) auth/callback (processSignupReferral) — runs automatically on email
+      verification if raw_user_meta_data.referral_code_used was set at signup.
+  (2) /api/referral/claim — the manual "Got a referral code?" form on /rewards.
+
+Problems:
+  - DOUBLE-AWARD RACE: both paths do "check cap → grant_credits → insert
+    referral_event → set referred_by" as separate, non-atomic statements. The
+    claim route guards on `profile.referred_by !== null`, but that value is read
+    at requireAuth() time. If the callback path and a manual claim interleave
+    (or two claim requests race), both can pass the null check before either
+    writes referred_by, producing two referral_events and two grant_credits for
+    one referred user. The DB has no unique constraint preventing a second
+    signup event for the same referred_id (idx is non-unique).
+  - INCONSISTENT CAP LOGIC: the L2 CHECK constraint on referral_events allows
+    credits_awarded IN (3,5,10,15). contracts.ReferralCaps.signup.creditsAwarded
+    is 10, but check_referral_cap() in schema (§4.8) and the DB comment say the
+    monthly signup cap is 5 — those agree. However the *credit value* the
+    callback inserts (10) and the route inserts (10) is correct; just note the
+    schema header comment block claims "signup 10" via ReferralCaps while the
+    function-body comment block (§4.8) says "signup: monthly 5" (that's the cap,
+    not the credit — easy to misread).
+
+Fix: make referral attribution atomic and single-source. Recommended: a single
+SECURITY DEFINER `claim_referral(p_referred_id, p_referrer_id, p_month_key)`
+that (a) locks the referred profile row, (b) re-checks referred_by IS NULL, (c)
+re-checks the cap, (d) inserts the event, (e) grant_credits, (f) sets
+referred_by — all in one transaction — and have BOTH the callback and the claim
+route call only that. Add a partial unique index to make a second signup event
+for the same referred_id impossible:
+    CREATE UNIQUE INDEX ux_referral_signup_once_per_referred
+      ON referral_events (referred_id) WHERE event_type = 'signup';
+
+-------------------------------------------------------------------------------
+A3. [MED] Claim route returns stale newBalance
+-------------------------------------------------------------------------------
+File: src/app/api/referral/claim/route.ts:82-85
+The response returns `newBalance: profile.token_balance` — the REFERRED user's
+balance read at requireAuth(). But grant_credits() credits the REFERRER, not the
+caller; the caller's own balance is unchanged by a signup referral. So the
+"newBalance" field is just the caller's pre-existing balance and is misleading
+relative to ClaimReferralResult's intent. Also the success toast on /rewards
+(UIMessages.referralCredited("your referrer", data.creditsAwarded)) implies the
+CALLER earned credits, which they did not. Decide the intended UX: either the
+referred user also earns a bonus (then actually grant it and return the real new
+balance from grant_credits RETURNING), or fix the copy to say the referrer was
+credited and drop newBalance from the contract.
+
+-------------------------------------------------------------------------------
+A4. [MED] auth/callback referral path bypasses the hardened RPC surface
+-------------------------------------------------------------------------------
+File: src/app/api/auth/callback/route.ts:106-128
+This path inserts directly into referral_events via the service-role client
+(admin.from(referralEvents).insert(...)) instead of going through
+logReferralEvent() / the planned atomic claim function. It duplicates the exact
+logic in /api/referral/claim and src/lib/db/referrals.ts. Two copies of the same
+fraud-sensitive flow will drift. Consolidate to one helper/RPC (see A2).
+
+-------------------------------------------------------------------------------
+A5. [MED] Quiz score can be inconsistent: client trusts its own isCorrect
+-------------------------------------------------------------------------------
+Files: src/app/quiz/[deckId]/page.tsx (submitAnswer/looslyCorrect)
+       src/app/api/quiz/result/route.ts  →  submit_quiz_result (schema §4.13)
+The client computes isCorrect locally (looslyCorrect = case-insensitive trim
+compare) and the server tallies score purely from the client-supplied
+isCorrect flags. The DB never re-derives correctness from the stored flashcard
+back text. This isn't only a security issue (covered in the security audit) —
+it's a correctness/consistency issue: identification answers use a very loose
+match on the client, multiple-choice uses exact ===; the canonical card text on
+the server is never consulted, so two clients could score the same answers
+differently and the stored score_percent reflects whatever the client claimed.
+At minimum, document that score is client-derived; ideally re-evaluate
+server-side from flashcard.back.
+
+NOTE: there's also a typo — `looslyCorrect` should be `looselyCorrect`
+(cosmetic, but it's a public-ish function name in the file).
+
+-------------------------------------------------------------------------------
+A6. [LOW] Deck-detail page sets profile only on success, leaves it null on slow path
+-------------------------------------------------------------------------------
+File: src/app/decks/[id]/page.tsx:33-85
+The 10s timeout sets error+loading=false, but the in-flight `load()` can still
+resolve afterward and call setState on a possibly-unmounted tree. The cleanup
+clears the timeout but not the fetch. Low impact (React tolerates it with a
+warning), but consider an AbortController for the fetch and a mounted flag.
+Same pattern in quiz/[deckId]/page.tsx.
+
+
+===============================================================================
+SECTION B — REDUNDANT / DEAD CODE
+===============================================================================
+
+-------------------------------------------------------------------------------
+B1. [MED] Dead unused export flagged by ESLint
+-------------------------------------------------------------------------------
+File: src/app/api/auth/logout/route.ts:2
+`internalErrorResponse` is imported but never used (the catch swallows errors
+and always returns success). This is the only lint warning in the build.
+Fix: remove the import.
+
+-------------------------------------------------------------------------------
+B2. [MED] Unused data-access layer functions (verified no call sites)
+-------------------------------------------------------------------------------
+The following are defined and re-exported from src/lib/db/index.ts but have NO
+caller anywhere in src/ outside their own module + the barrel (confirmed by
+grep across src and tests):
+
+  - createDeck                  (src/lib/db/decks.ts)        — superseded by
+                                  createDeckWithCardsAndCharge; only referenced
+                                  by validation.test.ts.
+  - updateDeckCardCount         (src/lib/db/decks.ts)        — card_count is now
+                                  synced inside the RPC; helper is orphaned.
+  - insertFlashcards            (src/lib/db/flashcards.ts)   — superseded by the
+                                  RPC; only referenced by validation.test.ts.
+  - getWeakCardsForDeck         (src/lib/db/flashcards.ts)   — Living Deck not
+                                  wired yet (TODO 8).
+  - applyCardReview             (src/lib/db/flashcards.ts)   — superseded by
+                                  submit_quiz_result RPC; only in flashcards.test.
+  - getQuizSessionById          (src/lib/db/quiz.ts)         — no caller.
+  - getPaymentById              (src/lib/db/admin.ts)        — no caller.
+  - listUserPayments            (src/lib/db/payments.ts)     — no caller (the
+                                  upgrade page reads payments directly via the
+                                  browser client instead).
+  - getProfileById              (src/lib/db/profiles.ts)     — no caller
+                                  (handlers use requireAuth()'s profile).
+  - updateOwnProfile            (src/lib/db/profiles.ts)     — no caller; settings
+                                  page updates profiles directly via browser
+                                  client. Only in profiles.test/validation.test.
+  - setReferredBy               (src/lib/db/profiles.ts)     — no caller; both
+                                  referral paths set referred_by inline instead.
+  - listReferralEventsForCurrentUser (src/lib/db/referrals.ts) — no caller;
+                                  rewards page queries referral_events directly.
+  - deductCredit                (src/lib/db/rpc.ts)          — no caller in the
+                                  generate path anymore (RPC charges); only in
+                                  rpc.test. Its own docstring says it's "kept for
+                                  future use."
+
+Recommendation: this is a deliberate "library surface" layer, so deleting is a
+judgment call. But several of these (createDeck, insertFlashcards,
+updateDeckCardCount, applyCardReview, updateOwnProfile, setReferredBy,
+listReferralEventsForCurrentUser) represent the OLD, pre-RPC architecture that
+the code has moved away from. Decide per item: delete, or document as "intended
+public API, retained on purpose." Right now the tests are the only thing keeping
+them alive, which masks that they're unreachable in production. See also B5.
+
+-------------------------------------------------------------------------------
+B3. [LOW] Unused helpers in src/lib/api/errors.ts
+-------------------------------------------------------------------------------
+  - jsonResponse()         — no caller.
+  - genericInternalError() — no caller (handlers use apiFail / handleApiError).
+  - failResponse (alias of apiFail) — only referenced by api-errors.test.ts.
+Consider removing jsonResponse and genericInternalError. Keep `apiFail`.
+
+-------------------------------------------------------------------------------
+B4. [LOW] forbiddenResponse / unauthorizedResponse partial overlap
+-------------------------------------------------------------------------------
+src/lib/auth/errors.ts exports unauthorizedResponse + forbiddenResponse, but
+the route layer mostly funnels through handleApiError → authErrorResponse, which
+itself calls those two. reset-password/route.ts uses unauthorizedResponse
+directly. This is fine, just noting the two parallel error-emitting styles
+(builder functions vs apiFail) coexist — pick one convention to reduce surface.
+
+-------------------------------------------------------------------------------
+B5. [LOW] Direct DB reads in client pages duplicate the data-access layer
+-------------------------------------------------------------------------------
+Dashboard, deck-detail, settings, rewards, upgrade pages all read profiles /
+payment_submissions / referral_events directly through the browser Supabase
+client (RLS-scoped, so safe), while a typed, validated equivalent exists in
+src/lib/db (getProfileById, listUserPayments, listReferralEventsForCurrentUser).
+This is why those lib functions look dead (B2). It's a legitimate pattern (fewer
+round-trips, RLS enforces scope), but it means the contract types and the lib
+layer are bypassed and the duplication is the root cause of the "dead code"
+above. Pick a lane: either route reads through API + lib, or accept direct
+browser reads and prune the unused lib functions.
+
+
+===============================================================================
+SECTION C — OPTIMIZATION / EFFICIENCY
+===============================================================================
+
+-------------------------------------------------------------------------------
+C1. [MED] Quiz distractor selection is O(n^2) and re-shuffles per card
+-------------------------------------------------------------------------------
+File: src/app/api/quiz/[id]/route.ts (buildQuestions)
+For every card it filters the full card array twice (sameCat / otherCat) and
+shuffles each result — O(n) per card → O(n^2) overall, plus an allocation of
+two arrays + two shuffles per question. For a 20-card deck this is trivial; for
+Pro decks with maxCardsPerDeck = Infinity it grows quadratically. Pre-bucket
+cards by category once (Map<category, Flashcard[]>) before the map, and sample
+distractors from the buckets. Also `shuffled()` uses Array.sort(() => 0.5 -
+Math.random()) which is a biased shuffle — use Fisher–Yates for a correct,
+faster shuffle.
+
+-------------------------------------------------------------------------------
+C2. [LOW] package.json missing a declared dependency referenced in config
+-------------------------------------------------------------------------------
+next.config.ts lists "@napi-rs/canvas" in serverExternalPackages (line 8) but
+it is NOT in package.json dependencies. If it's actually needed for server-side
+pdfjs rendering it should be declared; if it's not needed, drop it from the
+config (it's currently dropped anyway by the duplicate-key bug A1). The OCR/
+render path is client-side (render-pages-client uses document.createElement),
+so server-side canvas is likely unnecessary — confirm and remove.
+
+-------------------------------------------------------------------------------
+C3. [LOW] generate route counts decks with a second round-trip it can skip for Pro
+-------------------------------------------------------------------------------
+File: src/app/api/generate/route.ts:89-95
+countDecksForUser() runs a COUNT query before generation. For Pro (maxDecks ===
+Infinity) it's already skipped — good. For free users it's one extra query per
+generation; acceptable. Minor: it runs BEFORE the DeepSeek call but AFTER the
+rate-limit/credit checks, which is the right order. No change required; noted
+for completeness.
+
+-------------------------------------------------------------------------------
+C4. [LOW] truncateToMaxInputTokens cuts mid-character / mid-word
+-------------------------------------------------------------------------------
+File: src/lib/text/truncate.ts
+slice() by char count (maxInputTokens * 4) can cut a multi-byte sequence or a
+word in half before sending to DeepSeek. Functionally OK (the model tolerates
+it) but a trailing partial word wastes a token and can confuse extraction. Trim
+back to the last whitespace boundary. Very low priority.
+
+-------------------------------------------------------------------------------
+C5. [LOW] extractTextFromPdfBuffer processes pages sequentially
+-------------------------------------------------------------------------------
+File: src/lib/pdf/extract-text-server.ts:55-64
+Pages are read in a serial for-loop with await per page. pdfjs page reads are
+independent; for large PDFs this dominates upload latency. Could batch with a
+bounded Promise pool. Weigh against memory — keep small concurrency (e.g. 4).
+Optional.
+
+-------------------------------------------------------------------------------
+C6. [LOW] Repeated inline navbar / page-shell markup across pages
+-------------------------------------------------------------------------------
+Every page re-implements the same brown navbar with inline styles (dashboard,
+deck, quiz, result, settings, rewards, upgrade, new-deck). This is ~40 lines of
+duplicated JSX/style per page. Extract a <Navbar/> component (upgrade/page.tsx
+already factors a local `Navbar` const — generalize it) and a shared style
+module. Reduces bundle text and the risk of the App.name / colors drifting.
+Also: dashboard/page.tsx:89 and login/signup hardcode the literal "Crammable"
+in JSX instead of {App.name} — a direct CLAUDE.md §0 violation (App.name is the
+single source). Replace those literals.
+
+
+===============================================================================
+SECTION D — CONTRACT / SCHEMA DRIFT (per CLAUDE.md §0)
+===============================================================================
+
+-------------------------------------------------------------------------------
+D1. [MED] Hardcoded strings that should come from contracts.ts
+-------------------------------------------------------------------------------
+  - src/app/dashboard/page.tsx:89  — literal "Crammable" instead of App.name.
+  - src/app/login/page.tsx:84      — literal "Crammable".
+  - src/app/signup/page.tsx:164    — literal "Crammable".
+  - src/app/dashboard/page.tsx:66  — handleLogout navigates to "/" instead of
+                                     Routes.home.
+  - src/components/upload/PdfUploadFlow.tsx — uses supabase.from("profiles")?
+    No: it uses TableNames.profiles (good). But admin/page.tsx:58 uses
+    supabase.from("profiles") with the RAW string — should be
+    TableNames.profiles (CLAUDE.md §0 / §9).
+  - src/app/api/auth/signup (client signup/page.tsx:44) posts to the literal
+    "/api/auth/signup" instead of ApiPaths/Routes.api. Minor.
+
+-------------------------------------------------------------------------------
+D2. [LOW] QUIZ_RESULT_KEY duplicated as a literal in two files
+-------------------------------------------------------------------------------
+quiz/[deckId]/page.tsx exports QUIZ_RESULT_KEY = "crammable_quiz_result" and
+quiz/[deckId]/result/page.tsx re-declares the same literal locally (line 23)
+with a "mirrored from" comment. Import the exported constant in the result page
+instead of re-declaring, so the two can't drift.
+
+-------------------------------------------------------------------------------
+D3. [LOW] score_percent type mismatch contract vs RPC
+-------------------------------------------------------------------------------
+contracts QuizSession.score_percent is `number | null` and the DB column is
+FLOAT, but submit_quiz_result returns score_percent as INTEGER (round()). The
+client (SubmitQuizResultData.scorePercent) is number, so this works, but the
+stored column is FLOAT while the function always writes an integer — harmless,
+just note the rounding happens in the RPC and the result page shows an integer.
+
+
+===============================================================================
+SECTION E — QUICK-WIN CHECKLIST (highest value first)
+===============================================================================
+[ ] A1  Fix duplicate keys in next.config.ts (unblocks `tsc`).            HIGH
+[ ] A2  Make referral attribution atomic + unique index; one code path.  HIGH
+[ ] B1  Remove unused internalErrorResponse import in logout route.      LOW (lint)
+[ ] D1  Replace hardcoded "Crammable" / "/" / from("profiles") literals. MED
+[ ] A3  Fix misleading newBalance / referral toast copy.                 MED
+[ ] C1  Pre-bucket quiz distractors; switch to Fisher–Yates shuffle.     MED
+[ ] B2  Decide fate of the 13 unreachable lib functions (delete/keep).   MED
+[ ] C2  Reconcile @napi-rs/canvas: declare it or drop it.                LOW
+[ ] D2  Import QUIZ_RESULT_KEY instead of re-declaring it.               LOW
+[ ] B3  Drop jsonResponse / genericInternalError.                        LOW
+
+===============================================================================
+END OF CODE AUDIT
+===============================================================================

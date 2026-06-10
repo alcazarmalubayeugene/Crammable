@@ -4,6 +4,11 @@ Items intentionally postponed. Each has enough context to pick up later.
 Frontend page status is in `FRONTEND.md`. Unimplemented backend routes are tracked in
 `docs/PROJECT-DOCUMENTATION.md §9`.
 
+> **Status note (2026-06-10):** items **2, 6b, 9, 10, 11 are now DONE** — this file
+> had gone stale. The only item below still genuinely open is **#8 (Living Deck)**.
+> For the broader list of unbuilt/advertised-but-missing features (Pro features,
+> reward methods, card editing, etc.) see **`docs/MISSING_FEATURES.md`**.
+
 ---
 
 ## Auth / login
@@ -11,18 +16,11 @@ Frontend page status is in `FRONTEND.md`. Unimplemented backend routes are track
 ### ~~1. Login "email not confirmed" UX (enumeration-safe)~~ ✅ Done
 - **Files touched:** `src/app/login/page.tsx`, reused existing resend route.
 
-### 2. Missing `/forgot-password` page (404) — backend done, frontend spec in `FRONTEND.md`
-- **What:** `src/app/login/page.tsx` links to `/forgot-password`, but there is **no**
-  `src/app/forgot-password/page.tsx` — the link 404s today.
-- **Backend:** `POST /api/auth/forgot-password` and `POST /api/auth/reset-password` both
-  exist and are enumeration-safe. The reset callback lands on
-  `/api/auth/callback?type=recovery`.
-- **Frontend needed:** new `src/app/forgot-password/page.tsx` (email form → posts to
-  forgot-password route → shows "if an account exists…" confirmation); a
-  `/settings?mode=reset-password` UI to complete the flow after the email link is clicked.
-- **Spec:** see `FRONTEND.md` — "Frontend spec — forgot-password & reset-password flow".
-- **Files:** new `src/app/forgot-password/page.tsx`; update settings page for reset-password
-  mode.
+### ~~2. Missing `/forgot-password` page~~ ✅ Done
+- **Built:** `src/app/forgot-password/page.tsx` exists (email form → posts to the
+  enumeration-safe `POST /api/auth/forgot-password`, with a resend cooldown), and the
+  settings page handles `?mode=reset-password` (calls `POST /api/auth/reset-password`).
+- The reset callback lands on `/api/auth/callback?type=recovery`.
 
 ---
 
@@ -56,19 +54,12 @@ Frontend page status is in `FRONTEND.md`. Unimplemented backend routes are track
   `src/app/api/decks/[id]/route.ts`. Both use `requireAuth()` + `handleApiError()`;
   ownership is enforced by the session-client RLS — 404 for non-owned or missing decks.
 
-### 6b. Migrate dashboard + deck-detail pages off Supabase-direct reads  ⚠️ Frontend
-- **What:** `src/app/dashboard/page.tsx` and `src/app/decks/[id]/page.tsx` still call
-  `getSupabaseBrowserClient()` directly — they were intentional workarounds before the
-  proper routes existed. Now that §6 is done, swap them for API calls.
-- **Approach:**
-  - `dashboard/page.tsx`: replace the Supabase deck query with `GET /api/decks`
-    (`ApiPaths.decks`). Response shape: `{ success: true, decks: Deck[] }`.
-  - `decks/[id]/page.tsx`: replace the deck + flashcard queries with `GET /api/decks/[id]`
-    (`ApiPaths.deck(id)`). Response shape: `{ success: true, deck: Deck, cards: Flashcard[] }`.
-  - Both routes return 404 (`ApiErrorCode.FORBIDDEN`) when the deck doesn't belong to the
-    user — redirect to dashboard on that case.
-  - Auth is cookie-based (`requireAuth()`), so plain `fetch()` — no Bearer token needed.
-- **Files:** `src/app/dashboard/page.tsx`; `src/app/decks/[id]/page.tsx`.
+### ~~6b. Migrate dashboard + deck-detail pages off Supabase-direct deck reads~~ ✅ Done
+- **Built:** `dashboard/page.tsx` lists decks via `GET /api/decks`; `decks/[id]/page.tsx`
+  loads the deck + cards via `GET /api/decks/[id]` (both cookie-auth, RLS-scoped, 404 →
+  redirect/error). Each page still does a **direct, RLS-scoped read for the user's own
+  profile** (token balance / name) because there is no profile API route — that's
+  intentional, not the workaround this item was about.
 
 ### ~~7. Quiz API routes (`POST /api/quiz/[id]`, `POST /api/quiz/result`)~~ ✅ Done
 - **Files touched:** new `src/app/api/quiz/[id]/route.ts` (server-side question builder,
@@ -108,46 +99,27 @@ Frontend page status is in `FRONTEND.md`. Unimplemented backend routes are track
 
 ## Payments & admin
 
-### 9. Wire `POST /api/payment/submit`
-- **What:** The `/upgrade` page form is built — the backend route doesn't exist yet.
-- **Approach:**
-  - Validate `referenceNumber` against `Validation.referenceNumber.pattern` (13 digits) →
-    `INVALID_REFERENCE_NUMBER`.
-  - Check for an existing `pending` row → `PAYMENT_ALREADY_PENDING`.
-  - Insert via `src/lib/db/payments.ts`; rate limit 2/24h
-    (`RateLimits[ApiPaths.submitPayment]`).
-  - Return `ApiResponse<SubmitPaymentResult>` including `UIMessages.verificationEta`.
-  - **Never auto-activate Pro** — admin must approve.
-- **Files:** new `src/app/api/payment/submit/route.ts`; `src/lib/db/payments.ts`;
-  update `src/app/upgrade/page.tsx`.
+### ~~9. Wire `POST /api/payment/submit`~~ ✅ Done
+- **Built:** `src/app/api/payment/submit/route.ts` — validates the 13-digit reference,
+  amount, and method; rate-limited 2/24h; inserts via `createPaymentSubmission`; one
+  pending per user + unique reference enforced at the DB. Never auto-activates Pro. The
+  `/upgrade` page posts to it. (CSRF origin check added 2026-06-10.)
 
-### 10. Wire admin payment routes (`GET /api/admin/payments`, approve, reject)
-- **What:** The `/admin` page exists — the three routes it calls are not implemented.
-- **Approach:**
-  - All three routes gate behind `requireAdmin()` first.
-  - `GET /api/admin/payments` → `ApiResponse<AdminPaymentsListResult>` — join payments +
-    profiles for `userEmail`; compute `minutesSinceSubmission` server-side.
-  - `POST /api/admin/payments/approve` + `POST /api/admin/payments/reject` → use
-    `approvePayment()` and `rejectPayment()` from `src/lib/db/admin.ts` (atomic RPCs).
-  - Rejection requires `rejectionReason` (shown to student via `UIMessages.paymentRejected`).
-  - Approval writes `admin_action_log` automatically inside the RPC.
-- **Files:** new `src/app/api/admin/payments/route.ts`, `approve/route.ts`,
-  `reject/route.ts`; `src/lib/db/admin.ts`; update `src/app/admin/page.tsx`.
+### ~~10. Wire admin payment routes~~ ✅ Done
+- **Built:** `GET /api/admin/payments` (+ `userEmail`, `minutesSinceSubmission`),
+  `POST /api/admin/payments/approve`, `POST /api/admin/payments/reject` — all gated by
+  `requireAdmin()`, using the atomic `approvePayment()` / `rejectPayment()` RPCs. The
+  `/admin` page calls all three.
 
 ---
 
 ## Referral
 
-### 11. Wire `POST /api/referral/claim`
-- **What:** The `/rewards` page is built — the claim route doesn't exist yet.
-- **Approach:**
-  - Accept `ClaimReferralRequest` (`referralCode: string`); validate length against
-    `Validation.referralCode.length` (8 chars) → `INVALID_REFERRAL_CODE`.
-  - Look up the referrer via `getProfileIdByReferralCode()` — returns only the ID (no
-    profile-data leak).
-  - Call `checkReferralCap()` RPC; handle `SELF_REFERRAL` and `REFERRAL_CAP_REACHED`.
-  - If allowed: `grantCredits()` for referrer + `logReferralEvent()`.
-  - Rate limit: 5/24h (`RateLimits[ApiPaths.claimReferral]`).
-  - Return `ApiResponse<ClaimReferralResult>` (`creditsAwarded`, `newBalance`).
-- **Files:** new `src/app/api/referral/claim/route.ts`; `src/lib/db/referrals.ts`;
-  `src/lib/db/rpc.ts`; update `src/app/rewards/page.tsx`.
+### ~~11. Wire `POST /api/referral/claim`~~ ✅ Done (and hardened)
+- **Built:** `src/app/api/referral/claim/route.ts` — validates the 8-char code, resolves
+  the referrer by id only, rate-limited 5/24h.
+- **2026-06-10 hardening:** attribution was made atomic and single-source. Both the claim
+  route AND `auth/callback` now call one `claim_referral()` SECURITY DEFINER RPC (lock →
+  re-check `referred_by`/self/cap → insert ledger → credit referrer → set `referred_by`),
+  backed by a partial unique index `ux_referral_signup_once_per_referred`. This replaced
+  the old non-atomic two-path flow that could double-award. See `WORK_SUMMARY_2026-06-10.md`.

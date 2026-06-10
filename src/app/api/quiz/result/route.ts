@@ -6,6 +6,7 @@ import {
   type SubmitQuizResultRequest,
 } from "@/lib/contracts";
 import { handleApiError, apiSuccess, apiFail } from "@/lib/api/errors";
+import { assertSameOrigin } from "@/lib/api/csrf";
 import { requireAuth } from "@/lib/auth/helpers";
 import { checkRateLimit } from "@/lib/supabase/server";
 import { submitQuizResult } from "@/lib/db/quiz";
@@ -15,6 +16,9 @@ export const dynamic = "force-dynamic";
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    const csrf = assertSameOrigin(request);
+    if (csrf) return csrf;
+
     const { user } = await requireAuth();
 
     const rate = await checkRateLimit(user.id, ApiPaths.submitQuizResult);

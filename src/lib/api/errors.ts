@@ -2,7 +2,6 @@ import { ZodError } from "zod";
 import {
   ApiErrorCode,
   type ApiFailResponse,
-  type ApiResponse,
   UIMessages,
 } from "@/lib/contracts";
 import { AuthError, authErrorResponse } from "@/lib/auth/errors";
@@ -30,14 +29,6 @@ export const failResponse = apiFail;
  */
 export function apiSuccess<T extends object>(data: T, status: number = 200): Response {
   return Response.json({ success: true, ...data }, { status });
-}
-
-export function jsonResponse<T>(body: ApiResponse<T>, status: number): Response {
-  return Response.json(body, { status });
-}
-
-export function genericInternalError(): Response {
-  return apiFail(ApiErrorCode.INTERNAL_ERROR, UIMessages.genericError, 500);
 }
 
 /**

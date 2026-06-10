@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Routes } from "@/lib/contracts";
+import { ApiPaths, App, Routes } from "@/lib/contracts";
 
 export default function SignupPage() {
   const [fullName, setFullName]   = useState("");
@@ -41,7 +41,7 @@ export default function SignupPage() {
 
     setLoading(true);
 
-    const res = await fetch("/api/auth/signup", {
+    const res = await fetch(ApiPaths.authSignup, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -143,7 +143,7 @@ export default function SignupPage() {
 
           <p style={{ color: "#8A6E52", fontSize: 13 }}>
             Already verified?{" "}
-            <Link href="/login" style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>
+            <Link href={Routes.login} style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>
               Log in
             </Link>
           </p>
@@ -161,10 +161,10 @@ export default function SignupPage() {
           <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
             <span style={{ fontSize: 24 }}>🦫</span>
             <span style={{ fontFamily: "var(--font-lora, serif)", fontWeight: 700, fontSize: 18, color: "#FAF2E4" }}>
-              Crammable
+              {App.name}
             </span>
           </Link>
-          <Link href="/login" style={{ fontSize: 13, color: "#C49A6C", textDecoration: "none" }}>
+          <Link href={Routes.login} style={{ fontSize: 13, color: "#C49A6C", textDecoration: "none" }}>
             Already have an account?{" "}
             <span style={{ color: "#C47A2E", fontWeight: 600 }}>Log in</span>
           </Link>
@@ -247,7 +247,7 @@ export default function SignupPage() {
 
             <p style={{ textAlign: "center", fontSize: 13, color: "#8A6E52", marginTop: 20, marginBottom: 0 }}>
               Already have an account?{" "}
-              <Link href="/login" style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>Log in</Link>
+              <Link href={Routes.login} style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>Log in</Link>
             </p>
 
           </div>

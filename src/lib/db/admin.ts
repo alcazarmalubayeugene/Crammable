@@ -51,20 +51,6 @@ export async function listPendingPayments(): Promise<AdminPaymentRow[]> {
   );
 }
 
-/** Fetch a single submission regardless of owner (admin detail view). */
-export async function getPaymentById(
-  paymentId: string
-): Promise<PaymentSubmission | null> {
-  const admin = createAdminClient();
-  const { data, error } = await admin
-    .from(TableNames.paymentSubmissions)
-    .select("*")
-    .eq("id", paymentId)
-    .maybeSingle();
-  if (error) throw toDbError(error, "Failed to load payment.");
-  return (data as PaymentSubmission) ?? null;
-}
-
 /**
  * Approve a payment atomically via approve_payment() (schema §4.10): marks it
  * verified, upgrades the submitter to Pro (extending any remaining Pro time),

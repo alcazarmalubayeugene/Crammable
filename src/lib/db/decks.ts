@@ -101,19 +101,6 @@ export async function countDecksForUser(userId: string): Promise<number> {
   return count ?? 0;
 }
 
-/** Keep the cached card_count in sync after generation or a Living Deck refresh. */
-export async function updateDeckCardCount(
-  deckId: string,
-  cardCount: number
-): Promise<void> {
-  const supabase = await createSessionClient();
-  const { error } = await supabase
-    .from(TableNames.decks)
-    .update({ card_count: cardCount })
-    .eq("id", deckId);
-  if (error) throw toDbError(error, "Failed to update deck card count.");
-}
-
 /**
  * Delete a deck (flashcards/quiz rows cascade via FK). Returns the number of
  * rows deleted — 0 when the deck doesn't exist or isn't owned by the caller

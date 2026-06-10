@@ -18,17 +18,15 @@
 export { DbError, dbError, toDbError } from "@/lib/db/errors";
 
 // Credit / referral RPCs
-export { deductCredit, grantCredits, checkReferralCap } from "@/lib/db/rpc";
+export { deductCredit, grantCredits, checkReferralCap, claimReferral } from "@/lib/db/rpc";
 
 // Rate limiting
 export { checkRateLimit, enforceRateLimit } from "@/lib/db/rate-limit";
 
 // Profiles
 export {
-  getProfileById,
   updateOwnProfile,
   getProfileIdByReferralCode,
-  setReferredBy,
   type EditableProfileFields,
 } from "@/lib/db/profiles";
 
@@ -39,7 +37,6 @@ export {
   getDeckById,
   getDeckWithCards,
   countDecksForUser,
-  updateDeckCardCount,
   deleteDeck,
   createDeckWithCardsAndCharge,
   type NewDeckInput,
@@ -56,7 +53,6 @@ export {
 // Quiz
 export {
   createQuizSession,
-  getQuizSessionById,
   submitQuizResult,
   type NewQuizSessionInput,
 } from "@/lib/db/quiz";
@@ -64,21 +60,17 @@ export {
 // Payments (student side)
 export {
   createPaymentSubmission,
-  listUserPayments,
   type NewPaymentInput,
 } from "@/lib/db/payments";
 
 // Referrals
 export {
-  logReferralEvent,
   listReferralEventsForCurrentUser,
-  type NewReferralEventInput,
 } from "@/lib/db/referrals";
 
 // Admin payment verification
 export {
   listPendingPayments,
-  getPaymentById,
   approvePayment,
   rejectPayment,
 } from "@/lib/db/admin";

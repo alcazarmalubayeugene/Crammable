@@ -1,7 +1,6 @@
 import {
   ApiErrorCode,
   ApiPaths,
-  EnvKeys,
   OcrThresholds,
   PdfType,
   SubscriptionTier,
@@ -11,6 +10,7 @@ import {
   type UploadResult,
 } from "@/lib/contracts";
 import { apiFail, handleApiError } from "@/lib/api/errors";
+import { assertSameOrigin } from "@/lib/api/csrf";
 import { PDF_EXTRACTION_TEST_MODE } from "@/lib/dev/pdf-test-mode";
 import { extractTextFromPdfBuffer } from "@/lib/pdf/extract-text-server";
 import { checkRateLimit, getMaxUploadPages } from "@/lib/supabase/server";
@@ -31,13 +31,6 @@ export type UploadTestDebug = {
   threshold:        typeof OcrThresholds.minCharsPerPageForText;
 };
 
-function isPersistenceEnabled(): boolean {
-  return Boolean(
-    process.env[EnvKeys.supabaseUrl]?.trim() &&
-      process.env[EnvKeys.supabaseServiceRoleKey]?.trim(),
-  );
-}
-
 function isPdfFile(file: File): boolean {
   const name = file.name.toLowerCase();
   return file.type === PDF_MIME || name.endsWith(".pdf");
@@ -45,10 +38,17 @@ function isPdfFile(file: File): boolean {
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    const csrf = assertSameOrigin(request);
+    if (csrf) return csrf;
+
     let maxPages: number = TierLimits[SubscriptionTier.FREE].maxUploadPages;
     let maxUploadMb: number = TierLimits[SubscriptionTier.FREE].maxUploadSizeMb;
 
-    if (!PDF_EXTRACTION_TEST_MODE && isPersistenceEnabled()) {
+    // SECURITY (audit 1.1): auth + consent + rate limit are ALWAYS enforced
+    // (outside the dev-only PDF_EXTRACTION_TEST_MODE). They must never be gated
+    // on whether the service-role env happens to be configured — a missing key
+    // previously turned this into an open, unauthenticated PDF-parsing endpoint.
+    if (!PDF_EXTRACTION_TEST_MODE) {
       // Cookie/session auth + RLS. requireAuth throws AuthError (→ 401) when
       // unauthenticated or the profile is missing; mapped by the outer catch.
       const { user, profile } = await requireAuth();
@@ -68,6 +68,19 @@ export async function POST(request: Request): Promise<Response> {
 
       maxPages = getMaxUploadPages(profile.subscription_tier);
       maxUploadMb = TierLimits[profile.subscription_tier].maxUploadSizeMb;
+    }
+
+    // SECURITY (audit 8.2): reject oversized bodies on the declared Content-Length
+    // BEFORE buffering the multipart payload into memory. The precise per-file
+    // check below still applies; this is the cheap pre-filter (with a small
+    // multipart-overhead margin) that stops a memory-pressure DoS up front.
+    const contentLength = Number(request.headers.get("content-length") ?? 0);
+    if (contentLength > maxUploadMb * 1024 * 1024 + 1024 * 1024) {
+      return apiFail(
+        ApiErrorCode.FILE_TOO_LARGE,
+        `File must be ${maxUploadMb} MB or smaller.`,
+        413,
+      );
     }
 
     const formData = await request.formData();
@@ -92,7 +105,7 @@ export async function POST(request: Request): Promise<Response> {
       return apiFail(
         ApiErrorCode.FILE_TOO_LARGE,
         `File must be ${maxUploadMb} MB or smaller.`,
-        400,
+        413,
       );
     }
 

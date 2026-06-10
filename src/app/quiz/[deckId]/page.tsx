@@ -43,7 +43,7 @@ interface LocalAnswer {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function looslyCorrect(user: string, correct: string): boolean {
+function looselyCorrect(user: string, correct: string): boolean {
   return user.trim().toLowerCase() === correct.trim().toLowerCase();
 }
 
@@ -159,7 +159,7 @@ export default function QuizPage() {
     } else {
       if (!typedAnswer.trim()) return;
       userAnswer = typedAnswer;
-      correct = looslyCorrect(userAnswer, q.correctAnswer);
+      correct = looselyCorrect(userAnswer, q.correctAnswer);
     }
 
     setAnswers((prev) => [

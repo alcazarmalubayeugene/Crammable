@@ -70,18 +70,22 @@ and the roadmap. (Deferred work is tracked separately in `docs/TODO.md`.)
 
 | Route | File | Status |
 |---|---|---|
-| `POST /api/upload` | `src/app/api/upload/route.ts` | ✅ PDF upload → text extraction → OCR detection; deletes source from Storage (RA 10173) |
+| `POST /api/upload` | `src/app/api/upload/route.ts` | ✅ PDF → in-memory text extraction → OCR detection. The PDF is parsed from the request buffer and **never written to Storage** (stronger than the old "delete after extraction" — nothing to delete). Auth/consent/rate-limit always enforced + CSRF + size pre-check (2026-06-10) |
 | `POST /api/generate` | `src/app/api/generate/route.ts` | ✅ DeepSeek generation; tier + deck-limit enforcement; `createDeckWithCards` + `deductCredit` |
 | `GET /api/decks` | `src/app/api/decks/route.ts` | ✅ User's decks, session-client RLS |
 | `GET /api/decks/[id]` | `src/app/api/decks/[id]/route.ts` | ✅ Deck + cards; 404 for non-owned (no ownership leak) |
 | `DELETE /api/decks/[id]` | `src/app/api/decks/[id]/route.ts` | ✅ Cascade-deletes flashcards/sessions via FK |
 | `POST /api/quiz/[id]` | `src/app/api/quiz/[id]/route.ts` | ✅ Server-side question builder; same-category MC distractors; creates `quiz_sessions` row |
-| `POST /api/quiz/result` | `src/app/api/quiz/result/route.ts` | ✅ Rate-limited; persists `quiz_answers`; `apply_card_review` per card; closes session |
-| `POST /api/payment/submit` | — | ⚠️ Not built — see TODO §9 |
-| `GET /api/admin/payments` | — | ⚠️ Not built |
-| `POST /api/admin/payments/approve` | — | ⚠️ Not built |
-| `POST /api/admin/payments/reject` | — | ⚠️ Not built |
-| `POST /api/referral/claim` | — | ⚠️ Not built |
+| `POST /api/quiz/result` | `src/app/api/quiz/result/route.ts` | ✅ Rate-limited; one atomic `submit_quiz_result` RPC; **score re-derived server-side** from `flashcards.back` (2026-06-10) |
+| `POST /api/payment/submit` | `src/app/api/payment/submit/route.ts` | ✅ 13-digit ref + amount/method validation; 2/24h; one pending per user; never auto-activates Pro |
+| `GET /api/admin/payments` | `src/app/api/admin/payments/route.ts` | ✅ `requireAdmin`; joins `userEmail`; computes `minutesSinceSubmission` |
+| `POST /api/admin/payments/approve` | `src/app/api/admin/payments/approve/route.ts` | ✅ atomic `approve_payment` RPC (verify → Pro → +30 credits → audit) |
+| `POST /api/admin/payments/reject` | `src/app/api/admin/payments/reject/route.ts` | ✅ atomic `reject_payment` RPC (reason shown to student) |
+| `POST /api/referral/claim` | `src/app/api/referral/claim/route.ts` | ✅ atomic `claim_referral` RPC (single source w/ `auth/callback`); unique-index backstop (2026-06-10) |
+
+> **Frontend feature gaps** (advertised but unbuilt: Living Decks, Deep Dive, PDF export,
+> the non-signup reward methods, deck/card editing, etc.) are catalogued in
+> **`docs/MISSING_FEATURES.md`**.
 
 ### Configuration & dependencies
 
@@ -107,15 +111,20 @@ Supabase mocked).
 |---|---|
 | `src/lib/db/errors.ts` | `DbError` (carries `ApiErrorCode` + HTTP status); `toDbError()` maps SQLSTATEs (23505/23514/23503) and `RAISE EXCEPTION` sentinels to typed errors; logs raw cause on 500-class faults. |
 | `src/lib/api/errors.ts` | `handleApiError(err)` standard route `catch` (AuthError→401/403, DbError→its code, ZodError→400, unknown→opaque 500); `apiSuccess<T>()`. |
-| `src/lib/db/rpc.ts` | Service-role wrappers: `deductCredit`, `grantCredits`, `checkReferralCap`. |
+| `src/lib/db/rpc.ts` | Service-role wrappers: `deductCredit`, `grantCredits`, `checkReferralCap`, `claimReferral` (atomic referral attribution). |
 | `src/lib/db/rate-limit.ts` | `checkRateLimit` / `enforceRateLimit` (reads `RateLimits[endpoint]`). |
-| `src/lib/db/profiles.ts` | `getProfileById`, `updateOwnProfile` (whitelisted), `getProfileIdByReferralCode`, `setReferredBy`. |
-| `src/lib/db/decks.ts` | deck CRUD incl. `createDeckWithCards` (compensating delete). |
-| `src/lib/db/flashcards.ts` | `insertFlashcards`, `getWeakCardsForDeck`, `applyCardReview` (atomic RPC). |
-| `src/lib/db/quiz.ts` | quiz session create/answer/complete. |
-| `src/lib/db/payments.ts` | `createPaymentSubmission`, `listUserPayments`. |
-| `src/lib/db/referrals.ts` | `logReferralEvent`, `listReferralEventsForCurrentUser`. |
+| `src/lib/db/profiles.ts` | `updateOwnProfile` (whitelisted), `getProfileIdByReferralCode`. |
+| `src/lib/db/decks.ts` | deck CRUD incl. `createDeckWithCardsAndCharge` (atomic RPC — insert + cards + `card_count` + `deduct_credit` in one txn). |
+| `src/lib/db/flashcards.ts` | `insertFlashcards`, `getFlashcardsForDeck`, `getWeakCardsForDeck`, `applyCardReview` (atomic RPC). |
+| `src/lib/db/quiz.ts` | `createQuizSession`, `submitQuizResult` (atomic RPC — answers + card stats + finalize). |
+| `src/lib/db/payments.ts` | `createPaymentSubmission`. |
+| `src/lib/db/referrals.ts` | `listReferralEventsForCurrentUser`. |
 | `src/lib/db/admin.ts` | `listPendingPayments`, `approvePayment`, `rejectPayment` (atomic RPCs). |
+
+> **Note (2026-06-10):** unused, untested helpers were pruned — `getProfileById`,
+> `setReferredBy`, `updateDeckCardCount`, `getQuizSessionById`, `getPaymentById`,
+> `listUserPayments`, `logReferralEvent`. The referral ledger insert now happens inside
+> the `claim_referral` RPC, not a separate `logReferralEvent` call.
 | `src/lib/db/validate.ts` | `ensureMaxLength`, `ensureMaxItems` write-path guards. |
 | `src/lib/db/index.ts` | Barrel — import from `@/lib/db`. |
 
@@ -678,28 +687,21 @@ adds anon/authenticated — so any new `SECURITY DEFINER` function in `public` i
 
 ## 9. Not yet built / roadmap
 
-See `docs/TODO.md` for full approach notes on each item. Priority order:
+> **Updated 2026-06-10.** The payment-submit, admin-payment, and referral-claim routes,
+> the `/forgot-password` page, the dashboard/deck-detail migration, and the
+> `create_deck_with_cards_and_charge()` atomic RPC are all **now built** — they were stale
+> entries here. The single open backend item is **Living Deck (#8)**.
+>
+> The full catalogue of advertised-but-unbuilt product features (Living Decks, Deep Dive,
+> PDF export, the non-signup reward methods, deck/card editing, quiz history, Pro-expiry
+> enforcement, account deletion, etc.) now lives in **`docs/MISSING_FEATURES.md`** — that is
+> the authoritative feature-gap list.
 
-**Backend routes (unblocked)**
-- **Living Deck** (`src/app/api/quiz/result/route.ts` — trigger already wired as `false`) —
-  Pro-only; after a quiz with `scorePercent < 70`, calls `getWeakCardsForDeck()`, sends to
-  DeepSeek, inserts reinforcement cards, deducts 1 credit. TODO item 8.
-- **`POST /api/payment/submit`** — GCash reference validation, pending-check, insert, rate
-  limit. New `src/app/api/payment/submit/route.ts`. TODO item 9.
-- **Admin payment routes** (`GET /api/admin/payments`, approve, reject) — gate behind
-  `requireAdmin()`; use atomic `approvePayment()` / `rejectPayment()` RPCs from
-  `src/lib/db/admin.ts`. TODO item 10.
-- **`POST /api/referral/claim`** — validate code, `checkReferralCap()`, `grantCredits()`,
-  `logReferralEvent()`, rate limit. TODO item 11.
+**Still open — backend**
+- **Living Deck** (`src/app/api/quiz/result/route.ts` — `livingDeckRefreshTriggered` wired
+  as `false`) — Pro-only; after a quiz with `scorePercent < 70`, call `getWeakCardsForDeck()`,
+  send to DeepSeek, insert reinforcement cards, deduct 1 credit. TODO item 8 / `MISSING_FEATURES` B1.
 
-**Frontend migrations (unblocked)**
-- **`/forgot-password` page** — spec in `FRONTEND.md`; backend routes exist. TODO item 2.
-- **Dashboard + deck-detail off Supabase-direct** — swap `getSupabaseBrowserClient()` reads
-  for `GET /api/decks` and `GET /api/decks/[id]`. TODO item 6b.
-
-**Data-access / architecture**
-- `create_deck_with_cards_and_charge()` SECURITY DEFINER RPC — fold deck insert + flashcard
-  insert + `deduct_credit` into a single atomic Postgres transaction (currently three separate
-  HTTP calls with a compensating delete as interim mitigation).
+**Still open — data-access / architecture**
 - Generated Supabase types — eliminate the `as` casts throughout the data-access layer.
 - Integration test suite against a real local Supabase stack (`npm run test:int`).

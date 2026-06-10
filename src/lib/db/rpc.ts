@@ -73,3 +73,31 @@ export async function checkReferralCap(
   if (error) throw toDbError(error, "Failed to check referral cap.");
   return data as boolean;
 }
+
+/**
+ * claim_referral(): atomic, single-source referral attribution (schema §4.14b).
+ * Locks the referred profile, re-checks referred_by/self/cap, inserts the ledger
+ * event, credits the referrer, and stamps referred_by — all in one transaction.
+ * Both referral paths (the /api/referral/claim route and the auth/callback
+ * auto-process) MUST go through this so they can't double-award (audit 2.1).
+ *
+ * @throws {DbError} SELF_REFERRAL (400) · VALIDATION_ERROR (400, ALREADY_REFERRED)
+ *                   · REFERRAL_CAP_REACHED (409) · INTERNAL_ERROR (USER_NOT_FOUND)
+ */
+export async function claimReferral(
+  referredId: string,
+  referrerId: string,
+  eventType: ReferralEventType,
+  monthKey: string,
+  credits: number
+): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin.rpc("claim_referral", {
+    p_referred_id: referredId,
+    p_referrer_id: referrerId,
+    p_event_type: eventType,
+    p_month_key: monthKey,
+    p_credits: credits,
+  });
+  if (error) throw toDbError(error, "Failed to claim referral.");
+}

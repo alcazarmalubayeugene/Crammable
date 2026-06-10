@@ -1,5 +1,14 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Project documentation
+
+- [`WORK_SUMMARY_2026-06-10.md`](./WORK_SUMMARY_2026-06-10.md) — session log: audit fixes, the referral/quiz DB migration, and the env-config fix.
+- [`CODE_AUDIT.txt`](./CODE_AUDIT.txt) — code audit (correctness, redundancy, optimization).
+- [`SECURITY_AUDIT.txt`](./SECURITY_AUDIT.txt) — security audit (auth, RLS, CSRF, fraud, privacy).
+- [`docs/MISSING_FEATURES.md`](./docs/MISSING_FEATURES.md) — gap analysis: advertised-but-unbuilt features, prioritized.
+- [`CLAUDE.md`](./CLAUDE.md) / [`AGENTS.md`](./AGENTS.md) — backend rules and conventions.
+- [`docs/PROJECT-DOCUMENTATION.md`](./docs/PROJECT-DOCUMENTATION.md) · [`docs/TODO.md`](./docs/TODO.md)
+
 ## Getting Started
 
 First, run the development server:
