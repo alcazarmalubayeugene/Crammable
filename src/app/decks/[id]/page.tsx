@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import {
   ApiPaths,
@@ -20,6 +20,7 @@ interface MinProfile {
 
 export default function DeckDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const deckId = Array.isArray(params.id) ? params.id[0] : (params.id as string);
 
   const [profile, setProfile] = useState<MinProfile | null>(null);
@@ -29,6 +30,7 @@ export default function DeckDetailPage() {
   const [error, setError] = useState("");
   const [currentIdx, setCurrentIdx] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -87,6 +89,23 @@ export default function DeckDetailPage() {
   function goTo(idx: number) {
     setCurrentIdx(idx);
     setIsFlipped(false);
+  }
+
+  async function handleDelete() {
+    if (!deck) return;
+    if (!confirm(`Delete "${deck.title}"? This can't be undone.`)) return;
+
+    setDeleting(true);
+    const res = await fetch(ApiPaths.deck(deckId), { method: "DELETE" });
+    const json = (await res.json()) as { success: boolean; error?: { message: string } };
+
+    if (!json.success) {
+      setError(json.error?.message ?? "Failed to delete deck. Please try again.");
+      setDeleting(false);
+      return;
+    }
+
+    router.push(Routes.dashboard);
   }
 
   const card = cards[currentIdx] ?? null;
@@ -264,26 +283,48 @@ export default function DeckDetailPage() {
               </div>
             </div>
 
-            {total > 0 && (
-              <a
-                href={Routes.quiz(deckId)}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, whiteSpace: "nowrap" }}>
+              {total > 0 && (
+                <a
+                  href={Routes.quiz(deckId)}
+                  style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    gap: 8,
+                    background: "#C47A2E",
+                    color: "#FAF2E4",
+                    padding: "11px 24px",
+                    borderRadius: 10,
+                    fontWeight: 600,
+                    fontSize: 14,
+                    textDecoration: "none",
+                  }}
+                >
+                  Start Quiz →
+                </a>
+              )}
+              <button
+                onClick={handleDelete}
+                disabled={deleting}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 8,
-                  background: "#C47A2E",
-                  color: "#FAF2E4",
-                  padding: "11px 24px",
+                  background: "transparent",
+                  color: "#B3492E",
+                  border: "1.5px solid #E0C9A8",
+                  padding: "11px 20px",
                   borderRadius: 10,
                   fontWeight: 600,
                   fontSize: 14,
-                  textDecoration: "none",
-                  whiteSpace: "nowrap",
+                  cursor: deleting ? "not-allowed" : "pointer",
+                  opacity: deleting ? 0.6 : 1,
+                  fontFamily: "var(--font-dm-sans, sans-serif)",
                 }}
               >
-                Start Quiz →
-              </a>
-            )}
+                {deleting ? "Deleting…" : "Delete deck"}
+              </button>
+            </div>
           </div>
         </div>
 

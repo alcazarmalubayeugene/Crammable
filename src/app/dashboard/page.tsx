@@ -155,16 +155,28 @@ export default function DashboardPage() {
             <Link href={Routes.newDeck} style={{ fontSize: 20, color: "#C47A2E", textDecoration: "none", fontWeight: 700, lineHeight: 1 }} title="Create a new deck">+</Link>
           </div>
 
-          <Link href={Routes.upgrade} style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16, textDecoration: "none" }}>
-            <div style={{ width: 44, height: 44, background: "#F8EBE0", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🎯</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: "var(--font-lora, serif)", fontSize: 26, fontWeight: 700, color: "#2E1A0C", lineHeight: 1 }}>
-                {isPro ? "Pro" : "Free"}
+          {isPro ? (
+            <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{ width: 44, height: 44, background: "#F8EBE0", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🎯</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: "var(--font-lora, serif)", fontSize: 26, fontWeight: 700, color: "#2E1A0C", lineHeight: 1 }}>
+                  Pro
+                </div>
+                <div style={{ fontSize: 12, color: "#8A6E52", marginTop: 3 }}>Current plan</div>
               </div>
-              <div style={{ fontSize: 12, color: "#8A6E52", marginTop: 3 }}>Current plan</div>
             </div>
-            {!isPro && <span style={{ fontSize: 12, fontWeight: 600, color: "#C47A2E", whiteSpace: "nowrap" }}>Upgrade →</span>}
-          </Link>
+          ) : (
+            <Link href={Routes.upgrade} style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16, textDecoration: "none" }}>
+              <div style={{ width: 44, height: 44, background: "#F8EBE0", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🎯</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: "var(--font-lora, serif)", fontSize: 26, fontWeight: 700, color: "#2E1A0C", lineHeight: 1 }}>
+                  Free
+                </div>
+                <div style={{ fontSize: 12, color: "#8A6E52", marginTop: 3 }}>Current plan</div>
+              </div>
+              <span style={{ fontSize: 12, fontWeight: 600, color: "#C47A2E", whiteSpace: "nowrap" }}>Upgrade →</span>
+            </Link>
+          )}
         </div>
 
         {decks.length === 0 ? (
