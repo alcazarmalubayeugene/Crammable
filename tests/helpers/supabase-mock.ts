@@ -19,6 +19,7 @@ export interface QueryBuilderMock {
   update: ReturnType<typeof vi.fn>;
   delete: ReturnType<typeof vi.fn>;
   eq: ReturnType<typeof vi.fn>;
+  ilike: ReturnType<typeof vi.fn>;
   or: ReturnType<typeof vi.fn>;
   gte: ReturnType<typeof vi.fn>;
   lte: ReturnType<typeof vi.fn>;
@@ -31,7 +32,7 @@ export interface QueryBuilderMock {
 
 export function queryBuilder(result: QueryResult): QueryBuilderMock {
   const builder = {} as QueryBuilderMock;
-  const chain = ["select", "insert", "update", "delete", "eq", "or", "gte", "lte", "order", "limit"] as const;
+  const chain = ["select", "insert", "update", "delete", "eq", "ilike", "or", "gte", "lte", "order", "limit"] as const;
   for (const m of chain) {
     builder[m] = vi.fn(() => builder);
   }

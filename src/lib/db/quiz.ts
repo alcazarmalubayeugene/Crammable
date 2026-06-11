@@ -1,6 +1,7 @@
 import { createSessionClient } from "@/lib/supabase/server";
 import {
   TableNames,
+  type QuizHistoryRow,
   type QuizSession,
   type QuizType,
   type SubmitQuizAnswer,
@@ -101,4 +102,39 @@ export async function markLivingDeckRefreshTriggered(sessionId: string): Promise
     .update({ living_deck_refresh_triggered: true })
     .eq("id", sessionId);
   if (error) throw toDbError(error, "Failed to update quiz session.");
+}
+
+/**
+ * A user's completed quiz history (D3), newest first, with the deck title
+ * joined for display. RLS scopes quiz_sessions to the caller's own rows, so
+ * userId is only used for the explicit filter (clarity + index hit).
+ * Optionally scoped to a single deck for a deck-detail history section.
+ */
+export async function listQuizSessionsForUser(
+  userId: string,
+  deckId?: string,
+  limit: number = 20
+): Promise<QuizHistoryRow[]> {
+  const supabase = await createSessionClient();
+  let query = supabase
+    .from(TableNames.quizSessions)
+    .select(`*, ${TableNames.decks}(title)`)
+    .eq("user_id", userId)
+    .not("completed_at", "is", null)
+    .order("completed_at", { ascending: false })
+    .limit(limit);
+
+  if (deckId) {
+    query = query.eq("deck_id", deckId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw toDbError(error, "Failed to load quiz history.");
+
+  return ((data as Array<QuizSession & { decks: { title: string } | null }>) ?? []).map(
+    ({ decks, ...session }) => ({
+      ...session,
+      deckTitle: decks?.title ?? "",
+    })
+  );
 }

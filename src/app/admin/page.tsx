@@ -16,9 +16,15 @@ import {
   ReferralEventType,
   Validation,
   type AdminAppReviewRow,
+  type AdminAuditLogResult,
+  type AdminAuditLogRow,
   type AdminPaymentRow,
+  type AdminUserRow,
+  type AdminUsersListResult,
   type ApiResponse,
   type ApprovePaymentRequest,
+  type GrantCreditsRequest,
+  type GrantCreditsResult,
   type RejectPaymentRequest,
   type VerifyReviewRequest,
   type VerifyReviewResult,
@@ -46,6 +52,18 @@ function emptyReviewRowState(): ReviewRowState {
   return { actionState: "idle", error: "" };
 }
 
+interface GrantState {
+  amount: string;
+  notes: string;
+  busy: boolean;
+  error: string;
+  success: string;
+}
+
+function emptyGrantState(): GrantState {
+  return { amount: "", notes: "", busy: false, error: "", success: "" };
+}
+
 function minutesToLabel(mins: number): string {
   if (mins < 60) return `${mins}m ago`;
   const h = Math.floor(mins / 60);
@@ -62,6 +80,12 @@ export default function AdminPage() {
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
   const [reviews, setReviews] = useState<AdminAppReviewRow[]>([]);
   const [reviewRowStates, setReviewRowStates] = useState<Record<string, ReviewRowState>>({});
+  const [users, setUsers] = useState<AdminUserRow[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [userSearch, setUserSearch] = useState("");
+  const [grantStates, setGrantStates] = useState<Record<string, GrantState>>({});
+  const [auditLog, setAuditLog] = useState<AdminAuditLogRow[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -116,9 +140,80 @@ export default function AdminPage() {
       }
 
       setLoading(false);
+
+      loadUsers();
+      loadAuditLog();
     }
     load();
   }, []);
+
+  async function loadUsers(search?: string) {
+    setUsersLoading(true);
+    try {
+      const url = search ? `${ApiPaths.adminUsers}?search=${encodeURIComponent(search)}` : ApiPaths.adminUsers;
+      const res = await fetch(url, { headers: await authHeaders() });
+      const data = (await res.json()) as ApiResponse<AdminUsersListResult>;
+      if (data.success) {
+        setUsers(data.users);
+        const states: Record<string, GrantState> = {};
+        data.users.forEach((u) => { states[u.id] = emptyGrantState(); });
+        setGrantStates(states);
+      }
+    } finally {
+      setUsersLoading(false);
+    }
+  }
+
+  async function loadAuditLog() {
+    setAuditLoading(true);
+    try {
+      const res = await fetch(ApiPaths.adminAuditLog, { headers: await authHeaders() });
+      const data = (await res.json()) as ApiResponse<AdminAuditLogResult>;
+      if (data.success) {
+        setAuditLog(data.actions);
+      }
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
+  function setGrant(id: string, patch: Partial<GrantState>) {
+    setGrantStates((prev) => ({ ...prev, [id]: { ...(prev[id] ?? emptyGrantState()), ...patch } }));
+  }
+
+  async function grantCredits(targetUser: AdminUserRow) {
+    const gs = grantStates[targetUser.id] ?? emptyGrantState();
+    const amount = Number(gs.amount);
+    if (!Number.isInteger(amount) || amount < Validation.adminCreditGrant.minAmount || amount > Validation.adminCreditGrant.maxAmount) {
+      setGrant(targetUser.id, { error: `Enter an integer between ${Validation.adminCreditGrant.minAmount} and ${Validation.adminCreditGrant.maxAmount}.`, success: "" });
+      return;
+    }
+    setGrant(targetUser.id, { busy: true, error: "", success: "" });
+    try {
+      const res = await fetch(ApiPaths.adminGrantCredits, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await authHeaders()),
+        } as HeadersInit,
+        body: JSON.stringify({
+          userId: targetUser.id,
+          amount,
+          notes: gs.notes.trim() || undefined,
+        } satisfies GrantCreditsRequest),
+      });
+      const data = (await res.json()) as ApiResponse<GrantCreditsResult>;
+      if (!data.success) {
+        setGrant(targetUser.id, { busy: false, error: data.error.message });
+        return;
+      }
+      setUsers((prev) => prev.map((u) => u.id === targetUser.id ? { ...u, token_balance: data.newBalance } : u));
+      setGrant(targetUser.id, { busy: false, amount: "", notes: "", success: `New balance: ${data.newBalance}` });
+      loadAuditLog();
+    } catch {
+      setGrant(targetUser.id, { busy: false, error: UIMessages.genericError });
+    }
+  }
 
   function setRow(id: string, patch: Partial<RowState>) {
     setRowStates((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
@@ -493,6 +588,124 @@ export default function AdminPage() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* ── Users (E4) ── */}
+        <h2 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 16, fontWeight: 700, color: "#2E1A0C", margin: "36px 0 12px" }}>
+          Users
+        </h2>
+        <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+          <input
+            type="text"
+            value={userSearch}
+            onChange={(e) => setUserSearch(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") loadUsers(userSearch.trim() || undefined); }}
+            placeholder="Search by email…"
+            style={{ flex: 1, background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: "#2E1A0C", fontFamily: "var(--font-dm-sans, sans-serif)", outline: "none" }}
+          />
+          <button
+            type="button"
+            onClick={() => loadUsers(userSearch.trim() || undefined)}
+            disabled={usersLoading}
+            style={{ background: "#5C7A35", color: "#FAF2E4", border: "none", borderRadius: 8, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: usersLoading ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+          >
+            {usersLoading ? "Loading…" : "Search"}
+          </button>
+        </div>
+
+        {users.length === 0 ? (
+          <div style={{ background: "#FFFCF7", border: "1.5px dashed #E0C9A8", borderRadius: 16, padding: "32px 24px", textAlign: "center", marginBottom: 36 }}>
+            <p style={{ color: "#8A6E52", fontSize: 14 }}>{usersLoading ? "Loading users…" : "No users found."}</p>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 36 }}>
+            {users.map((u) => {
+              const gs = grantStates[u.id] ?? emptyGrantState();
+              return (
+                <div key={u.id} style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "14px 18px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+                    <div>
+                      <p style={{ fontSize: 14, fontWeight: 600, color: "#2E1A0C", marginBottom: 2 }}>
+                        {u.email}
+                        {u.is_admin && (
+                          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, background: "#FBF0E0", color: "#C47A2E", borderRadius: 20, padding: "2px 8px" }}>
+                            Admin
+                          </span>
+                        )}
+                      </p>
+                      <p style={{ fontSize: 12, color: "#8A6E52", margin: 0 }}>
+                        {u.full_name ?? "—"} · {u.subscription_tier} · {u.token_balance} credits
+                      </p>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                    <input
+                      type="number"
+                      value={gs.amount}
+                      onChange={(e) => setGrant(u.id, { amount: e.target.value, success: "" })}
+                      placeholder="Amount"
+                      min={Validation.adminCreditGrant.minAmount}
+                      max={Validation.adminCreditGrant.maxAmount}
+                      style={{ width: 90, background: "#FAF2E4", border: "1.5px solid #E0C9A8", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: "#2E1A0C", fontFamily: "var(--font-dm-sans, sans-serif)", outline: "none" }}
+                    />
+                    <input
+                      type="text"
+                      value={gs.notes}
+                      onChange={(e) => setGrant(u.id, { notes: e.target.value, success: "" })}
+                      maxLength={Validation.adminNotes.maxLength}
+                      placeholder="Notes (optional)"
+                      style={{ flex: 1, minWidth: 160, background: "#FAF2E4", border: "1.5px solid #E0C9A8", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: "#2E1A0C", fontFamily: "var(--font-dm-sans, sans-serif)", outline: "none" }}
+                    />
+                    <button
+                      type="button"
+                      disabled={gs.busy}
+                      onClick={() => grantCredits(u)}
+                      style={{ background: "#5C7A35", color: "#FAF2E4", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: gs.busy ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                    >
+                      {gs.busy ? "Granting…" : "Grant credits"}
+                    </button>
+                  </div>
+                  {gs.error && <p style={{ fontSize: 12, color: "#EF4444", marginTop: 6 }}>{gs.error}</p>}
+                  {gs.success && <p style={{ fontSize: 12, color: "#5C7A35", marginTop: 6 }}>{gs.success}</p>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Audit Log (E4) ── */}
+        <h2 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 16, fontWeight: 700, color: "#2E1A0C", margin: "36px 0 12px" }}>
+          Audit Log
+        </h2>
+        {auditLog.length === 0 ? (
+          <div style={{ background: "#FFFCF7", border: "1.5px dashed #E0C9A8", borderRadius: 16, padding: "32px 24px", textAlign: "center" }}>
+            <p style={{ color: "#8A6E52", fontSize: 14 }}>{auditLoading ? "Loading…" : "No admin actions yet."}</p>
+          </div>
+        ) : (
+          <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, overflow: "hidden" }}>
+            {auditLog.map((entry, i) => (
+              <div
+                key={entry.id}
+                style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "12px 18px", borderBottom: i < auditLog.length - 1 ? "1px solid #E0C9A8" : "none", gap: 12, flexWrap: "wrap" }}
+              >
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: "#2E1A0C", marginBottom: 2 }}>
+                    {entry.action}
+                    {entry.targetUserEmail ? ` — ${entry.targetUserEmail}` : ""}
+                    {entry.credits_amount != null ? ` (${entry.credits_amount} credits)` : ""}
+                  </p>
+                  <p style={{ fontSize: 12, color: "#8A6E52", margin: 0 }}>
+                    {entry.adminEmail ? `by ${entry.adminEmail}` : "system"}
+                    {entry.paymentReference ? ` · ref ${entry.paymentReference}` : ""}
+                    {entry.notes ? ` · ${entry.notes}` : ""}
+                  </p>
+                </div>
+                <span style={{ fontSize: 12, color: "#8A6E52", whiteSpace: "nowrap" }}>
+                  {new Date(entry.created_at).toLocaleString()}
+                </span>
+              </div>
+            ))}
           </div>
         )}
       </div>

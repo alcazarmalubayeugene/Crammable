@@ -159,44 +159,76 @@ So **Pro users get the same 20-card cap as free users**, and DeepSeek is even to
 
 ## D. Content-management / study features users will expect
 
-### D1. [P1] No flashcard editing (no card-level CRUD)
+### D1. [P1] [DONE] No flashcard editing (no card-level CRUD)
 There is **no `/api/flashcards` route at all** — you can't edit a card's front/back,
 fix an AI mistake, add a card manually, or delete a single card. Decks are 100%
 AI-generated and immutable.
 - **Effort:** Medium — a `flashcards` route (`PATCH`/`POST`/`DELETE`) + inline edit
   UI on the deck-detail page. RLS already scopes flashcards to the owner.
+- **Resolution:** Added `createFlashcard`, `updateFlashcard`, `deleteFlashcard`, and
+  `recomputeDeckCardCount` to `src/lib/db/flashcards.ts`. `POST
+  /api/decks/[id]/flashcards` adds a card (CSRF + rate-limited + tier-gated via
+  `TierLimits[tier].maxCardsPerDeck`, returning `VALIDATION_ERROR` once the deck's
+  `card_count` hits the cap); `PATCH`/`DELETE /api/flashcards/[id]` edit or remove a
+  single card (RLS-scoped, 404 `FORBIDDEN` if not owned). Both insert/delete paths
+  resync `decks.card_count` from a live `COUNT(*)` rather than re-implementing the
+  increment/decrement in JS. The deck-detail page now has an "+ Add card" form, and
+  per-card "Edit"/"Delete" controls with an inline edit form (front/back/tags/category,
+  all validated against `Validation.flashcard.*`, including the new
+  `categoryMaxLength`).
 
-### D2. [P1] No deck rename / edit
+### D2. [P1] [DONE] No deck rename / edit
 `decks/[id]/route.ts` has only `GET` + `DELETE` — no `PATCH`. The title is fixed at
 generation time.
 - **Effort:** Small — add `PATCH /api/decks/[id]` (title) + an edit affordance.
+- **Resolution:** Added `renameDeck()` to `src/lib/db/decks.ts` and a `PATCH
+  /api/decks/[id]` handler (CSRF-checked, validates a non-empty trimmed title
+  ≤ `Validation.deck.titleMaxLength`, 404 `FORBIDDEN` if not owned). The deck-detail
+  page title now has an inline pencil-edit affordance with Save/Cancel.
 
-### D3. [P1] No quiz history / progress view
+### D3. [P1] [DONE] No quiz history / progress view
 `quiz_sessions` records every attempt and score, but the result page reads only from
 `sessionStorage` — refresh it and you get "No quiz results found." There is no
 "past quizzes / score over time" view anywhere; the stored history is effectively
 write-only to the user.
 - **Effort:** Medium — a `GET /api/quiz/history` (or reuse a sessions list) + a
   history/progress section on the deck or dashboard.
+- **Resolution:** Added `listQuizSessionsForUser()` to `src/lib/db/quiz.ts`
+  (completed sessions only, newest first, joined with the deck title) and `GET
+  /api/quiz/history?deckId=...` (no rate limit, mirroring the existing list-route
+  precedent). The deck-detail page now shows a "Quiz history" section listing past
+  attempts with score, correct/total, quiz type, and completion date.
 
-### D4. [P2] No "study weak cards" mode / spaced repetition
+### D4. [P2] [DONE] No "study weak cards" mode / spaced repetition
 `difficulty_score` and `last_reviewed_at` are tracked per card but never used — the
 deck viewer shows cards in creation order. The only intended consumer is Living Deck
 (B1), which is unbuilt.
 - **Effort:** Small-Medium once the data is surfaced — a study mode that orders by
   `difficulty_score DESC`.
+- **Resolution:** Added a frontend-only "Study weak cards" toggle on the deck-detail
+  page that re-sorts the card list by `difficulty_score` descending and resets the
+  viewer to the first card; the progress header also shows each card's difficulty
+  percentage while the mode is active.
 
 ---
 
 ## E. Payments, notifications, admin, account & compliance
 
-### E1. [P1] No payment status notifications
+### E1. [P1] [DONE] No payment status notifications
 `UIMessages.paymentApproved` / `paymentRejected` exist, and `schema.sql` notes
 "enable Realtime on `payment_submissions` for live student notifications," but the
 client has **no realtime subscription and no notification UI** — a user must manually
 revisit `/upgrade` to learn if they were approved/rejected.
 - **Effort:** Small-Medium — a Supabase Realtime subscription on the user's payment
   row + a toast/badge.
+- **Resolution:** `payment_submissions` added to the `supabase_realtime`
+  publication (idempotent `ALTER PUBLICATION` in `schema.sql`, applied via
+  migration). New `src/app/PaymentNotifications.tsx` (client component, mounted
+  in `src/app/layout.tsx`) opens a `postgres_changes` subscription on
+  `UPDATE payment_submissions` filtered to `user_id=eq.<self>` (RLS-scoped — no
+  new policy needed) and shows a dismissible toast using
+  `UIMessages.paymentApproved` / `UIMessages.paymentRejected(reason)` when the
+  status flips to `verified`/`rejected`.
 
 ### E2. [P0] [DONE] Can't actually pay — `App.gcashNumber` is blank
 `contracts.ts` `App.gcashNumber = ""`, so `/upgrade` can't show a number and tells
@@ -218,19 +250,43 @@ expiry date. Once Pro, always Pro until an admin changes it.
   Schema re-run against the live Supabase project is **complete** — the
   function, cron job, and all B1–B5 schema additions (see below) are live.
 
-### E4. [P1] No admin tooling beyond payments
+### E4. [P1] [DONE] No admin tooling beyond payments
 The admin dashboard only approves/rejects payments. There is no UI for: verifying
 `app_review` referrals (B4), granting credits manually, managing users, or viewing
 the `admin_action_log` audit trail.
 - **Effort:** Medium — extends the existing `/admin` page + a couple of routes.
+- **Resolution:** (`app_review` verification (B4) was already shipped earlier.)
+  Added a "Users" section to `/admin` — searchable (by email, capped at 50 rows
+  via `listUsers()`) list with an inline manual credit-grant form per user, and
+  an "Audit Log" section listing recent `admin_action_log` rows joined with
+  admin/target emails and payment references (`listAuditLog()`). New
+  `admin_grant_credits()` SECURITY DEFINER function (schema §4.7a) wraps
+  `grant_credits()` + an `admin_action_log` insert (`action='credit_grant'`) in
+  one transaction. `admin_action_log.action` CHECK constraint widened to include
+  `'credit_grant'` and `'account_deleted'`, plus new nullable `target_user_id`
+  and `credits_amount` columns. New routes: `GET /api/admin/users`,
+  `POST /api/admin/users/grant-credits` (validated against
+  `Validation.adminCreditGrant` 1–1000 and `Validation.adminNotes`), and
+  `GET /api/admin/audit-log`.
 
-### E5. [P2] No account deletion / data export (RA 10173)
+### E5. [P2] [DONE] No account deletion / data export (RA 10173)
 Settings only has "Sign out." For the privacy law this app explicitly cares about,
 users arguably should be able to **delete their account** and **export their data**;
 neither exists. (An auditable consent timestamp is also worth adding — currently
 `consent_deepseek` is just a boolean.)
 - **Effort:** Medium — a delete-account flow (cascades via FK) + a data-export
   endpoint.
+- **Resolution:** Added a "Your data" section to `/settings` with "Export my
+  data" and "Delete my account" (double-confirmed via
+  `UIMessages.accountDeleteConfirm`). `GET /api/account/export` returns a
+  downloadable JSON file (binary-response pattern, like B3's PDF export) of the
+  user's profile, decks, flashcards, quiz sessions, payment submissions,
+  referral events, and app reviews — via the session client, so RLS scopes it to
+  the caller. `POST /api/account/delete` calls new `prepare_account_deletion()`
+  (schema §4.11b, service-role): nulls out the user's rows in
+  `admin_action_log.payment_id` (now nullable, was `ON DELETE RESTRICT`) and
+  writes an `'account_deleted'` audit row, then `auth.admin.deleteUser()`
+  cascades the actual deletion through `profiles` and all dependent tables.
 
 ---
 
@@ -241,16 +297,19 @@ neither exists. (An auditable consent timestamp is also worth adding — current
 | 1 | **C1** Pro card-cap bug | A paid promise is broken right now | S | ✅ Done |
 | 2 | **E2** Fill `gcashNumber` | Hard launch blocker — nobody can pay | trivial | ✅ Done |
 | 3 | **A1** Delete-deck button | Endpoint already exists; pure UI | S | |
-| 4 | **D2** Rename deck | Tiny route + affordance | S | |
+| 4 | **D2** Rename deck | Tiny route + affordance | S | ✅ Done |
 | 5 | **E3** Pro expiry cron | Subscriptions never actually end | S | ✅ Done |
-| 6 | **D1** Flashcard editing | Core content management gap | M | |
+| 6 | **D1** Flashcard editing | Core content management gap | M | ✅ Done |
 | 7 | **B1** Living Decks | The flagship Pro feature, fully spec'd | M | ✅ Done |
 | 8 | **B2 / B3** Deep Dive / PDF export | Remaining Pro promises | M | ✅ Done |
 | 9 | **B4** Profile-complete + review + deck-share earns | Rewards page is mostly decorative | M | ✅ Done |
-| 10 | **D3 / E1 / E4 / E5** History, notifications, admin, account | Depth + compliance | M+ | |
+| 10 | **D3 / E1 / E4 / E5** History, notifications, admin, account | Depth + compliance | M+ | ✅ Done |
 
 **B5** (public/shared decks) was completed alongside B4, since the deck-share
 earn method depends on it.
+
+**D4** (study weak cards mode), not listed in the table above, was completed
+alongside D1 since it builds directly on the same deck-detail card list.
 
 ---
 

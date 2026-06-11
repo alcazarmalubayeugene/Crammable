@@ -3,8 +3,11 @@ import {
   PaymentStatus,
   SubscriptionTier,
   TableNames,
+  type AdminActionLog,
   type AdminAppReviewRow,
+  type AdminAuditLogRow,
   type AdminPaymentRow,
+  type AdminUserRow,
   type AppReview,
   type PaymentSubmission,
 } from "@/lib/contracts";
@@ -97,6 +100,82 @@ export async function rejectPayment(
   });
   if (error) throw toDbError(error, "Failed to reject payment.");
   return { userId: data as string };
+}
+
+/**
+ * E4 — user list for the admin dashboard, optionally filtered by an email
+ * substring. Service-role client (RLS would otherwise hide every row but the
+ * admin's own profile). Capped at 50 rows, newest accounts first.
+ */
+export async function listUsers(search?: string): Promise<AdminUserRow[]> {
+  const admin = createAdminClient();
+  let query = admin
+    .from(TableNames.profiles)
+    .select("id, email, full_name, subscription_tier, token_balance, is_admin, created_at")
+    .order("created_at", { ascending: false })
+    .limit(50);
+
+  if (search) {
+    query = query.ilike("email", `%${search}%`);
+  }
+
+  const { data, error } = await query;
+  if (error) throw toDbError(error, "Failed to load users.");
+  return (data as AdminUserRow[]) ?? [];
+}
+
+/**
+ * E4 — manually grant credits to a user via admin_grant_credits() (schema
+ * §4.7a): atomic grant_credits() + admin_action_log insert
+ * (action='credit_grant'), so the balance change and audit row commit together.
+ */
+export async function grantCreditsAsAdmin(
+  adminId: string,
+  targetUserId: string,
+  amount: number,
+  notes?: string
+): Promise<number> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("admin_grant_credits", {
+    p_admin_id: adminId,
+    p_target_user_id: targetUserId,
+    p_amount: amount,
+    p_notes: notes ?? null,
+  });
+  if (error) throw toDbError(error, "Failed to grant credits.");
+  return data as number;
+}
+
+/**
+ * E4 — recent admin actions (approvals, rejections, credit grants, account
+ * deletions) joined with the admin's email, the affected user's email, and the
+ * related payment's reference number where applicable. Newest first.
+ */
+export async function listAuditLog(limit: number = 50): Promise<AdminAuditLogRow[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from(TableNames.adminActionLog)
+    .select(
+      `*, admin:${TableNames.profiles}!admin_id(email), target:${TableNames.profiles}!target_user_id(email), payment:${TableNames.paymentSubmissions}!payment_id(reference_number)`
+    )
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) throw toDbError(error, "Failed to load audit log.");
+
+  return (
+    (data as Array<
+      AdminActionLog & {
+        admin: { email: string } | null;
+        target: { email: string } | null;
+        payment: { reference_number: string } | null;
+      }
+    >) ?? []
+  ).map(({ admin: adminUser, target, payment, ...row }) => ({
+    ...row,
+    adminEmail: adminUser?.email ?? null,
+    targetUserEmail: target?.email ?? null,
+    paymentReference: payment?.reference_number ?? null,
+  }));
 }
 
 /** Pending app reviews (B4) joined with the submitter's email, oldest first (FIFO). */

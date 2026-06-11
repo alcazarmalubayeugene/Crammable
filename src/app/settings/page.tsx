@@ -12,6 +12,7 @@ import {
   Routes,
   SubscriptionTier,
   TableNames,
+  UIMessages,
   Validation,
   type ApiResponse,
   type ClaimProfileCompleteResult,
@@ -45,6 +46,12 @@ function SettingsContent() {
 
   // logout state
   const [loggingOut, setLoggingOut] = useState(false);
+
+  // export / delete account state (E5)
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   // reset-password mode state (?mode=reset-password)
   const [newPassword, setNewPassword] = useState("");
@@ -140,6 +147,62 @@ function SettingsContent() {
     const supabase = getSupabaseBrowserClient();
     await supabase.auth.signOut();
     window.location.replace(Routes.home);
+  }
+
+  async function handleExportData() {
+    setExporting(true);
+    setExportError("");
+    try {
+      const res = await fetch(ApiPaths.accountExport, { headers: await authHeaders() });
+      if (!res.ok) {
+        const data = (await res.json()) as ApiResponse<never>;
+        setExportError(!data.success ? data.error.message : UIMessages.genericError);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `crammable-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      setExportError(UIMessages.genericError);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (!confirm(UIMessages.accountDeleteConfirm)) return;
+    if (!confirm("Are you absolutely sure? This is your last chance to cancel.")) return;
+
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const res = await fetch(ApiPaths.accountDelete, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await authHeaders()),
+        } as HeadersInit,
+      });
+      const data = (await res.json()) as ApiResponse<never>;
+      if (!data.success) {
+        setDeleting(false);
+        setDeleteError(data.error.message);
+        return;
+      }
+      const supabase = getSupabaseBrowserClient();
+      await supabase.auth.signOut();
+      alert(UIMessages.accountDeleted);
+      window.location.replace(Routes.home);
+    } catch {
+      setDeleting(false);
+      setDeleteError(UIMessages.genericError);
+    }
   }
 
   async function handleResetPassword(e: React.FormEvent) {
@@ -561,6 +624,86 @@ function SettingsContent() {
           >
             {loggingOut ? "Signing out…" : "Sign out"}
           </button>
+        </div>
+
+        {/* ── Your data (E5) ── */}
+        <div
+          style={{
+            background: "#FFFCF7",
+            border: "1.5px solid #E0C9A8",
+            borderRadius: 16,
+            padding: "20px 22px",
+            marginTop: 16,
+          }}
+        >
+          <p
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              color: "#C49A6C",
+              textTransform: "uppercase",
+              marginBottom: 14,
+            }}
+          >
+            Your data
+          </p>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <div>
+              <button
+                type="button"
+                onClick={handleExportData}
+                disabled={exporting}
+                style={{
+                  background: "none",
+                  border: "1.5px solid #E0C9A8",
+                  borderRadius: 8,
+                  padding: "9px 20px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#8A6E52",
+                  cursor: exporting ? "not-allowed" : "pointer",
+                  fontFamily: "var(--font-dm-sans, sans-serif)",
+                }}
+              >
+                {exporting ? "Preparing…" : "Export my data"}
+              </button>
+              {exportError && (
+                <p style={{ fontSize: 12, color: "#EF4444", marginTop: 8 }}>{exportError}</p>
+              )}
+            </div>
+
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#EF4444", marginBottom: 6 }}>
+                Danger zone
+              </p>
+              <p style={{ fontSize: 12, color: "#8A6E52", marginBottom: 10 }}>
+                {UIMessages.accountDeleteConfirm}
+              </p>
+              <button
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={deleting}
+                style={{
+                  background: "#EF4444",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "9px 20px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: "#FAF2E4",
+                  cursor: deleting ? "not-allowed" : "pointer",
+                  fontFamily: "var(--font-dm-sans, sans-serif)",
+                }}
+              >
+                {deleting ? "Deleting…" : "Delete my account"}
+              </button>
+              {deleteError && (
+                <p style={{ fontSize: 12, color: "#EF4444", marginTop: 8 }}>{deleteError}</p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </main>

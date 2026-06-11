@@ -88,8 +88,10 @@ export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
 
 /** Admin action types — stored in admin_action_log.action */
 export const AdminAction = {
-  APPROVED: "approved",
-  REJECTED: "rejected",
+  APPROVED:        "approved",
+  REJECTED:        "rejected",
+  CREDIT_GRANT:    "credit_grant",
+  ACCOUNT_DELETED: "account_deleted",
 } as const;
 export type AdminAction = (typeof AdminAction)[keyof typeof AdminAction];
 
@@ -162,9 +164,12 @@ export const ApiPaths = {
   deck:                (id: string) => `/api/decks/${id}`,
   deckShare:           (id: string) => `/api/decks/${id}/share`,
   deckExport:          (id: string) => `/api/decks/${id}/export`,
+  deckFlashcards:      (id: string) => `/api/decks/${id}/flashcards`,
+  flashcard:           (id: string) => `/api/flashcards/${id}`,
   publicDeck:          (id: string) => `/api/public/decks/${id}`,
   startQuiz:           (id: string) => `/api/quiz/${id}`,
   submitQuizResult:    "/api/quiz/result",
+  quizHistory:         "/api/quiz/history",
   claimReferral:       "/api/referral/claim",
   submitPayment:       "/api/payment/submit",
   adminPayments:       "/api/admin/payments",
@@ -174,6 +179,11 @@ export const ApiPaths = {
   submitAppReview:       "/api/rewards/submit-review",
   adminReviews:          "/api/admin/reviews",
   adminVerifyReview:     "/api/admin/reviews/verify",
+  adminUsers:            "/api/admin/users",
+  adminGrantCredits:     "/api/admin/users/grant-credits",
+  adminAuditLog:         "/api/admin/audit-log",
+  accountExport:         "/api/account/export",
+  accountDelete:         "/api/account/delete",
   authSignup:             "/api/auth/signup",
   authLogin:              "/api/auth/login",
   authResendConfirmation: "/api/auth/resend-confirmation",
@@ -306,6 +316,13 @@ export const RateLimits: Record<string, RateLimitRule> = {
   "/api/decks/[id]/export":     { windowMinutes: 60,   maxRequests: 10  },
   [ApiPaths.claimProfileComplete]: { windowMinutes: 1440, maxRequests: 5 }, // 24-hour window
   [ApiPaths.submitAppReview]:      { windowMinutes: 1440, maxRequests: 2 }, // 24-hour window
+  "/api/decks/[id]/flashcards": { windowMinutes: 60,   maxRequests: 60  },
+  "/api/flashcards/[id]":       { windowMinutes: 60,   maxRequests: 120 },
+  [ApiPaths.adminUsers]:        { windowMinutes: 60,   maxRequests: 200 },
+  [ApiPaths.adminGrantCredits]: { windowMinutes: 60,   maxRequests: 60  },
+  [ApiPaths.adminAuditLog]:     { windowMinutes: 60,   maxRequests: 200 },
+  [ApiPaths.accountExport]:     { windowMinutes: 60,   maxRequests: 5   },
+  [ApiPaths.accountDelete]:     { windowMinutes: 1440, maxRequests: 3   }, // 24-hour window
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -366,10 +383,11 @@ export const Validation = {
     filenameMaxLength: 255,
   },
   flashcard: {
-    frontMaxLength: 500,
-    backMaxLength:  1000,
-    maxTags:        5,
-    tagMaxLength:   30,
+    frontMaxLength:    500,
+    backMaxLength:     1000,
+    maxTags:           5,
+    tagMaxLength:      30,
+    categoryMaxLength: 50,
   },
   profile: {
     fullNameMaxLength: 100,
@@ -377,6 +395,10 @@ export const Validation = {
   },
   adminNotes: {
     maxLength: 500,
+  },
+  adminCreditGrant: {
+    minAmount: 1,
+    maxAmount: 1000,  // sane ceiling on a single manual grant — fat-finger guard
   },
   appReview: {
     textMaxLength: 1000,
@@ -441,6 +463,10 @@ export const UIMessages = {
   aiUnavailable:     "AI processing is temporarily unavailable. Your document is saved — try again in a few minutes.",
   rateLimited:       "You've reached the request limit for this action. Please wait before trying again.",
   genericError:      "Something went wrong. Please try again or contact support.",
+
+  // Account (E5)
+  accountDeleteConfirm: "This permanently deletes your account, decks, flashcards, and quiz history. This cannot be undone. Continue?",
+  accountDeleted:       "Your account has been deleted. We're sorry to see you go.",
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -564,12 +590,14 @@ export interface RateLimitLog {
 }
 
 export interface AdminActionLog {
-  id:         string;
-  admin_id:   string;
-  payment_id: string;
-  action:     AdminAction;
-  notes:      string | null;
-  created_at: string;
+  id:              string;
+  admin_id:        string | null;
+  payment_id:      string | null;       // null for non-payment actions (credit_grant, account_deleted)
+  target_user_id:  string | null;       // set for credit_grant / account_deleted
+  credits_amount:  number | null;       // set for credit_grant
+  action:          AdminAction;
+  notes:           string | null;
+  created_at:      string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -657,6 +685,46 @@ export interface DeckDetailResult {
   cards: Flashcard[];
 }
 
+// ── PATCH /api/decks/[id] ─────────────────────────────────────────────────────
+export interface RenameDeckRequest {
+  title: string;  // ≤ Validation.deck.titleMaxLength
+}
+
+export interface RenameDeckResult {
+  deck: Deck;
+}
+
+// ── POST /api/decks/[id]/flashcards ───────────────────────────────────────────
+export interface CreateFlashcardRequest {
+  front:    string;   // ≤ Validation.flashcard.frontMaxLength
+  back:     string;   // ≤ Validation.flashcard.backMaxLength
+  tags?:    string[]; // ≤ Validation.flashcard.maxTags, each ≤ Validation.flashcard.tagMaxLength
+  category?: string;
+}
+
+export interface CreateFlashcardResult {
+  card:      Flashcard;
+  cardCount: number;
+}
+
+// ── PATCH /api/flashcards/[id] ────────────────────────────────────────────────
+export interface UpdateFlashcardRequest {
+  front?:    string;
+  back?:     string;
+  tags?:     string[];
+  category?: string;
+}
+
+export interface UpdateFlashcardResult {
+  card: Flashcard;
+}
+
+// ── DELETE /api/flashcards/[id] ───────────────────────────────────────────────
+export interface DeleteFlashcardResult {
+  flashcardId: string;
+  cardCount:   number;
+}
+
 // ── POST /api/quiz/[id] ───────────────────────────────────────────────────────
 export interface StartQuizRequest {
   quizType: QuizType;
@@ -694,6 +762,16 @@ export interface SubmitQuizResultData {
   livingDeckRefreshTriggered: boolean;
   reinforcedCardCount?:       number;   // only present when livingDeckRefreshTriggered = true
   upsellMessage?:             string;   // shown to non-Pro users instead of a refresh
+}
+
+// ── GET /api/quiz/history ─────────────────────────────────────────────────────
+/** A completed quiz session, with the deck title joined for display. */
+export interface QuizHistoryRow extends QuizSession {
+  deckTitle: string;
+}
+
+export interface QuizHistoryResult {
+  sessions: QuizHistoryRow[];
 }
 
 // ── POST /api/referral/claim ──────────────────────────────────────────────────
@@ -797,6 +875,48 @@ export interface VerifyReviewResult {
   userId:         string;
   creditsAwarded: number;
 }
+
+// ── GET /api/admin/users (E4) ──────────────────────────────────────────────────
+/** Minimal profile fields for the admin user-management list. */
+export interface AdminUserRow {
+  id:                string;
+  email:             string;
+  full_name:         string | null;
+  subscription_tier: SubscriptionTier;
+  token_balance:     number;
+  is_admin:          boolean;
+  created_at:        string;
+}
+
+export interface AdminUsersListResult {
+  users: AdminUserRow[];
+}
+
+// ── POST /api/admin/users/grant-credits (E4) ───────────────────────────────────
+export interface GrantCreditsRequest {
+  userId:  string;
+  amount:  number;   // Validation.adminCreditGrant.minAmount..maxAmount
+  notes?:  string;   // ≤ Validation.adminNotes.maxLength
+}
+
+export interface GrantCreditsResult {
+  userId:     string;
+  newBalance: number;
+}
+
+// ── GET /api/admin/audit-log (E4) ──────────────────────────────────────────────
+export interface AdminAuditLogRow extends AdminActionLog {
+  adminEmail:      string | null;   // joined from profiles via admin_id
+  targetUserEmail: string | null;   // joined from profiles via target_user_id
+  paymentReference: string | null;  // joined from payment_submissions via payment_id
+}
+
+export interface AdminAuditLogResult {
+  actions: AdminAuditLogRow[];
+}
+
+// ── POST /api/account/delete (E5) ───────────────────────────────────────────────
+// (No success payload — { success: true } is sufficient)
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 16 — SHARED UTILITY TYPES

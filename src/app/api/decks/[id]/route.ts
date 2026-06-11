@@ -1,8 +1,15 @@
 import type { NextRequest } from "next/server";
-import { ApiErrorCode, type DeckDetailResult } from "@/lib/contracts";
+import {
+  ApiErrorCode,
+  Validation,
+  type DeckDetailResult,
+  type RenameDeckRequest,
+  type RenameDeckResult,
+} from "@/lib/contracts";
 import { handleApiError, apiSuccess, apiFail } from "@/lib/api/errors";
+import { assertSameOrigin } from "@/lib/api/csrf";
 import { requireAuth } from "@/lib/auth/helpers";
-import { getDeckWithCards, deleteDeck } from "@/lib/db/decks";
+import { getDeckWithCards, deleteDeck, renameDeck } from "@/lib/db/decks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,6 +29,37 @@ export async function GET(_req: NextRequest, { params }: Ctx): Promise<Response>
       return apiFail(ApiErrorCode.FORBIDDEN, "Deck not found.", 404);
     }
     return apiSuccess<DeckDetailResult>(result);
+  } catch (err) {
+    return handleApiError(err);
+  }
+}
+
+export async function PATCH(request: NextRequest, { params }: Ctx): Promise<Response> {
+  try {
+    const csrf = assertSameOrigin(request);
+    if (csrf) return csrf;
+
+    await requireAuth();
+    const { id } = await params;
+
+    const body = (await request.json()) as RenameDeckRequest;
+    const title = body.title?.trim() ?? "";
+    if (!title) {
+      return apiFail(ApiErrorCode.VALIDATION_ERROR, "Deck title is required.", 400);
+    }
+    if (title.length > Validation.deck.titleMaxLength) {
+      return apiFail(
+        ApiErrorCode.VALIDATION_ERROR,
+        `Deck title must be ${Validation.deck.titleMaxLength} characters or fewer.`,
+        400
+      );
+    }
+
+    const deck = await renameDeck(id, title);
+    if (!deck) {
+      return apiFail(ApiErrorCode.FORBIDDEN, "Deck not found.", 404);
+    }
+    return apiSuccess<RenameDeckResult>({ deck });
   } catch (err) {
     return handleApiError(err);
   }

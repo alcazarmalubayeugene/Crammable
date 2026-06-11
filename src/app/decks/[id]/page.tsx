@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import { useParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
@@ -14,10 +14,20 @@ import {
   SubscriptionTier,
   TableNames,
   UIMessages,
+  Validation,
   type ApiResponse,
+  type CreateFlashcardRequest,
+  type CreateFlashcardResult,
   type Deck,
+  type DeleteFlashcardResult,
   type Flashcard,
+  type QuizHistoryResult,
+  type QuizHistoryRow,
+  type RenameDeckRequest,
+  type RenameDeckResult,
   type ShareDeckResult,
+  type UpdateFlashcardRequest,
+  type UpdateFlashcardResult,
 } from "@/lib/contracts";
 
 interface MinProfile {
@@ -25,6 +35,21 @@ interface MinProfile {
   full_name: string | null;
   subscription_tier: (typeof SubscriptionTier)[keyof typeof SubscriptionTier];
 }
+
+// Shared style for the D1 add/edit-card form fields.
+const inputStyle: CSSProperties = {
+  display: "block",
+  width: "100%",
+  marginTop: 4,
+  background: "#FAF2E4",
+  border: "1px solid #E0C9A8",
+  borderRadius: 6,
+  padding: "8px 10px",
+  fontSize: 13,
+  color: "#2E1A0C",
+  fontFamily: "var(--font-dm-sans, sans-serif)",
+  boxSizing: "border-box",
+};
 
 export default function DeckDetailPage() {
   const params = useParams();
@@ -40,6 +65,38 @@ export default function DeckDetailPage() {
   const [sharing, setSharing] = useState(false);
   const [shareMessage, setShareMessage] = useState("");
   const [copied, setCopied] = useState(false);
+
+  // D2 — inline deck title rename
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleInput, setTitleInput] = useState("");
+  const [savingTitle, setSavingTitle] = useState(false);
+  const [titleError, setTitleError] = useState("");
+
+  // D1 — edit / delete the current card
+  const [editingCard, setEditingCard] = useState(false);
+  const [editFront, setEditFront] = useState("");
+  const [editBack, setEditBack] = useState("");
+  const [editTags, setEditTags] = useState("");
+  const [editCategory, setEditCategory] = useState("");
+  const [savingCard, setSavingCard] = useState(false);
+  const [deletingCard, setDeletingCard] = useState(false);
+  const [cardError, setCardError] = useState("");
+
+  // D1 — add a new card
+  const [addingCard, setAddingCard] = useState(false);
+  const [newFront, setNewFront] = useState("");
+  const [newBack, setNewBack] = useState("");
+  const [newTags, setNewTags] = useState("");
+  const [newCategory, setNewCategory] = useState("");
+  const [savingNewCard, setSavingNewCard] = useState(false);
+  const [addCardError, setAddCardError] = useState("");
+
+  // D3 — quiz history for this deck
+  const [history, setHistory] = useState<QuizHistoryRow[]>([]);
+  const [loadingHistory, setLoadingHistory] = useState(true);
+
+  // D4 — study weak cards mode (sort by difficulty_score desc)
+  const [studyWeakMode, setStudyWeakMode] = useState(false);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -95,6 +152,28 @@ export default function DeckDetailPage() {
     return () => clearTimeout(timeout);
   }, [deckId]);
 
+  useEffect(() => {
+    let cancelled = false;
+    async function loadHistory() {
+      setLoadingHistory(true);
+      try {
+        const res = await fetch(`${ApiPaths.quizHistory}?deckId=${deckId}`, {
+          headers: await authHeaders(),
+        });
+        const data = (await res.json()) as ApiResponse<QuizHistoryResult>;
+        if (!cancelled && data.success) setHistory(data.sessions);
+      } catch {
+        // Quiz history is supplementary — fail silently.
+      } finally {
+        if (!cancelled) setLoadingHistory(false);
+      }
+    }
+    loadHistory();
+    return () => {
+      cancelled = true;
+    };
+  }, [deckId]);
+
   function goTo(idx: number) {
     setCurrentIdx(idx);
     setIsFlipped(false);
@@ -132,8 +211,179 @@ export default function DeckDetailPage() {
     setTimeout(() => setCopied(false), 2000);
   }
 
-  const card = cards[currentIdx] ?? null;
-  const total = cards.length;
+  // ── D2: rename deck ──────────────────────────────────────────────────────
+  function startEditTitle() {
+    if (!deck) return;
+    setTitleInput(deck.title);
+    setTitleError("");
+    setEditingTitle(true);
+  }
+
+  async function saveTitle() {
+    const title = titleInput.trim();
+    if (!title) {
+      setTitleError("Title is required.");
+      return;
+    }
+    if (title.length > Validation.deck.titleMaxLength) {
+      setTitleError(`Title must be ${Validation.deck.titleMaxLength} characters or fewer.`);
+      return;
+    }
+    setSavingTitle(true);
+    setTitleError("");
+    try {
+      const res = await fetch(ApiPaths.deck(deckId), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({ title } satisfies RenameDeckRequest),
+      });
+      const data = (await res.json()) as ApiResponse<RenameDeckResult>;
+      if (!data.success) {
+        setTitleError(data.error.message);
+        return;
+      }
+      setDeck(data.deck);
+      setEditingTitle(false);
+    } catch {
+      setTitleError(UIMessages.genericError);
+    } finally {
+      setSavingTitle(false);
+    }
+  }
+
+  // ── D1: edit / delete the current card ──────────────────────────────────
+  function startEditCard() {
+    if (!card) return;
+    setEditFront(card.front);
+    setEditBack(card.back);
+    setEditTags((card.tags ?? []).join(", "));
+    setEditCategory(card.category ?? "");
+    setCardError("");
+    setEditingCard(true);
+    setIsFlipped(false);
+  }
+
+  async function saveCardEdit() {
+    if (!card) return;
+    const front = editFront.trim();
+    const back = editBack.trim();
+    if (!front || !back) {
+      setCardError("Front and back are required.");
+      return;
+    }
+    const tags = editTags.split(",").map((t) => t.trim()).filter(Boolean);
+    setSavingCard(true);
+    setCardError("");
+    try {
+      const res = await fetch(ApiPaths.flashcard(card.id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({
+          front,
+          back,
+          tags,
+          category: editCategory.trim(),
+        } satisfies UpdateFlashcardRequest),
+      });
+      const data = (await res.json()) as ApiResponse<UpdateFlashcardResult>;
+      if (!data.success) {
+        setCardError(data.error.message);
+        return;
+      }
+      setCards((cs) => cs.map((c) => (c.id === data.card.id ? data.card : c)));
+      setEditingCard(false);
+    } catch {
+      setCardError(UIMessages.genericError);
+    } finally {
+      setSavingCard(false);
+    }
+  }
+
+  async function deleteCurrentCard() {
+    if (!card) return;
+    if (typeof window !== "undefined" && !window.confirm("Delete this card? This can't be undone.")) {
+      return;
+    }
+    setDeletingCard(true);
+    setCardError("");
+    try {
+      const res = await fetch(ApiPaths.flashcard(card.id), {
+        method: "DELETE",
+        headers: await authHeaders(),
+      });
+      const data = (await res.json()) as ApiResponse<DeleteFlashcardResult>;
+      if (!data.success) {
+        setCardError(data.error.message);
+        return;
+      }
+      setCards((cs) => cs.filter((c) => c.id !== data.flashcardId));
+      setDeck((d) => (d ? { ...d, card_count: data.cardCount } : d));
+      setCurrentIdx((idx) => Math.max(0, Math.min(idx, cards.length - 2)));
+      setIsFlipped(false);
+      setEditingCard(false);
+    } catch {
+      setCardError(UIMessages.genericError);
+    } finally {
+      setDeletingCard(false);
+    }
+  }
+
+  // ── D1: add a new card ───────────────────────────────────────────────────
+  async function addCard() {
+    const front = newFront.trim();
+    const back = newBack.trim();
+    if (!front || !back) {
+      setAddCardError("Front and back are required.");
+      return;
+    }
+    const tags = newTags.split(",").map((t) => t.trim()).filter(Boolean);
+    setSavingNewCard(true);
+    setAddCardError("");
+    try {
+      const res = await fetch(ApiPaths.deckFlashcards(deckId), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+        body: JSON.stringify({
+          front,
+          back,
+          tags,
+          category: newCategory.trim(),
+        } satisfies CreateFlashcardRequest),
+      });
+      const data = (await res.json()) as ApiResponse<CreateFlashcardResult>;
+      if (!data.success) {
+        setAddCardError(data.error.message);
+        return;
+      }
+      setCards((cs) => [...cs, data.card]);
+      setDeck((d) => (d ? { ...d, card_count: data.cardCount } : d));
+      setNewFront("");
+      setNewBack("");
+      setNewTags("");
+      setNewCategory("");
+      setAddingCard(false);
+      setCurrentIdx(cards.length);
+      setIsFlipped(false);
+    } catch {
+      setAddCardError(UIMessages.genericError);
+    } finally {
+      setSavingNewCard(false);
+    }
+  }
+
+  // ── D4: study weak cards mode ───────────────────────────────────────────
+  function toggleStudyWeakMode() {
+    setStudyWeakMode((m) => !m);
+    setCurrentIdx(0);
+    setIsFlipped(false);
+    setEditingCard(false);
+  }
+
+  const displayCards = studyWeakMode
+    ? [...cards].sort((a, b) => b.difficulty_score - a.difficulty_score)
+    : cards;
+  const card = displayCards[currentIdx] ?? null;
+  const total = displayCards.length;
 
   if (loading) {
     return (
@@ -271,36 +521,117 @@ export default function DeckDetailPage() {
             }}
           >
             <div>
-              <h1
-                style={{
-                  fontFamily: "var(--font-lora, serif)",
-                  fontSize: 28,
-                  fontWeight: 700,
-                  color: "#2E1A0C",
-                  marginBottom: 6,
-                  lineHeight: 1.25,
-                }}
-              >
-                {deck.title}
-                {deck.generation_mode === GenerationMode.DEEP_DIVE && (
-                  <span
+              {editingTitle ? (
+                <div style={{ marginBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input
+                      type="text"
+                      value={titleInput}
+                      onChange={(e) => setTitleInput(e.target.value)}
+                      maxLength={Validation.deck.titleMaxLength}
+                      autoFocus
+                      style={{
+                        fontFamily: "var(--font-lora, serif)",
+                        fontSize: 22,
+                        fontWeight: 700,
+                        color: "#2E1A0C",
+                        background: "#FFFCF7",
+                        border: "1.5px solid #E0C9A8",
+                        borderRadius: 8,
+                        padding: "6px 10px",
+                        minWidth: 240,
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={saveTitle}
+                      disabled={savingTitle}
+                      style={{
+                        background: "#C47A2E",
+                        color: "#FAF2E4",
+                        border: "none",
+                        borderRadius: 8,
+                        padding: "8px 14px",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: savingTitle ? "not-allowed" : "pointer",
+                        fontFamily: "var(--font-dm-sans, sans-serif)",
+                      }}
+                    >
+                      {savingTitle ? "…" : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setEditingTitle(false); setTitleError(""); }}
+                      disabled={savingTitle}
+                      style={{
+                        background: "#FFFCF7",
+                        color: "#8A6E52",
+                        border: "1.5px solid #E0C9A8",
+                        borderRadius: 8,
+                        padding: "8px 14px",
+                        fontSize: 13,
+                        fontWeight: 600,
+                        cursor: savingTitle ? "not-allowed" : "pointer",
+                        fontFamily: "var(--font-dm-sans, sans-serif)",
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                  {titleError && (
+                    <p style={{ fontSize: 12, color: "#B23B3B", marginTop: 6 }}>{titleError}</p>
+                  )}
+                </div>
+              ) : (
+                <h1
+                  style={{
+                    fontFamily: "var(--font-lora, serif)",
+                    fontSize: 28,
+                    fontWeight: 700,
+                    color: "#2E1A0C",
+                    marginBottom: 6,
+                    lineHeight: 1.25,
+                  }}
+                >
+                  {deck.title}
+                  {deck.generation_mode === GenerationMode.DEEP_DIVE && (
+                    <span
+                      style={{
+                        marginLeft: 10,
+                        fontSize: 11,
+                        fontWeight: 700,
+                        letterSpacing: "0.06em",
+                        textTransform: "uppercase",
+                        color: "#C47A2E",
+                        background: "rgba(196,122,46,0.15)",
+                        borderRadius: 6,
+                        padding: "3px 8px",
+                        verticalAlign: "middle",
+                      }}
+                    >
+                      Deep Dive
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={startEditTitle}
+                    title="Rename deck"
+                    aria-label="Rename deck"
                     style={{
                       marginLeft: 10,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      color: "#C47A2E",
-                      background: "rgba(196,122,46,0.15)",
-                      borderRadius: 6,
-                      padding: "3px 8px",
+                      background: "none",
+                      border: "none",
+                      cursor: "pointer",
+                      fontSize: 16,
+                      color: "#C49A6C",
                       verticalAlign: "middle",
                     }}
                   >
-                    Deep Dive
-                  </span>
-                )}
-              </h1>
+                    ✏️
+                  </button>
+                </h1>
+              )}
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontSize: 13, color: "#8A6E52" }}>
                   {total} {total === 1 ? "card" : "cards"}
@@ -500,6 +831,141 @@ export default function DeckDetailPage() {
           </p>
         </div>
 
+        {/* D1 — card management toolbar */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            flexWrap: "wrap",
+            marginBottom: 16,
+          }}
+        >
+          {total > 0 ? (
+            <button
+              type="button"
+              onClick={toggleStudyWeakMode}
+              style={{
+                background: studyWeakMode ? "#C47A2E" : "#FFFCF7",
+                border: "1.5px solid #E0C9A8",
+                color: studyWeakMode ? "#FAF2E4" : "#2E1A0C",
+                padding: "8px 16px",
+                borderRadius: 8,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: "pointer",
+                fontFamily: "var(--font-dm-sans, sans-serif)",
+              }}
+            >
+              {studyWeakMode ? "✓ Studying weak cards" : "Study weak cards"}
+            </button>
+          ) : (
+            <span />
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setAddingCard((a) => !a);
+              setAddCardError("");
+            }}
+            style={{
+              background: "#FFFCF7",
+              border: "1.5px solid #E0C9A8",
+              color: "#2E1A0C",
+              padding: "8px 16px",
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              fontFamily: "var(--font-dm-sans, sans-serif)",
+            }}
+          >
+            {addingCard ? "Cancel" : "+ Add card"}
+          </button>
+        </div>
+
+        {/* D1 — add-card form */}
+        {addingCard && (
+          <div
+            style={{
+              background: "#FFFCF7",
+              border: "1.5px solid #E0C9A8",
+              borderRadius: 14,
+              padding: 18,
+              marginBottom: 20,
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52" }}>
+              Front
+              <textarea
+                value={newFront}
+                onChange={(e) => setNewFront(e.target.value)}
+                maxLength={Validation.flashcard.frontMaxLength}
+                rows={2}
+                style={inputStyle}
+              />
+            </label>
+            <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52" }}>
+              Back
+              <textarea
+                value={newBack}
+                onChange={(e) => setNewBack(e.target.value)}
+                maxLength={Validation.flashcard.backMaxLength}
+                rows={3}
+                style={inputStyle}
+              />
+            </label>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52", flex: 1, minWidth: 160 }}>
+                Category
+                <input
+                  type="text"
+                  value={newCategory}
+                  onChange={(e) => setNewCategory(e.target.value)}
+                  maxLength={Validation.flashcard.categoryMaxLength}
+                  style={inputStyle}
+                />
+              </label>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52", flex: 2, minWidth: 200 }}>
+                Tags (comma-separated)
+                <input
+                  type="text"
+                  value={newTags}
+                  onChange={(e) => setNewTags(e.target.value)}
+                  style={inputStyle}
+                />
+              </label>
+            </div>
+            {addCardError && (
+              <p style={{ fontSize: 12, color: "#B23B3B", margin: 0 }}>{addCardError}</p>
+            )}
+            <div>
+              <button
+                type="button"
+                onClick={addCard}
+                disabled={savingNewCard}
+                style={{
+                  background: "#C47A2E",
+                  color: "#FAF2E4",
+                  border: "none",
+                  borderRadius: 8,
+                  padding: "10px 20px",
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: savingNewCard ? "not-allowed" : "pointer",
+                  fontFamily: "var(--font-dm-sans, sans-serif)",
+                }}
+              >
+                {savingNewCard ? "Adding…" : "Add card"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Flashcard viewer */}
         {total === 0 ? (
           <div
@@ -523,13 +989,45 @@ export default function DeckDetailPage() {
                 alignItems: "center",
                 justifyContent: "space-between",
                 marginBottom: 10,
+                flexWrap: "wrap",
+                gap: 8,
               }}
             >
               <span style={{ fontSize: 13, color: "#8A6E52" }}>
                 Card {currentIdx + 1} of {total}
+                {studyWeakMode && card && (
+                  <span style={{ color: "#C49A6C" }}> · difficulty {Math.round(card.difficulty_score * 100)}%</span>
+                )}
               </span>
-              <span style={{ fontSize: 12, color: "#C49A6C" }}>Click card to flip</span>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                {!editingCard && (
+                  <>
+                    <button
+                      type="button"
+                      onClick={startEditCard}
+                      style={{ background: "none", border: "none", color: "#C47A2E", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={deleteCurrentCard}
+                      disabled={deletingCard}
+                      style={{ background: "none", border: "none", color: "#B23B3B", fontSize: 12, fontWeight: 600, cursor: deletingCard ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                    >
+                      {deletingCard ? "Deleting…" : "Delete"}
+                    </button>
+                  </>
+                )}
+                <span style={{ fontSize: 12, color: "#C49A6C" }}>
+                  {editingCard ? "Editing card" : "Click card to flip"}
+                </span>
+              </div>
             </div>
+
+            {cardError && (
+              <p style={{ fontSize: 12, color: "#B23B3B", marginBottom: 10 }}>{cardError}</p>
+            )}
 
             {/* Progress bar */}
             <div
@@ -552,7 +1050,104 @@ export default function DeckDetailPage() {
               />
             </div>
 
+            {/* Edit-card form (D1) */}
+            {editingCard && (
+              <div
+                style={{
+                  background: "#FFFCF7",
+                  border: "1.5px solid #E0C9A8",
+                  borderRadius: 14,
+                  padding: 18,
+                  marginBottom: 20,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                }}
+              >
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52" }}>
+                  Front
+                  <textarea
+                    value={editFront}
+                    onChange={(e) => setEditFront(e.target.value)}
+                    maxLength={Validation.flashcard.frontMaxLength}
+                    rows={2}
+                    style={inputStyle}
+                  />
+                </label>
+                <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52" }}>
+                  Back
+                  <textarea
+                    value={editBack}
+                    onChange={(e) => setEditBack(e.target.value)}
+                    maxLength={Validation.flashcard.backMaxLength}
+                    rows={3}
+                    style={inputStyle}
+                  />
+                </label>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52", flex: 1, minWidth: 160 }}>
+                    Category
+                    <input
+                      type="text"
+                      value={editCategory}
+                      onChange={(e) => setEditCategory(e.target.value)}
+                      maxLength={Validation.flashcard.categoryMaxLength}
+                      style={inputStyle}
+                    />
+                  </label>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52", flex: 2, minWidth: 200 }}>
+                    Tags (comma-separated)
+                    <input
+                      type="text"
+                      value={editTags}
+                      onChange={(e) => setEditTags(e.target.value)}
+                      style={inputStyle}
+                    />
+                  </label>
+                </div>
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button
+                    type="button"
+                    onClick={saveCardEdit}
+                    disabled={savingCard}
+                    style={{
+                      background: "#C47A2E",
+                      color: "#FAF2E4",
+                      border: "none",
+                      borderRadius: 8,
+                      padding: "10px 20px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: savingCard ? "not-allowed" : "pointer",
+                      fontFamily: "var(--font-dm-sans, sans-serif)",
+                    }}
+                  >
+                    {savingCard ? "Saving…" : "Save"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setEditingCard(false); setCardError(""); }}
+                    disabled={savingCard}
+                    style={{
+                      background: "#FFFCF7",
+                      color: "#8A6E52",
+                      border: "1.5px solid #E0C9A8",
+                      borderRadius: 8,
+                      padding: "10px 20px",
+                      fontSize: 13,
+                      fontWeight: 600,
+                      cursor: savingCard ? "not-allowed" : "pointer",
+                      fontFamily: "var(--font-dm-sans, sans-serif)",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Flip card */}
+            {!editingCard && (
             <div
               onClick={() => setIsFlipped((f) => !f)}
               style={{ perspective: "1200px", cursor: "pointer", marginBottom: 20 }}
@@ -692,6 +1287,7 @@ export default function DeckDetailPage() {
                 </div>
               </div>
             </div>
+            )}
 
             {/* Navigation controls */}
             <div
@@ -799,6 +1395,66 @@ export default function DeckDetailPage() {
               </a>
             </div>
           </>
+        )}
+
+        {/* D3 — quiz history / progress */}
+        {!loadingHistory && history.length > 0 && (
+          <div style={{ marginTop: 36, paddingTop: 28, borderTop: "1px solid #E0C9A8" }}>
+            <h2
+              style={{
+                fontFamily: "var(--font-lora, serif)",
+                fontSize: 18,
+                fontWeight: 700,
+                color: "#2E1A0C",
+                marginBottom: 12,
+              }}
+            >
+              Quiz history
+            </h2>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {history.map((session) => (
+                <div
+                  key={session.id}
+                  style={{
+                    background: "#FFFCF7",
+                    border: "1px solid #E0C9A8",
+                    borderRadius: 10,
+                    padding: "10px 16px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    gap: 12,
+                    flexWrap: "wrap",
+                  }}
+                >
+                  <div>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: "#2E1A0C", margin: 0 }}>
+                      {session.score_percent ?? 0}% · {session.correct_count}/{session.total_questions} correct
+                    </p>
+                    <p style={{ fontSize: 12, color: "#8A6E52", margin: "2px 0 0" }}>
+                      {session.completed_at
+                        ? new Date(session.completed_at).toLocaleString()
+                        : ""}
+                    </p>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      letterSpacing: "0.04em",
+                      textTransform: "uppercase",
+                      color: "#C49A6C",
+                      background: "rgba(196,122,46,0.12)",
+                      borderRadius: 6,
+                      padding: "3px 8px",
+                    }}
+                  >
+                    {session.quiz_type.replace("_", " ")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </main>

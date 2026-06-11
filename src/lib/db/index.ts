@@ -38,6 +38,7 @@ export {
   getDeckWithCards,
   countDecksForUser,
   deleteDeck,
+  renameDeck,
   createDeckWithCardsAndCharge,
   setDeckPublic,
   getPublicDeckWithCards,
@@ -51,6 +52,12 @@ export {
   getWeakCardsForDeck,
   applyCardReview,
   insertReinforcementCardsAndCharge,
+  createFlashcard,
+  updateFlashcard,
+  deleteFlashcard,
+  recomputeDeckCardCount,
+  type NewFlashcardInput,
+  type FlashcardEdits,
 } from "@/lib/db/flashcards";
 
 // Quiz
@@ -59,6 +66,7 @@ export {
   submitQuizResult,
   getQuizSession,
   markLivingDeckRefreshTriggered,
+  listQuizSessionsForUser,
   type NewQuizSessionInput,
 } from "@/lib/db/quiz";
 
@@ -79,11 +87,21 @@ export {
   getOwnAppReview,
 } from "@/lib/db/reviews";
 
-// Admin payment verification
+// Admin payment verification + user management (E4)
 export {
   listPendingPayments,
   approvePayment,
   rejectPayment,
   listPendingAppReviews,
   verifyAppReview,
+  listUsers,
+  grantCreditsAsAdmin,
+  listAuditLog,
 } from "@/lib/db/admin";
+
+// Account export / deletion (E5)
+export {
+  exportAccountData,
+  deleteAccount,
+  type AccountExportData,
+} from "@/lib/db/account";

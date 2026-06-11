@@ -117,6 +117,25 @@ export async function deleteDeck(deckId: string): Promise<number> {
 }
 
 /**
+ * Rename a deck (D2). Session-client update — RLS scopes the write to the
+ * deck's owner. Returns the updated deck, or null if the deck doesn't exist /
+ * isn't owned by the caller.
+ */
+export async function renameDeck(deckId: string, title: string): Promise<Deck | null> {
+  ensureMaxLength(title, Validation.deck.titleMaxLength, "Deck title");
+
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase
+    .from(TableNames.decks)
+    .update({ title })
+    .eq("id", deckId)
+    .select("*")
+    .maybeSingle();
+  if (error) throw toDbError(error, "Failed to rename deck.");
+  return (data as Deck) ?? null;
+}
+
+/**
  * Set a deck's is_public flag (B5 sharing). Session-client update — RLS scopes
  * the write to the deck's owner. Returns the updated deck, or null if the deck
  * doesn't exist / isn't owned by the caller.

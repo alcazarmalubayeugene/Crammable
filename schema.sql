@@ -239,16 +239,24 @@ CREATE TABLE IF NOT EXISTS public.rate_limit_log (
 -- C1: admin_id is nullable (SET NULL) so deleting an admin profile does NOT
 --     destroy their audit trail. payment_id uses RESTRICT so a payment with
 --     an audit entry cannot be deleted.
+-- E4/E5: payment_id is nullable — 'credit_grant' (manual admin credit grants)
+--     and 'account_deleted' (E5 self-service deletion audit) actions aren't
+--     tied to a payment. target_user_id + credits_amount support those rows.
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS public.admin_action_log (
-  id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   -- Nullable: if the admin account is deleted the log row is preserved
-  admin_id   UUID        REFERENCES public.profiles(id) ON DELETE SET NULL,
-  -- RESTRICT: cannot delete a payment submission that has been acted on
-  payment_id UUID        NOT NULL REFERENCES public.payment_submissions(id) ON DELETE RESTRICT,
-  action     TEXT        NOT NULL CHECK (action IN ('approved', 'rejected')),
-  notes      TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  admin_id       UUID        REFERENCES public.profiles(id) ON DELETE SET NULL,
+  -- RESTRICT: cannot delete a payment submission that has been acted on.
+  -- NULL for non-payment actions (credit_grant, account_deleted).
+  payment_id     UUID        REFERENCES public.payment_submissions(id) ON DELETE RESTRICT,
+  -- Set for credit_grant (the recipient) and account_deleted (the deleted user).
+  target_user_id UUID        REFERENCES public.profiles(id) ON DELETE SET NULL,
+  -- Set for credit_grant — the number of credits granted.
+  credits_amount INTEGER,
+  action         TEXT        NOT NULL CHECK (action IN ('approved', 'rejected', 'credit_grant', 'account_deleted')),
+  notes          TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 -- ---------------------------------------------------------------------------
@@ -356,6 +364,14 @@ CREATE INDEX IF NOT EXISTS idx_rate_limit_log
 -- admin_action_log: payment audit trail
 CREATE INDEX IF NOT EXISTS idx_admin_action_log_payment
   ON public.admin_action_log (payment_id, created_at DESC);
+
+-- admin_action_log: per-user audit trail (credit_grant / account_deleted)
+CREATE INDEX IF NOT EXISTS idx_admin_action_log_target_user
+  ON public.admin_action_log (target_user_id, created_at DESC);
+
+-- admin_action_log: E4 audit-log feed, newest first
+CREATE INDEX IF NOT EXISTS idx_admin_action_log_created_at
+  ON public.admin_action_log (created_at DESC);
 
 -- app_reviews: admin pending-review queue
 CREATE INDEX IF NOT EXISTS idx_app_reviews_status
@@ -683,6 +699,35 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 4.7a admin_grant_credits(p_admin_id, p_target_user_id, p_amount, p_notes)
+-- E4: Atomic manual credit grant + audit log row, mirroring how
+-- approve_payment() pairs grant_credits() with an admin_action_log insert in
+-- one transaction. action='credit_grant', payment_id NULL.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.admin_grant_credits(
+  p_admin_id       UUID,
+  p_target_user_id UUID,
+  p_amount         INTEGER,
+  p_notes          TEXT DEFAULT NULL
+)
+RETURNS INTEGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  new_balance INTEGER;
+BEGIN
+  new_balance := public.grant_credits(p_target_user_id, p_amount);
+
+  INSERT INTO public.admin_action_log (admin_id, target_user_id, credits_amount, action, notes)
+  VALUES (p_admin_id, p_target_user_id, p_amount, 'credit_grant', p_notes);
+
+  RETURN new_balance;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 4.7b pro_monthly_credit_refresh()
 -- Called by the daily pg_cron job to top up Pro users who haven't received
 -- their monthly 30-credit allotment in the last 28 days and whose subscription
@@ -942,6 +987,31 @@ BEGIN
   VALUES (p_admin_id, p_payment_id, 'rejected', p_notes);
 
   RETURN v_user_id;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 4.11b prepare_account_deletion(p_user_id)
+-- E5: Run before auth.admin.deleteUser(p_user_id). Detaches the user's
+-- payment_submissions from admin_action_log (the RESTRICT FK would otherwise
+-- block the cascade delete from auth.users -> profiles -> payment_submissions),
+-- and writes an 'account_deleted' audit row (admin_id NULL — self-service).
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.prepare_account_deletion(p_user_id UUID)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE public.admin_action_log
+  SET    payment_id = NULL
+  WHERE  payment_id IN (
+    SELECT id FROM public.payment_submissions WHERE user_id = p_user_id
+  );
+
+  INSERT INTO public.admin_action_log (admin_id, target_user_id, action, notes)
+  VALUES (NULL, p_user_id, 'account_deleted', 'Self-service account deletion');
 END;
 $$;
 
@@ -1499,6 +1569,8 @@ REVOKE EXECUTE ON FUNCTION public.downgrade_expired_pro()                       
 REVOKE EXECUTE ON FUNCTION public.claim_referral(uuid, uuid, text, text, integer) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.claim_self_referral_event(uuid, text, integer, text, uuid) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.verify_app_review(uuid, uuid, boolean, integer, text) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.admin_grant_credits(uuid, uuid, integer, text)  FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.prepare_account_deletion(uuid)                  FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.deduct_credit(uuid)                             TO service_role;
 GRANT EXECUTE ON FUNCTION public.grant_credits(uuid, integer)                    TO service_role;
@@ -1510,6 +1582,8 @@ GRANT EXECUTE ON FUNCTION public.ensure_profile(uuid)                           
 GRANT EXECUTE ON FUNCTION public.claim_referral(uuid, uuid, text, text, integer)  TO service_role;
 GRANT EXECUTE ON FUNCTION public.claim_self_referral_event(uuid, text, integer, text, uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.verify_app_review(uuid, uuid, boolean, integer, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.admin_grant_credits(uuid, uuid, integer, text)  TO service_role;
+GRANT EXECUTE ON FUNCTION public.prepare_account_deletion(uuid)                  TO service_role;
 -- pro_monthly_credit_refresh / downgrade_expired_pro are called by pg_cron
 -- (postgres role) — no service_role grant needed;
 
@@ -1766,6 +1840,23 @@ SELECT cron.schedule(
 
 
 -- =============================================================================
+-- E1: REALTIME — payment status notifications
+-- Adds payment_submissions to the supabase_realtime publication so the client
+-- can subscribe to postgres_changes (UPDATE) scoped by RLS to the caller's own
+-- rows ("payment_submissions: users read own", §5). Idempotent.
+-- =============================================================================
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_publication_tables
+    WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'payment_submissions'
+  ) THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE public.payment_submissions;
+  END IF;
+END $$;
+
+
+-- =============================================================================
 -- BACKEND DEV NOTES
 -- =============================================================================
 --
@@ -1794,7 +1885,19 @@ SELECT cron.schedule(
 --   1. UPDATE payment_submissions SET status='verified', verified_by=adminId, verified_at=now()
 --   2. UPDATE profiles SET subscription_tier='pro', subscription_expires_at=<30d from now>
 --   3. INSERT INTO admin_action_log (admin_id, payment_id, action, notes)
---   Enable Realtime on payment_submissions in Supabase Dashboard for live student notifications.
+--   Realtime is enabled on payment_submissions (see "E1: REALTIME" above) — the
+--   client subscribes to postgres_changes for live approve/reject notifications.
+--
+-- E4 ADMIN CREDIT GRANT PATTERN (service-role client only)
+--   admin.rpc('admin_grant_credits', { p_admin_id, p_target_user_id, p_amount, p_notes })
+--   Atomic grant_credits() + admin_action_log insert (action='credit_grant').
+--
+-- E5 ACCOUNT DELETION PATTERN (service-role client only)
+--   1. admin.rpc('prepare_account_deletion', { p_user_id })
+--   2. admin.auth.admin.deleteUser(p_user_id)
+--   Step 1 detaches admin_action_log.payment_id (RESTRICT) and writes the
+--   'account_deleted' audit row; step 2 cascades through every FK (profiles,
+--   decks, flashcards, quiz_*, payment_submissions, referral_events, app_reviews).
 --
 -- ADDING A NEW ADMIN
 --   Via service-role client or Supabase SQL Editor only:

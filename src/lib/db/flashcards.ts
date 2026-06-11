@@ -109,6 +109,157 @@ export async function insertReinforcementCardsAndCharge(
   };
 }
 
+/**
+ * Recompute and persist decks.card_count from the actual flashcards row count
+ * (D1 manual card CRUD). A single-statement read-then-write through the
+ * session client; decks RLS ("users crud own", FOR ALL) scopes the update to
+ * the caller's own deck. Recomputing from source of truth (rather than +1/-1)
+ * keeps this self-correcting even under concurrent edits.
+ */
+export async function recomputeDeckCardCount(deckId: string): Promise<number> {
+  const supabase = await createSessionClient();
+  const { count, error: countError } = await supabase
+    .from(TableNames.flashcards)
+    .select("id", { count: "exact", head: true })
+    .eq("deck_id", deckId);
+  if (countError) throw toDbError(countError, "Failed to update deck.");
+
+  const { error: updateError } = await supabase
+    .from(TableNames.decks)
+    .update({ card_count: count ?? 0 })
+    .eq("id", deckId);
+  if (updateError) throw toDbError(updateError, "Failed to update deck.");
+
+  return count ?? 0;
+}
+
+export interface NewFlashcardInput {
+  front:     string;
+  back:      string;
+  tags?:     string[];
+  category?: string;
+}
+
+/**
+ * Insert a single user-authored card into a deck (D1) and resync card_count.
+ * The deck's existence/ownership and tier card-cap are checked by the route
+ * before calling this — RLS additionally scopes the insert to the caller.
+ */
+export async function createFlashcard(
+  deckId: string,
+  userId: string,
+  input: NewFlashcardInput
+): Promise<{ card: Flashcard; cardCount: number }> {
+  const front = input.front.trim();
+  const back = input.back.trim();
+  const tags = input.tags ?? [];
+  const category = (input.category ?? "").trim() || "General";
+
+  if (!front) throw dbError(ApiErrorCode.VALIDATION_ERROR, "Card front is required.");
+  if (!back) throw dbError(ApiErrorCode.VALIDATION_ERROR, "Card back is required.");
+  ensureMaxLength(front, Validation.flashcard.frontMaxLength, "Card front");
+  ensureMaxLength(back, Validation.flashcard.backMaxLength, "Card back");
+  ensureMaxLength(category, Validation.flashcard.categoryMaxLength, "Category");
+  ensureMaxItems(tags, Validation.flashcard.maxTags, "Card tags");
+  for (const tag of tags) {
+    ensureMaxLength(tag, Validation.flashcard.tagMaxLength, "Tag");
+  }
+
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase
+    .from(TableNames.flashcards)
+    .insert({
+      deck_id:  deckId,
+      user_id:  userId,
+      front,
+      back,
+      tags,
+      category,
+    })
+    .select("*")
+    .single();
+  if (error) throw toDbError(error, "Failed to create flashcard.");
+
+  const cardCount = await recomputeDeckCardCount(deckId);
+  return { card: data as Flashcard, cardCount };
+}
+
+export interface FlashcardEdits {
+  front?:    string;
+  back?:     string;
+  tags?:     string[];
+  category?: string;
+}
+
+/**
+ * Edit a card's front/back/tags/category (D1). Plain session-client update —
+ * flashcards RLS ("users crud own") scopes the write to the caller's card.
+ * Returns null if the card doesn't exist or isn't owned by the caller.
+ */
+export async function updateFlashcard(cardId: string, edits: FlashcardEdits): Promise<Flashcard | null> {
+  const payload: Record<string, string | string[]> = {};
+
+  if (edits.front !== undefined) {
+    const front = edits.front.trim();
+    if (!front) throw dbError(ApiErrorCode.VALIDATION_ERROR, "Card front is required.");
+    ensureMaxLength(front, Validation.flashcard.frontMaxLength, "Card front");
+    payload.front = front;
+  }
+  if (edits.back !== undefined) {
+    const back = edits.back.trim();
+    if (!back) throw dbError(ApiErrorCode.VALIDATION_ERROR, "Card back is required.");
+    ensureMaxLength(back, Validation.flashcard.backMaxLength, "Card back");
+    payload.back = back;
+  }
+  if (edits.category !== undefined) {
+    const category = edits.category.trim() || "General";
+    ensureMaxLength(category, Validation.flashcard.categoryMaxLength, "Category");
+    payload.category = category;
+  }
+  if (edits.tags !== undefined) {
+    ensureMaxItems(edits.tags, Validation.flashcard.maxTags, "Card tags");
+    for (const tag of edits.tags) {
+      ensureMaxLength(tag, Validation.flashcard.tagMaxLength, "Tag");
+    }
+    payload.tags = edits.tags;
+  }
+
+  if (Object.keys(payload).length === 0) {
+    throw dbError(ApiErrorCode.VALIDATION_ERROR, "No changes provided.");
+  }
+
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase
+    .from(TableNames.flashcards)
+    .update(payload)
+    .eq("id", cardId)
+    .select("*")
+    .maybeSingle();
+  if (error) throw toDbError(error, "Failed to update flashcard.");
+  return (data as Flashcard) ?? null;
+}
+
+/**
+ * Delete a single card (D1) and resync the parent deck's card_count.
+ * Returns the deleted card's deck_id, or null if the card doesn't exist or
+ * isn't owned by the caller (flashcards RLS scopes the delete).
+ */
+export async function deleteFlashcard(cardId: string): Promise<{ deckId: string; cardCount: number } | null> {
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase
+    .from(TableNames.flashcards)
+    .delete()
+    .eq("id", cardId)
+    .select("deck_id")
+    .maybeSingle();
+  if (error) throw toDbError(error, "Failed to delete flashcard.");
+  if (!data) return null;
+
+  const deckId = (data as { deck_id: string }).deck_id;
+  const cardCount = await recomputeDeckCardCount(deckId);
+  return { deckId, cardCount };
+}
+
 /** Every card in a deck (deck viewer / quiz question source). */
 export async function getFlashcardsForDeck(deckId: string): Promise<Flashcard[]> {
   const supabase = await createSessionClient();

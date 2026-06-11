@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Lora, DM_Sans } from "next/font/google";
 import { App } from "@/lib/contracts";
+import PaymentNotifications from "./PaymentNotifications";
 import "./globals.css";
 
 const lora = Lora({
@@ -33,6 +34,7 @@ export default function RootLayout({
         style={{ fontFamily: "var(--font-dm-sans), sans-serif" }}
       >
         {children}
+        <PaymentNotifications />
         <div
           style={{
             position: "fixed",
