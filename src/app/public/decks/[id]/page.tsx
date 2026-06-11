@@ -2,44 +2,30 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { authHeaders } from "@/lib/api/auth-headers";
 import {
   ApiPaths,
   App,
-  GenerationMode,
-  ReferralCaps,
-  ReferralEventType,
   Routes,
-  SubscriptionTier,
-  TableNames,
   UIMessages,
-  type ApiResponse,
   type Deck,
   type Flashcard,
-  type ShareDeckResult,
 } from "@/lib/contracts";
 
-interface MinProfile {
-  token_balance: number;
-  full_name: string | null;
-  subscription_tier: (typeof SubscriptionTier)[keyof typeof SubscriptionTier];
-}
-
-export default function DeckDetailPage() {
+/**
+ * Read-only public deck viewer (B5) — no auth required. Fetches via
+ * GET /api/public/decks/[id], which is backed by the "anyone read public" RLS
+ * policies (schema §5). No quiz, no edit — just browse the cards.
+ */
+export default function PublicDeckPage() {
   const params = useParams();
   const deckId = Array.isArray(params.id) ? params.id[0] : (params.id as string);
 
-  const [profile, setProfile] = useState<MinProfile | null>(null);
   const [deck, setDeck] = useState<Deck | null>(null);
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [currentIdx, setCurrentIdx] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [sharing, setSharing] = useState(false);
-  const [shareMessage, setShareMessage] = useState("");
-  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -49,44 +35,26 @@ export default function DeckDetailPage() {
 
     async function load() {
       try {
-      const supabase = getSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        window.location.replace(Routes.login);
-        return;
-      }
+        const res = await fetch(ApiPaths.publicDeck(deckId));
+        const data = (await res.json()) as {
+          success: boolean;
+          deck?: Deck;
+          cards?: Flashcard[];
+          error?: { message: string };
+        };
 
-      // Profile stays a direct (RLS-scoped) read — no profile API route exists.
-      // Deck + cards now come from GET /api/decks/[id] (cookie-auth; the route
-      // enforces ownership server-side and 404s for non-owned/missing decks).
-      const [profileRes, deckRes] = await Promise.all([
-        supabase
-          .from(TableNames.profiles)
-          .select("token_balance, full_name, subscription_tier")
-          .eq("id", user.id)
-          .single(),
-        fetch(ApiPaths.deck(deckId)),
-      ]);
+        if (!data.success || !data.deck) {
+          setError("This deck isn't public, or it doesn't exist.");
+          setLoading(false);
+          return;
+        }
 
-      const deckJson = (await deckRes.json()) as {
-        success: boolean;
-        deck?: Deck;
-        cards?: Flashcard[];
-        error?: { message: string };
-      };
-
-      if (!deckJson.success || !deckJson.deck) {
-        setError("Deck not found or you don't have access to it.");
+        setDeck(data.deck);
+        setCards(data.cards ?? []);
         setLoading(false);
-        return;
-      }
-
-      setProfile(profileRes.data);
-      setDeck(deckJson.deck);
-      setCards(deckJson.cards ?? []);
-      setLoading(false);
+      } catch {
+        setError("Failed to load deck. Check your connection and try again.");
+        setLoading(false);
       } finally {
         clearTimeout(timeout);
       }
@@ -98,38 +66,6 @@ export default function DeckDetailPage() {
   function goTo(idx: number) {
     setCurrentIdx(idx);
     setIsFlipped(false);
-  }
-
-  async function toggleShare() {
-    if (!deck) return;
-    setSharing(true);
-    setShareMessage("");
-    try {
-      const res = await fetch(ApiPaths.deckShare(deckId), {
-        method: deck.is_public ? "DELETE" : "POST",
-        headers: await authHeaders(),
-      });
-      const data = (await res.json()) as ApiResponse<ShareDeckResult>;
-      if (!data.success) {
-        setShareMessage(data.error.message);
-        return;
-      }
-      setDeck((d) => d ? { ...d, is_public: data.isPublic } : d);
-      if (data.creditsAwarded > 0) {
-        setShareMessage(`Deck shared! +${data.creditsAwarded} credits earned.`);
-      }
-    } catch {
-      setShareMessage(UIMessages.genericError);
-    } finally {
-      setSharing(false);
-    }
-  }
-
-  async function copyShareLink() {
-    if (typeof window === "undefined") return;
-    await navigator.clipboard.writeText(`${window.location.origin}${Routes.publicDeck(deckId)}`);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
   }
 
   const card = cards[currentIdx] ?? null;
@@ -167,12 +103,13 @@ export default function DeckDetailPage() {
           fontFamily: "var(--font-dm-sans, sans-serif)",
         }}
       >
+        <span style={{ fontSize: 48 }}>🦫</span>
         <p style={{ color: "#8A6E52", fontSize: 15 }}>{error || "Deck not found."}</p>
         <a
-          href={Routes.dashboard}
+          href={Routes.home}
           style={{ color: "#C47A2E", textDecoration: "none", fontWeight: 600, fontSize: 14 }}
         >
-          ← Back to Dashboard
+          ← Back to {App.name}
         </a>
       </main>
     );
@@ -207,14 +144,10 @@ export default function DeckDetailPage() {
             justifyContent: "space-between",
           }}
         >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <a
-              href={Routes.dashboard}
-              style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
-            >
-              <span style={{ fontSize: 14, color: "#C49A6C" }}>← Back</span>
-            </a>
-            <span style={{ color: "#4A2512", margin: "0 8px" }}>|</span>
+          <a
+            href={Routes.home}
+            style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
+          >
             <span style={{ fontSize: 24 }}>🦫</span>
             <span
               style={{
@@ -226,264 +159,31 @@ export default function DeckDetailPage() {
             >
               {App.name}
             </span>
-          </div>
-
-          {profile && (
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  background: "#4A2512",
-                  border: "1px solid rgba(196,122,46,0.3)",
-                  borderRadius: 20,
-                  padding: "5px 14px",
-                }}
-              >
-                <span style={{ fontSize: 14 }}>🪙</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#D4954A" }}>
-                  {profile.token_balance} credits
-                </span>
-              </div>
-              {profile.full_name && (
-                <span style={{ fontSize: 13, color: "#C49A6C" }}>
-                  {profile.full_name.split(" ")[0]}
-                </span>
-              )}
-            </div>
-          )}
+          </a>
+          <span style={{ fontSize: 13, color: "#C49A6C" }}>Shared deck</span>
         </div>
       </nav>
 
       {/* ── CONTENT ── */}
       <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 24px" }}>
-
         {/* Deck header */}
         <div style={{ marginBottom: 24 }}>
-          <div
+          <h1
             style={{
-              display: "flex",
-              alignItems: "flex-start",
-              justifyContent: "space-between",
-              gap: 16,
-              flexWrap: "wrap",
+              fontFamily: "var(--font-lora, serif)",
+              fontSize: 28,
+              fontWeight: 700,
+              color: "#2E1A0C",
+              marginBottom: 6,
+              lineHeight: 1.25,
             }}
           >
-            <div>
-              <h1
-                style={{
-                  fontFamily: "var(--font-lora, serif)",
-                  fontSize: 28,
-                  fontWeight: 700,
-                  color: "#2E1A0C",
-                  marginBottom: 6,
-                  lineHeight: 1.25,
-                }}
-              >
-                {deck.title}
-                {deck.generation_mode === GenerationMode.DEEP_DIVE && (
-                  <span
-                    style={{
-                      marginLeft: 10,
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: "0.06em",
-                      textTransform: "uppercase",
-                      color: "#C47A2E",
-                      background: "rgba(196,122,46,0.15)",
-                      borderRadius: 6,
-                      padding: "3px 8px",
-                      verticalAlign: "middle",
-                    }}
-                  >
-                    Deep Dive
-                  </span>
-                )}
-              </h1>
-              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 13, color: "#8A6E52" }}>
-                  {total} {total === 1 ? "card" : "cards"}
-                </span>
-                {deck.source_filename && (
-                  <>
-                    <span style={{ color: "#E0C9A8" }}>·</span>
-                    <span
-                      style={{
-                        fontSize: 13,
-                        color: "#8A6E52",
-                        maxWidth: 240,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      {deck.source_filename}
-                    </span>
-                  </>
-                )}
-              </div>
-            </div>
-
-            {total > 0 && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                {profile?.subscription_tier === SubscriptionTier.PRO ? (
-                  <a
-                    href={ApiPaths.deckExport(deckId)}
-                    download
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 8,
-                      background: "#FFFCF7",
-                      border: "1.5px solid #E0C9A8",
-                      color: "#2E1A0C",
-                      padding: "10px 20px",
-                      borderRadius: 10,
-                      fontWeight: 600,
-                      fontSize: 14,
-                      textDecoration: "none",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    Export PDF
-                  </a>
-                ) : (
-                  <a
-                    href={Routes.upgrade}
-                    title={UIMessages.proFeatureLocked}
-                    style={{
-                      display: "inline-flex",
-                      alignItems: "center",
-                      gap: 8,
-                      background: "#FFFCF7",
-                      border: "1.5px solid #E0C9A8",
-                      color: "#B7A28A",
-                      padding: "10px 20px",
-                      borderRadius: 10,
-                      fontWeight: 600,
-                      fontSize: 14,
-                      textDecoration: "none",
-                      whiteSpace: "nowrap",
-                    }}
-                  >
-                    Export PDF (Pro)
-                  </a>
-                )}
-
-                <a
-                  href={Routes.quiz(deckId)}
-                  style={{
-                    display: "inline-flex",
-                    alignItems: "center",
-                    gap: 8,
-                    background: "#C47A2E",
-                    color: "#FAF2E4",
-                    padding: "11px 24px",
-                    borderRadius: 10,
-                    fontWeight: 600,
-                    fontSize: 14,
-                    textDecoration: "none",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  Start Quiz →
-                </a>
-              </div>
-            )}
-          </div>
+            {deck.title}
+          </h1>
+          <span style={{ fontSize: 13, color: "#8A6E52" }}>
+            {total} {total === 1 ? "card" : "cards"} · shared by a {App.name} user
+          </span>
         </div>
-
-        {/* Share / public link (B4 deck_share + B5 public decks) */}
-        {deck && (
-          <div
-            style={{
-              background: "#FFFCF7",
-              border: "1.5px solid #E0C9A8",
-              borderRadius: 10,
-              padding: "14px 16px",
-              marginBottom: 16,
-              display: "flex",
-              flexDirection: "column",
-              gap: 10,
-            }}
-          >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
-              <div>
-                <p style={{ fontSize: 13, fontWeight: 600, color: "#2E1A0C", margin: "0 0 2px" }}>
-                  {deck.is_public ? "This deck is public" : "Share this deck"}
-                </p>
-                <p style={{ fontSize: 12, color: "#8A6E52", margin: 0 }}>
-                  {deck.is_public
-                    ? "Anyone with the link can view (read-only)."
-                    : `Share publicly to let others view it. Decks with ≥${(ReferralCaps[ReferralEventType.DECK_SHARE] as { minCards: number }).minCards} cards earn +${ReferralCaps[ReferralEventType.DECK_SHARE].creditsAwarded} credits (once per deck).`}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={toggleShare}
-                disabled={sharing}
-                style={{
-                  background: deck.is_public ? "#FFFCF7" : "#C47A2E",
-                  border: deck.is_public ? "1.5px solid #E0C9A8" : "none",
-                  color: deck.is_public ? "#8A6E52" : "#FAF2E4",
-                  padding: "8px 16px",
-                  borderRadius: 8,
-                  fontSize: 13,
-                  fontWeight: 600,
-                  cursor: sharing ? "not-allowed" : "pointer",
-                  fontFamily: "var(--font-dm-sans, sans-serif)",
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {sharing ? "…" : deck.is_public ? "Make private" : "Make public"}
-              </button>
-            </div>
-
-            {deck.is_public && (
-              <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <code
-                  style={{
-                    fontSize: 12,
-                    color: "#2E1A0C",
-                    background: "#FAF2E4",
-                    border: "1px solid #E0C9A8",
-                    borderRadius: 6,
-                    padding: "6px 10px",
-                    flex: 1,
-                    minWidth: 200,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {Routes.publicDeck(deckId)}
-                </code>
-                <button
-                  type="button"
-                  onClick={copyShareLink}
-                  style={{
-                    background: copied ? "#5C7A35" : "#FFFCF7",
-                    border: "1.5px solid #E0C9A8",
-                    color: copied ? "#FAF2E4" : "#2E1A0C",
-                    padding: "6px 14px",
-                    borderRadius: 8,
-                    fontSize: 12,
-                    fontWeight: 600,
-                    cursor: "pointer",
-                    fontFamily: "var(--font-dm-sans, sans-serif)",
-                  }}
-                >
-                  {copied ? "✓ Copied!" : "Copy link"}
-                </button>
-              </div>
-            )}
-
-            {shareMessage && (
-              <p style={{ fontSize: 12, color: "#5C7A35", fontWeight: 600, margin: 0 }}>{shareMessage}</p>
-            )}
-          </div>
-        )}
 
         {/* AI disclaimer — required on every generated deck page */}
         <div
@@ -775,13 +475,13 @@ export default function DeckDetailPage() {
               </button>
             </div>
 
-            {/* Quiz CTA — bottom */}
+            {/* Sign-up CTA — bottom */}
             <div style={{ textAlign: "center", marginTop: 36, paddingTop: 28, borderTop: "1px solid #E0C9A8" }}>
               <p style={{ fontSize: 14, color: "#8A6E52", marginBottom: 14 }}>
-                Feeling ready? Test yourself on all {total} cards.
+                Want to make your own flashcards from your notes?
               </p>
               <a
-                href={Routes.quiz(deckId)}
+                href={Routes.signup}
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -795,7 +495,7 @@ export default function DeckDetailPage() {
                   textDecoration: "none",
                 }}
               >
-                🎯 Start Quiz
+                Try {App.name} →
               </a>
             </div>
           </>

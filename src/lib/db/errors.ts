@@ -36,6 +36,7 @@ const STATUS_BY_CODE: Record<ApiErrorCode, number> = {
   [ApiErrorCode.SELF_REFERRAL]: 400,
   [ApiErrorCode.INVALID_REFERENCE_NUMBER]: 400,
   [ApiErrorCode.PAYMENT_ALREADY_PENDING]: 409,
+  [ApiErrorCode.REVIEW_ALREADY_SUBMITTED]: 409,
   [ApiErrorCode.AI_UNAVAILABLE]: 503,
   [ApiErrorCode.EXTRACTION_FAILED]: 422,
   [ApiErrorCode.VALIDATION_ERROR]: 400,
@@ -139,6 +140,14 @@ export function toDbError(
     // grant_credits() target row missing — a server-side inconsistency, not user error.
     return internalError(error, "Account not found.");
   }
+  if (msg.startsWith("DECK_NOT_FOUND")) {
+    // insert_reinforcement_cards_and_charge(): deck missing or owned by another user.
+    return new DbError(ApiErrorCode.FORBIDDEN, 404, "Deck not found.");
+  }
+  if (msg.startsWith("NO_CARDS")) {
+    // insert_reinforcement_cards_and_charge(): empty cards array reached the DB.
+    return dbError(ApiErrorCode.VALIDATION_ERROR, "No reinforcement cards to insert.");
+  }
 
   // --- SQLSTATE constraint violations ---------------------------------------
   // Constraint/index names may appear in message or details — scan both here.
@@ -161,6 +170,14 @@ export function toDbError(
       if (raw.includes("ux_referral_signup_once_per_referred")) {
         // AUDIT 2.1: duplicate signup attribution caught by the partial unique index.
         return dbError(ApiErrorCode.VALIDATION_ERROR, "You have already used a referral code.");
+      }
+      if (raw.includes("ux_referral_deck_share_once_per_deck")) {
+        // claim_self_referral_event(): this deck already earned its one-time deck_share credit.
+        return dbError(ApiErrorCode.VALIDATION_ERROR, "This deck has already earned a sharing reward.");
+      }
+      if (raw.includes("one_review_per_user")) {
+        // app_reviews insert: user already has a review row (any status).
+        return dbError(ApiErrorCode.REVIEW_ALREADY_SUBMITTED, "You've already submitted a review.");
       }
       return dbError(ApiErrorCode.VALIDATION_ERROR, "That record already exists.");
     }

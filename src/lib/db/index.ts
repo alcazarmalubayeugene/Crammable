@@ -18,7 +18,7 @@
 export { DbError, dbError, toDbError } from "@/lib/db/errors";
 
 // Credit / referral RPCs
-export { deductCredit, grantCredits, checkReferralCap, claimReferral } from "@/lib/db/rpc";
+export { deductCredit, grantCredits, checkReferralCap, claimReferral, claimSelfReferralEvent } from "@/lib/db/rpc";
 
 // Rate limiting
 export { checkRateLimit, enforceRateLimit } from "@/lib/db/rate-limit";
@@ -39,6 +39,8 @@ export {
   countDecksForUser,
   deleteDeck,
   createDeckWithCardsAndCharge,
+  setDeckPublic,
+  getPublicDeckWithCards,
   type NewDeckInput,
 } from "@/lib/db/decks";
 
@@ -48,12 +50,15 @@ export {
   getFlashcardsForDeck,
   getWeakCardsForDeck,
   applyCardReview,
+  insertReinforcementCardsAndCharge,
 } from "@/lib/db/flashcards";
 
 // Quiz
 export {
   createQuizSession,
   submitQuizResult,
+  getQuizSession,
+  markLivingDeckRefreshTriggered,
   type NewQuizSessionInput,
 } from "@/lib/db/quiz";
 
@@ -68,9 +73,17 @@ export {
   listReferralEventsForCurrentUser,
 } from "@/lib/db/referrals";
 
+// App reviews (B4)
+export {
+  createAppReview,
+  getOwnAppReview,
+} from "@/lib/db/reviews";
+
 // Admin payment verification
 export {
   listPendingPayments,
   approvePayment,
   rejectPayment,
+  listPendingAppReviews,
+  verifyAppReview,
 } from "@/lib/db/admin";

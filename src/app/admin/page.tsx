@@ -12,11 +12,16 @@ import {
   Routes,
   TableNames,
   UIMessages,
+  ReferralCaps,
+  ReferralEventType,
   Validation,
+  type AdminAppReviewRow,
   type AdminPaymentRow,
   type ApiResponse,
   type ApprovePaymentRequest,
   type RejectPaymentRequest,
+  type VerifyReviewRequest,
+  type VerifyReviewResult,
 } from "@/lib/contracts";
 
 type ActionState = "idle" | "approving" | "rejecting";
@@ -30,6 +35,15 @@ interface RowState {
 
 function emptyRowState(): RowState {
   return { actionState: "idle", rejectNote: "", showRejectForm: false, error: "" };
+}
+
+interface ReviewRowState {
+  actionState: "idle" | "verifying";
+  error: string;
+}
+
+function emptyReviewRowState(): ReviewRowState {
+  return { actionState: "idle", error: "" };
 }
 
 function minutesToLabel(mins: number): string {
@@ -46,6 +60,8 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
+  const [reviews, setReviews] = useState<AdminAppReviewRow[]>([]);
+  const [reviewRowStates, setReviewRowStates] = useState<Record<string, ReviewRowState>>({});
 
   useEffect(() => {
     async function load() {
@@ -86,6 +102,19 @@ export default function AdminPage() {
       const states: Record<string, RowState> = {};
       rows.forEach((r) => { states[r.id] = emptyRowState(); });
       setRowStates(states);
+
+      const reviewsRes = await fetch(ApiPaths.adminReviews, {
+        headers: await authHeaders(),
+      });
+      if (reviewsRes.ok) {
+        const reviewsData = await reviewsRes.json();
+        const reviewRows: AdminAppReviewRow[] = reviewsData.reviews ?? [];
+        setReviews(reviewRows);
+        const reviewStates: Record<string, ReviewRowState> = {};
+        reviewRows.forEach((r) => { reviewStates[r.id] = emptyReviewRowState(); });
+        setReviewRowStates(reviewStates);
+      }
+
       setLoading(false);
     }
     load();
@@ -93,6 +122,32 @@ export default function AdminPage() {
 
   function setRow(id: string, patch: Partial<RowState>) {
     setRowStates((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  }
+
+  function setReviewRow(id: string, patch: Partial<ReviewRowState>) {
+    setReviewRowStates((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  }
+
+  async function verifyReview(reviewId: string, approve: boolean) {
+    setReviewRow(reviewId, { actionState: "verifying", error: "" });
+    try {
+      const res = await fetch(ApiPaths.adminVerifyReview, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await authHeaders()),
+        } as HeadersInit,
+        body: JSON.stringify({ reviewId, approve } satisfies VerifyReviewRequest),
+      });
+      const data = (await res.json()) as ApiResponse<VerifyReviewResult>;
+      if (!data.success) {
+        setReviewRow(reviewId, { actionState: "idle", error: data.error.message });
+        return;
+      }
+      setReviews((prev) => prev.filter((r) => r.id !== reviewId));
+    } catch {
+      setReviewRow(reviewId, { actionState: "idle", error: UIMessages.genericError });
+    }
   }
 
   async function approve(payment: AdminPaymentRow) {
@@ -375,6 +430,70 @@ export default function AdminPage() {
               ))}
             </div>
           </>
+        )}
+
+        {/* ── Pending app reviews (B4) ── */}
+        <h2 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 16, fontWeight: 700, color: "#2E1A0C", margin: "36px 0 12px" }}>
+          Pending Reviews
+        </h2>
+        {reviews.length === 0 ? (
+          <div style={{ background: "#FFFCF7", border: "1.5px dashed #E0C9A8", borderRadius: 16, padding: "32px 24px", textAlign: "center" }}>
+            <p style={{ color: "#8A6E52", fontSize: 14 }}>No pending reviews.</p>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {reviews.map((review) => {
+              const rs = reviewRowStates[review.id] ?? emptyReviewRowState();
+              const busy = rs.actionState !== "idle";
+              return (
+                <div
+                  key={review.id}
+                  style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 16, padding: "20px 22px" }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+                    <div>
+                      <p style={{ fontSize: 15, fontWeight: 600, color: "#2E1A0C", marginBottom: 2 }}>
+                        {review.userEmail}
+                      </p>
+                      <p style={{ fontSize: 13, color: "#C47A2E", margin: 0 }}>
+                        {"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}
+                      </p>
+                    </div>
+                    <span style={{ fontSize: 11, fontWeight: 700, background: "#FBF0E0", color: "#C47A2E", borderRadius: 20, padding: "3px 10px" }}>
+                      Pending
+                    </span>
+                  </div>
+
+                  <p style={{ fontSize: 14, color: "#2E1A0C", marginBottom: 14, whiteSpace: "pre-wrap" }}>
+                    {review.review_text}
+                  </p>
+
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => verifyReview(review.id, true)}
+                      style={{ background: "#5C7A35", color: "#FAF2E4", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 600, cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                    >
+                      {busy ? "…" : `✓ Approve (+${ReferralCaps[ReferralEventType.APP_REVIEW].creditsAwarded} credits)`}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => verifyReview(review.id, false)}
+                      style={{ background: "none", border: "1.5px solid #E0C9A8", borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 600, color: "#8A6E52", cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                    >
+                      ✗ Reject
+                    </button>
+                  </div>
+
+                  {rs.error && (
+                    <p style={{ fontSize: 12, color: "#EF4444", marginTop: 8 }}>{rs.error}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
     </main>

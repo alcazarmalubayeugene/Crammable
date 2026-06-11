@@ -1,6 +1,7 @@
 import {
   ApiErrorCode,
   ApiPaths,
+  GenerationMode,
   PdfType,
   SubscriptionTier,
   TierLimits,
@@ -97,10 +98,18 @@ export async function POST(request: Request): Promise<Response> {
 
     const maxCards = maxCardsForTier(profile.subscription_tier);
 
+    // Deep Dive (B2) is Pro-only — never trust the client's tier. A free user
+    // requesting deep_dive is silently downgraded to standard rather than
+    // erroring, since the request itself is otherwise valid.
+    const generationMode: GenerationMode =
+      body.generationMode === GenerationMode.DEEP_DIVE && TierLimits[profile.subscription_tier].deepDive
+        ? GenerationMode.DEEP_DIVE
+        : GenerationMode.STANDARD;
+
     let cards: Awaited<ReturnType<typeof generateFlashcardsFromText>>["cards"];
     let aiTitle: string | null = null;
     try {
-      const result = await generateFlashcardsFromText(extractedText, maxCards);
+      const result = await generateFlashcardsFromText(extractedText, maxCards, generationMode);
       cards = result.cards;
       aiTitle = result.title;
     } catch (err) {
@@ -134,7 +143,7 @@ export async function POST(request: Request): Promise<Response> {
       {
         userId: user.id,
         title,
-        generationMode: body.generationMode,
+        generationMode,
         pdfType,
       },
       cards,

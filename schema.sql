@@ -216,6 +216,10 @@ CREATE TABLE IF NOT EXISTS public.referral_events (
   credits_awarded INTEGER     NOT NULL CHECK (credits_awarded IN (3, 5, 10, 15)),
   verified        BOOLEAN     NOT NULL DEFAULT false,
   month_key       TEXT        NOT NULL CHECK (month_key ~ '^\d{4}-\d{2}$'),
+  -- B4: deck_share attributions reference the shared deck, so a deck can only
+  -- ever earn its reward once (see ux_referral_deck_share_once_per_deck, §2).
+  -- NULL for all other event types.
+  deck_id         UUID        REFERENCES public.decks(id) ON DELETE SET NULL,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -245,6 +249,29 @@ CREATE TABLE IF NOT EXISTS public.admin_action_log (
   action     TEXT        NOT NULL CHECK (action IN ('approved', 'rejected')),
   notes      TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------------------------------------------------------------------------
+-- 1.10 app_reviews
+-- B4: user-submitted in-app reviews ("Write a review" reward, +15 credits,
+-- ReferralCaps.app_review.requiresAdminVerification). Credits are NOT granted
+-- on insert — an admin verifies via verify_app_review() (§4.16), which inserts
+-- the corresponding referral_events row (verified=true) and grants credits.
+-- one_review_per_user enforces the lifetime cap of 1 from ReferralCaps.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.app_reviews (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID        NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  rating      INTEGER     NOT NULL CHECK (rating BETWEEN 1 AND 5),
+  review_text TEXT        NOT NULL CHECK (char_length(review_text) <= 1000),
+  status      TEXT        NOT NULL DEFAULT 'pending'
+                          CHECK (status IN ('pending', 'approved', 'rejected')),
+  reviewed_by UUID        REFERENCES public.profiles(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMPTZ,
+  admin_notes TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+  CONSTRAINT one_review_per_user UNIQUE (user_id)
 );
 
 
@@ -316,6 +343,12 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_referral_signup_once_per_referred
   ON public.referral_events (referred_id)
   WHERE event_type = 'signup' AND referred_id IS NOT NULL;
 
+-- B4: a deck can only ever earn the deck_share credit once, regardless of how
+-- many times it's toggled public/private.
+CREATE UNIQUE INDEX IF NOT EXISTS ux_referral_deck_share_once_per_deck
+  ON public.referral_events (deck_id)
+  WHERE event_type = 'deck_share' AND deck_id IS NOT NULL;
+
 -- rate_limit_log: hot-path — every rate-checked request hits this
 CREATE INDEX IF NOT EXISTS idx_rate_limit_log
   ON public.rate_limit_log (user_id, endpoint, requested_at DESC);
@@ -323,6 +356,11 @@ CREATE INDEX IF NOT EXISTS idx_rate_limit_log
 -- admin_action_log: payment audit trail
 CREATE INDEX IF NOT EXISTS idx_admin_action_log_payment
   ON public.admin_action_log (payment_id, created_at DESC);
+
+-- app_reviews: admin pending-review queue
+CREATE INDEX IF NOT EXISTS idx_app_reviews_status
+  ON public.app_reviews (status, created_at ASC)
+  WHERE status = 'pending';
 
 
 -- =============================================================================
@@ -1153,6 +1191,87 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 4.14c insert_reinforcement_cards_and_charge(p_user_id, p_deck_id, p_cards)
+-- Living Deck (TODO §8): atomic persistence of AI-generated reinforcement
+-- cards + card_count sync + 1-credit charge, in ONE transaction. Mirrors
+-- create_deck_with_cards_and_charge() (§4.14): if deduct_credit() raises
+-- INSUFFICIENT_CREDITS, the inserted cards and card_count bump roll back too —
+-- so a Living Deck refresh never leaves orphan reinforcement cards uncharged,
+-- and credits are never spent without cards landing.
+--
+-- SECURITY DEFINER (must call deduct_credit(), whose EXECUTE is revoked from
+-- authenticated — §4.15). Self-guarded: p_user_id must equal auth.uid(), and
+-- the deck must be owned by that same user. Called via the SESSION client.
+--
+-- p_cards is a JSONB array of { front, back, tags (text[]), category }, same
+-- shape as create_deck_with_cards_and_charge's p_cards. All inserted rows get
+-- is_reinforcement = true.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.insert_reinforcement_cards_and_charge(
+  p_user_id UUID,
+  p_deck_id UUID,
+  p_cards   JSONB
+)
+RETURNS TABLE (inserted_count INTEGER, credits_remaining INTEGER)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_owner     UUID;
+  v_inserted  INTEGER;
+  v_remaining INTEGER;
+BEGIN
+  IF p_user_id IS DISTINCT FROM auth.uid() THEN
+    RAISE EXCEPTION 'FORBIDDEN: cannot refresh a deck for another user';
+  END IF;
+
+  SELECT user_id INTO v_owner
+  FROM   public.decks
+  WHERE  id = p_deck_id
+  FOR UPDATE;
+
+  IF v_owner IS NULL THEN
+    RAISE EXCEPTION 'DECK_NOT_FOUND'
+      USING HINT = 'No deck with that id exists';
+  END IF;
+
+  IF v_owner IS DISTINCT FROM p_user_id THEN
+    RAISE EXCEPTION 'FORBIDDEN: cannot refresh a deck owned by another user';
+  END IF;
+
+  IF jsonb_array_length(p_cards) = 0 THEN
+    RAISE EXCEPTION 'NO_CARDS'
+      USING HINT = 'p_cards must contain at least one card';
+  END IF;
+
+  INSERT INTO public.flashcards (deck_id, user_id, front, back, tags, category, is_reinforcement)
+  SELECT p_deck_id,
+         p_user_id,
+         c->>'front',
+         c->>'back',
+         COALESCE(
+           (SELECT array_agg(t) FROM jsonb_array_elements_text(c->'tags') AS t),
+           '{}'::text[]
+         ),
+         COALESCE(c->>'category', ''),
+         true
+  FROM   jsonb_array_elements(p_cards) AS c;
+
+  GET DIAGNOSTICS v_inserted = ROW_COUNT;
+
+  UPDATE public.decks
+  SET    card_count = card_count + v_inserted
+  WHERE  id = p_deck_id;
+
+  -- Charge last: on INSUFFICIENT_CREDITS the whole tx (cards + card_count) rolls back.
+  v_remaining := public.deduct_credit(p_user_id);
+
+  RETURN QUERY SELECT v_inserted, v_remaining;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 4.14b claim_referral(p_referred_id, p_referrer_id, p_event_type, p_month_key, p_credits)
 -- SECURITY FIX (audit 2.1/A2): atomic, single-source referral attribution.
 -- Previously TWO non-transactional code paths (auth/callback auto-processing and
@@ -1225,6 +1344,127 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 4.14d claim_self_referral_event(p_user_id, p_event_type, p_credits, p_month_key, p_deck_id)
+-- B4: atomic self-earned reward (profile_complete, deck_share — "Ways to earn"
+-- on /rewards that are not referrer/referred attributions). Differs from
+-- claim_referral() (§4.14b): referrer_id = referred_id = p_user_id (the user
+-- grants the reward to themselves), no referred_by/SELF_REFERRAL checks, and
+-- both event types are auto-verified (verified = true). Reuses
+-- check_referral_cap() (§4.8) unchanged — it already covers profile_complete
+-- (lifetime cap 1) and deck_share (monthly cap 3); the
+-- ux_referral_deck_share_once_per_deck index (§2) additionally caps deck_share
+-- at once per deck.
+--
+-- SECURITY DEFINER (must call grant_credits(), EXECUTE revoked from
+-- authenticated). Self-guarded: p_user_id must equal auth.uid(). service_role
+-- only — called from a route handler via the admin client (like
+-- claim_referral), since it must call grant_credits().
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.claim_self_referral_event(
+  p_user_id    UUID,
+  p_event_type TEXT,
+  p_credits    INTEGER,
+  p_month_key  TEXT,
+  p_deck_id    UUID DEFAULT NULL
+)
+RETURNS INTEGER  -- new token_balance
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_new_balance INTEGER;
+BEGIN
+  IF p_event_type NOT IN ('profile_complete', 'deck_share') THEN
+    RAISE EXCEPTION 'INVALID_EVENT_TYPE: % is not a self-claimable event', p_event_type;
+  END IF;
+
+  IF p_event_type = 'deck_share' AND p_deck_id IS NULL THEN
+    RAISE EXCEPTION 'VALIDATION_ERROR: p_deck_id is required for deck_share';
+  END IF;
+
+  -- Lock the profile row so concurrent claims (e.g. double-click) serialise.
+  PERFORM 1 FROM public.profiles WHERE id = p_user_id FOR UPDATE;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'USER_NOT_FOUND: no profile with id %', p_user_id;
+  END IF;
+
+  IF NOT public.check_referral_cap(p_user_id, p_event_type, p_month_key) THEN
+    RAISE EXCEPTION 'REFERRAL_CAP_REACHED'
+      USING HINT = 'You have reached the limit for this reward';
+  END IF;
+
+  INSERT INTO public.referral_events
+    (referrer_id, referred_id, event_type, credits_awarded, verified, month_key, deck_id)
+  VALUES
+    (p_user_id, p_user_id, p_event_type, p_credits, true, p_month_key, p_deck_id);
+
+  v_new_balance := public.grant_credits(p_user_id, p_credits);
+
+  RETURN v_new_balance;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
+-- 4.16 verify_app_review(p_admin_id, p_review_id, p_approve, p_credits, p_notes)
+-- B4: atomic admin verification of an app_reviews row, mirroring
+-- approve_payment()/reject_payment() (§4.10-4.11): claims the row
+-- (status='pending' guard — concurrent admin gets ALREADY_PROCESSED), then on
+-- approve inserts the referral_events ledger row (verified=true,
+-- event_type='app_review', referrer_id=referred_id=user_id) and calls
+-- grant_credits() — both atomic with the status flip. On reject, just flips
+-- status (no credit). p_credits is passed in from contracts.ts
+-- ReferralCaps.app_review.creditsAwarded rather than hardcoded.
+--
+-- service_role only (callers must gate behind requireAdmin first).
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.verify_app_review(
+  p_admin_id  UUID,
+  p_review_id UUID,
+  p_approve   BOOLEAN,
+  p_credits   INTEGER,
+  p_notes     TEXT DEFAULT NULL
+)
+RETURNS UUID  -- the reviewed user's id
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user_id UUID;
+BEGIN
+  UPDATE public.app_reviews
+  SET    status      = CASE WHEN p_approve THEN 'approved' ELSE 'rejected' END,
+         reviewed_by = p_admin_id,
+         reviewed_at = now(),
+         admin_notes = p_notes
+  WHERE  id     = p_review_id
+    AND  status = 'pending'
+  RETURNING user_id INTO v_user_id;
+
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'ALREADY_PROCESSED'
+      USING HINT = 'Review is not pending (already approved/rejected or missing)';
+  END IF;
+
+  IF p_approve THEN
+    IF p_credits <= 0 THEN
+      RAISE EXCEPTION 'INVALID_AMOUNT: p_credits must be greater than 0';
+    END IF;
+
+    INSERT INTO public.referral_events
+      (referrer_id, referred_id, event_type, credits_awarded, verified, month_key)
+    VALUES
+      (v_user_id, v_user_id, 'app_review', p_credits, true, to_char(now(), 'YYYY-MM'));
+
+    PERFORM public.grant_credits(v_user_id, p_credits);
+  END IF;
+
+  RETURN v_user_id;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 4.15 EXECUTE-privilege lockdown for service-role-only functions
 -- SECURITY FIX (P2-3): CREATE FUNCTION grants EXECUTE to PUBLIC by default, and
 -- Supabase additionally grants it to anon + authenticated — which exposed these
@@ -1257,6 +1497,8 @@ REVOKE EXECUTE ON FUNCTION public.ensure_profile(uuid)                          
 REVOKE EXECUTE ON FUNCTION public.pro_monthly_credit_refresh()                   FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.downgrade_expired_pro()                        FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.claim_referral(uuid, uuid, text, text, integer) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.claim_self_referral_event(uuid, text, integer, text, uuid) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.verify_app_review(uuid, uuid, boolean, integer, text) FROM PUBLIC, anon, authenticated;
 
 GRANT EXECUTE ON FUNCTION public.deduct_credit(uuid)                             TO service_role;
 GRANT EXECUTE ON FUNCTION public.grant_credits(uuid, integer)                    TO service_role;
@@ -1266,6 +1508,8 @@ GRANT EXECUTE ON FUNCTION public.approve_payment(uuid, uuid, text)              
 GRANT EXECUTE ON FUNCTION public.reject_payment(uuid, uuid, text, text)          TO service_role;
 GRANT EXECUTE ON FUNCTION public.ensure_profile(uuid)                            TO service_role;
 GRANT EXECUTE ON FUNCTION public.claim_referral(uuid, uuid, text, text, integer)  TO service_role;
+GRANT EXECUTE ON FUNCTION public.claim_self_referral_event(uuid, text, integer, text, uuid) TO service_role;
+GRANT EXECUTE ON FUNCTION public.verify_app_review(uuid, uuid, boolean, integer, text) TO service_role;
 -- pro_monthly_credit_refresh / downgrade_expired_pro are called by pg_cron
 -- (postgres role) — no service_role grant needed;
 
@@ -1280,6 +1524,7 @@ GRANT EXECUTE ON FUNCTION public.claim_referral(uuid, uuid, text, text, integer)
 -- deduct_credit() as owner, and the auth.uid() guard makes it safe.
 REVOKE EXECUTE ON FUNCTION public.submit_quiz_result(uuid, jsonb)                                          FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.create_deck_with_cards_and_charge(uuid, text, text, text, text, jsonb)   FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.insert_reinforcement_cards_and_charge(uuid, uuid, jsonb)                 FROM PUBLIC, anon;
 
 
 -- =============================================================================
@@ -1295,6 +1540,7 @@ ALTER TABLE public.payment_submissions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.referral_events     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rate_limit_log      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_action_log    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.app_reviews         ENABLE ROW LEVEL SECURITY;
 
 -- ---------------------------------------------------------------------------
 -- profiles
@@ -1324,6 +1570,16 @@ CREATE POLICY "decks: users crud own"
   USING    (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
 
+-- B5: anyone (including anon) can read decks marked public. Additive — the
+-- FOR ALL owner policy above already covers owner SELECT/INSERT/UPDATE/DELETE;
+-- this only ever grants extra SELECT access on is_public = true rows, so
+-- writes remain owner-only.
+DROP POLICY IF EXISTS "decks: anyone read public" ON public.decks;
+
+CREATE POLICY "decks: anyone read public"
+  ON public.decks FOR SELECT
+  USING (is_public = true);
+
 -- ---------------------------------------------------------------------------
 -- flashcards — full CRUD on own rows (user_id denormalised for performance)
 -- ---------------------------------------------------------------------------
@@ -1333,6 +1589,18 @@ CREATE POLICY "flashcards: users crud own"
   ON public.flashcards FOR ALL
   USING    (auth.uid() = user_id)
   WITH CHECK (auth.uid() = user_id);
+
+-- B5: anyone can read flashcards belonging to a public deck.
+DROP POLICY IF EXISTS "flashcards: anyone read of public deck" ON public.flashcards;
+
+CREATE POLICY "flashcards: anyone read of public deck"
+  ON public.flashcards FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.decks d
+      WHERE d.id = flashcards.deck_id AND d.is_public = true
+    )
+  );
 
 -- ---------------------------------------------------------------------------
 -- quiz_sessions — full CRUD on own rows
@@ -1422,6 +1690,32 @@ CREATE POLICY "admin_action_log: admins read all"
 
 CREATE POLICY "admin_action_log: admins insert"
   ON public.admin_action_log FOR INSERT
+  WITH CHECK (public.is_current_user_admin());
+
+-- ---------------------------------------------------------------------------
+-- app_reviews
+-- Users: insert and read their own. Admins: read all + update (verify workflow).
+-- ---------------------------------------------------------------------------
+DROP POLICY IF EXISTS "app_reviews: users insert own" ON public.app_reviews;
+DROP POLICY IF EXISTS "app_reviews: users read own"   ON public.app_reviews;
+DROP POLICY IF EXISTS "app_reviews: admins read all"  ON public.app_reviews;
+DROP POLICY IF EXISTS "app_reviews: admins update"    ON public.app_reviews;
+
+CREATE POLICY "app_reviews: users insert own"
+  ON public.app_reviews FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "app_reviews: users read own"
+  ON public.app_reviews FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "app_reviews: admins read all"
+  ON public.app_reviews FOR SELECT
+  USING (public.is_current_user_admin());
+
+CREATE POLICY "app_reviews: admins update"
+  ON public.app_reviews FOR UPDATE
+  USING    (public.is_current_user_admin())
   WITH CHECK (public.is_current_user_admin());
 
 

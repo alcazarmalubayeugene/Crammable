@@ -76,3 +76,29 @@ export async function submitQuizResult(
     scorePercent: Number(row?.score_percent ?? 0),
   };
 }
+
+/** Fetch a quiz session by id (RLS-scoped to its owner). Returns null if not found. */
+export async function getQuizSession(sessionId: string): Promise<QuizSession | null> {
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase
+    .from(TableNames.quizSessions)
+    .select("*")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (error) throw toDbError(error, "Failed to load quiz session.");
+  return (data as QuizSession | null) ?? null;
+}
+
+/**
+ * Stamp a quiz session as having triggered a Living Deck refresh. Plain
+ * session-client update — quiz_sessions RLS already permits an owner to
+ * update their own row (auth.uid() = user_id).
+ */
+export async function markLivingDeckRefreshTriggered(sessionId: string): Promise<void> {
+  const supabase = await createSessionClient();
+  const { error } = await supabase
+    .from(TableNames.quizSessions)
+    .update({ living_deck_refresh_triggered: true })
+    .eq("id", sessionId);
+  if (error) throw toDbError(error, "Failed to update quiz session.");
+}

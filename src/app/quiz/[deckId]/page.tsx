@@ -22,6 +22,9 @@ export interface QuizResultData {
   scorePercent:   number;
   correctCount:   number;
   totalQuestions: number;
+  livingDeckRefreshTriggered: boolean;
+  reinforcedCardCount?: number;
+  upsellMessage?: string;
   answers: Array<{
     front:      string;
     back:       string;
@@ -209,6 +212,9 @@ export default function QuizPage() {
         scorePercent?: number;
         correctCount?: number;
         totalQuestions?: number;
+        livingDeckRefreshTriggered?: boolean;
+        reinforcedCardCount?: number;
+        upsellMessage?: string;
         error?: { message: string };
       };
 
@@ -224,6 +230,9 @@ export default function QuizPage() {
         scorePercent:   data.scorePercent ?? 0,
         correctCount:   data.correctCount ?? 0,
         totalQuestions: data.totalQuestions ?? currentAnswers.length,
+        livingDeckRefreshTriggered: data.livingDeckRefreshTriggered ?? false,
+        reinforcedCardCount: data.reinforcedCardCount,
+        upsellMessage: data.upsellMessage,
         answers:        currentAnswers.map((a) => ({
           front:      a.front,
           back:       a.back,

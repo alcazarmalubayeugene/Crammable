@@ -101,3 +101,33 @@ export async function claimReferral(
   });
   if (error) throw toDbError(error, "Failed to claim referral.");
 }
+
+/**
+ * claim_self_referral_event() (schema §4.14d): atomic self-earned reward for
+ * the B4 "Ways to earn" methods that aren't referrer/referred attributions —
+ * profile_complete and deck_share. Records a verified=true referral_events row
+ * (referrer_id = referred_id = userId) and grants credits in one transaction.
+ * Returns the new token_balance.
+ *
+ * @throws {DbError} REFERRAL_CAP_REACHED (409) when the monthly/lifetime cap
+ *                   (or, for deck_share, the once-per-deck unique index) blocks
+ *                   another credit for this event type.
+ */
+export async function claimSelfReferralEvent(
+  userId: string,
+  eventType: typeof ReferralEventType.PROFILE_COMPLETE | typeof ReferralEventType.DECK_SHARE,
+  credits: number,
+  monthKey: string,
+  deckId?: string
+): Promise<number> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("claim_self_referral_event", {
+    p_user_id: userId,
+    p_event_type: eventType,
+    p_credits: credits,
+    p_month_key: monthKey,
+    p_deck_id: deckId ?? null,
+  });
+  if (error) throw toDbError(error, "Failed to grant reward.");
+  return data as number;
+}

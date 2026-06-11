@@ -1,12 +1,13 @@
 import { createSessionClient } from "@/lib/supabase/server";
 import {
+  ApiErrorCode,
   LivingDeck,
   TableNames,
   Validation,
   type Flashcard,
   type GeneratedCard,
 } from "@/lib/contracts";
-import { toDbError } from "@/lib/db/errors";
+import { dbError, toDbError } from "@/lib/db/errors";
 import { ensureMaxItems, ensureMaxLength } from "@/lib/db/validate";
 
 /**
@@ -57,6 +58,55 @@ export async function insertFlashcards(
     .select("*");
   if (error) throw toDbError(error, "Failed to save flashcards.");
   return (data as Flashcard[]) ?? [];
+}
+
+/**
+ * Insert Living Deck reinforcement cards and charge 1 credit, atomically, via
+ * insert_reinforcement_cards_and_charge() (schema §4.14c). Mirrors
+ * createDeckWithCardsAndCharge: if deduct_credit() raises INSUFFICIENT_CREDITS,
+ * the inserted cards and card_count bump roll back too — so a failed charge
+ * never leaves orphan reinforcement cards. Runs through the SESSION client
+ * (the function self-guards p_user_id = auth.uid() and the deck's ownership).
+ *
+ * @throws {DbError} FORBIDDEN (404, deck not found/not owned) ·
+ *   VALIDATION_ERROR (no cards) · INSUFFICIENT_CREDITS (402)
+ */
+export async function insertReinforcementCardsAndCharge(
+  userId: string,
+  deckId: string,
+  cards: GeneratedCard[]
+): Promise<{ insertedCount: number; creditsRemaining: number }> {
+  if (cards.length === 0) {
+    throw dbError(ApiErrorCode.VALIDATION_ERROR, "No reinforcement cards to insert.");
+  }
+
+  for (const card of cards) {
+    ensureMaxLength(card.front, Validation.flashcard.frontMaxLength, "Card front");
+    ensureMaxLength(card.back, Validation.flashcard.backMaxLength, "Card back");
+    ensureMaxItems(card.tags, Validation.flashcard.maxTags, "Card tags");
+    for (const tag of card.tags) {
+      ensureMaxLength(tag, Validation.flashcard.tagMaxLength, "Tag");
+    }
+  }
+
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase.rpc("insert_reinforcement_cards_and_charge", {
+    p_user_id: userId,
+    p_deck_id: deckId,
+    p_cards: cards.map((c) => ({
+      front: c.front,
+      back: c.back,
+      tags: c.tags,
+      category: c.category,
+    })),
+  });
+  if (error) throw toDbError(error, "Failed to save reinforcement cards.");
+
+  const row = Array.isArray(data) ? data[0] : data;
+  return {
+    insertedCount: Number(row?.inserted_count ?? 0),
+    creditsRemaining: Number(row?.credits_remaining ?? 0),
+  };
 }
 
 /** Every card in a deck (deck viewer / quiz question source). */

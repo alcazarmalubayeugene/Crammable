@@ -118,6 +118,7 @@ export const TableNames = {
   referralEvents:     "referral_events",
   rateLimitLog:       "rate_limit_log",
   adminActionLog:     "admin_action_log",
+  appReviews:         "app_reviews",
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -159,6 +160,9 @@ export const ApiPaths = {
   generate:            "/api/generate",
   decks:               "/api/decks",
   deck:                (id: string) => `/api/decks/${id}`,
+  deckShare:           (id: string) => `/api/decks/${id}/share`,
+  deckExport:          (id: string) => `/api/decks/${id}/export`,
+  publicDeck:          (id: string) => `/api/public/decks/${id}`,
   startQuiz:           (id: string) => `/api/quiz/${id}`,
   submitQuizResult:    "/api/quiz/result",
   claimReferral:       "/api/referral/claim",
@@ -166,6 +170,10 @@ export const ApiPaths = {
   adminPayments:       "/api/admin/payments",
   adminApprovePayment: "/api/admin/payments/approve",
   adminRejectPayment:  "/api/admin/payments/reject",
+  claimProfileComplete:  "/api/rewards/claim-profile-complete",
+  submitAppReview:       "/api/rewards/submit-review",
+  adminReviews:          "/api/admin/reviews",
+  adminVerifyReview:     "/api/admin/reviews/verify",
   authSignup:             "/api/auth/signup",
   authLogin:              "/api/auth/login",
   authResendConfirmation: "/api/auth/resend-confirmation",
@@ -189,6 +197,9 @@ export const Routes = {
   upgrade:    "/upgrade",
   rewards:    "/rewards",
   settings:   "/settings",
+
+  // Public (no auth required)
+  publicDeck: (id: string) => `/public/decks/${id}`,
 
   // Admin
   admin:      "/admin",
@@ -291,6 +302,10 @@ export const RateLimits: Record<string, RateLimitRule> = {
   [ApiPaths.claimReferral]:    { windowMinutes: 1440, maxRequests: 5   },
   [ApiPaths.adminPayments]:    { windowMinutes: 60,   maxRequests: 200 },
   [ApiPaths.authLogin]:        { windowMinutes: 15,   maxRequests: 10  },
+  "/api/decks/[id]/share":      { windowMinutes: 1440, maxRequests: 5   }, // 24-hour window
+  "/api/decks/[id]/export":     { windowMinutes: 60,   maxRequests: 10  },
+  [ApiPaths.claimProfileComplete]: { windowMinutes: 1440, maxRequests: 5 }, // 24-hour window
+  [ApiPaths.submitAppReview]:      { windowMinutes: 1440, maxRequests: 2 }, // 24-hour window
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -363,6 +378,9 @@ export const Validation = {
   adminNotes: {
     maxLength: 500,
   },
+  appReview: {
+    textMaxLength: 1000,
+  },
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -374,6 +392,8 @@ export const LivingDeck = {
   weakCardThreshold:      0.7,
   /** Max weak cards sent to DeepSeek per refresh (cost control) */
   maxWeakCardsPerRefresh: 5,
+  /** A quiz score below this triggers a Living Deck refresh attempt */
+  scorePercentThreshold:  70,
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -401,6 +421,9 @@ export const UIMessages = {
   // Living Decks
   livingDeckRefreshed: (count: number) => `${count} card${count === 1 ? "" : "s"} reinforced with new angles on this topic.`,
   livingDeckUpsell:    "Upgrade to Pro to have your deck automatically adapt to your weak areas.",
+
+  // Pro feature gating
+  proFeatureLocked:    "This feature is available on Pro. Upgrade to unlock it.",
 
   // Referral
   referralCredited:  (name: string, credits: number) => `+${credits} credits — ${name} signed up with your link!`,
@@ -516,7 +539,21 @@ export interface ReferralEvent {
   credits_awarded: number;
   verified:        boolean;          // admin sets true for 'app_review' events before credits issue
   month_key:       string;           // format: "YYYY-MM" — always use toMonthKey() to generate
+  deck_id:         string | null;    // set for 'deck_share' events; identifies the shared deck
   created_at:      string;
+}
+
+/** A user-submitted in-app review (B4 "Write a review" earn method). */
+export interface AppReview {
+  id:          string;
+  user_id:     string;
+  rating:      number;        // 1-5
+  review_text: string;        // ≤ Validation.appReview.textMaxLength
+  status:      "pending" | "approved" | "rejected";
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  admin_notes: string | null;
+  created_at:  string;
 }
 
 export interface RateLimitLog {
@@ -656,6 +693,7 @@ export interface SubmitQuizResultData {
   totalQuestions:             number;
   livingDeckRefreshTriggered: boolean;
   reinforcedCardCount?:       number;   // only present when livingDeckRefreshTriggered = true
+  upsellMessage?:             string;   // shown to non-Pro users instead of a refresh
 }
 
 // ── POST /api/referral/claim ──────────────────────────────────────────────────
@@ -710,6 +748,56 @@ export interface RejectPaymentRequest {
 
 // (Reject success has no extra payload — { success: true } is sufficient)
 
+// ── Rewards (B4): self-claimed + admin-verified earn methods ─────────────────
+export interface ClaimRewardResult {
+  creditsAwarded: number;
+  newBalance:     number;
+}
+
+// ── POST /api/rewards/claim-profile-complete ──────────────────────────────────
+export interface ClaimProfileCompleteRequest {
+  fullName: string;
+  course:   string;
+}
+
+export interface ClaimProfileCompleteResult extends ClaimRewardResult {
+  fullName: string | null;
+  course:   string | null;
+}
+
+// ── POST /api/decks/[id]/share ────────────────────────────────────────────────
+export interface ShareDeckResult {
+  isPublic:       boolean;
+  creditsAwarded: number;
+}
+
+// ── POST /api/rewards/submit-review ───────────────────────────────────────────
+export interface SubmitAppReviewRequest {
+  rating:     number;   // 1-5
+  reviewText: string;   // ≤ Validation.appReview.textMaxLength
+}
+
+// ── GET /api/admin/reviews ─────────────────────────────────────────────────────
+export interface AdminAppReviewRow extends AppReview {
+  userEmail: string;   // joined from profiles
+}
+
+export interface AdminReviewsListResult {
+  reviews: AdminAppReviewRow[];
+}
+
+// ── POST /api/admin/reviews/verify ─────────────────────────────────────────────
+export interface VerifyReviewRequest {
+  reviewId: string;
+  approve:  boolean;
+  notes?:   string;
+}
+
+export interface VerifyReviewResult {
+  userId:         string;
+  creditsAwarded: number;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 16 — SHARED UTILITY TYPES
 // ─────────────────────────────────────────────────────────────────────────────
@@ -744,6 +832,9 @@ export const ApiErrorCode = {
   // Payment
   INVALID_REFERENCE_NUMBER: "INVALID_REFERENCE_NUMBER",
   PAYMENT_ALREADY_PENDING:  "PAYMENT_ALREADY_PENDING",
+
+  // Rewards
+  REVIEW_ALREADY_SUBMITTED: "REVIEW_ALREADY_SUBMITTED",
 
   // AI / processing
   AI_UNAVAILABLE:           "AI_UNAVAILABLE",    // DeepSeek timeout / downtime

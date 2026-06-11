@@ -32,7 +32,7 @@ cards or the deck-detail page.
 
 All of these are sold on `/upgrade` or `/rewards` but have no working implementation.
 
-### B1. [P0] Living Decks (Pro headline feature) — not implemented
+### B1. [P0] [DONE] Living Decks (Pro headline feature) — not implemented
 "Your deck automatically adapts to your weak areas." In reality
 `livingDeckRefreshTriggered` is hardcoded `false`, `getWeakCardsForDeck()` is
 **never called**, no `is_reinforcement` cards are ever generated, and
@@ -43,8 +43,18 @@ All of these are sold on `/upgrade` or `/rewards` but have no working implementa
 - **Effort:** Medium — gate on Pro + consent + `scorePercent < 70` in the quiz-result
   path, fetch weak cards, call DeepSeek for new angles, insert reinforcement cards,
   charge 1 credit on success. Approach is spec'd in `docs/TODO.md §8`.
+- **Resolution:** `quiz/result/route.ts` now checks `scorePercent < 70` for Pro
+  users with `consent_deepseek = true`, fetches weak cards via
+  `getWeakCardsForDeck()`, generates new-angle cards via
+  `generateReinforcementCards()` (`deepseek/generate-cards.ts`), and inserts them
+  atomically with a 1-credit charge via the new `insert_reinforcement_cards_and_charge()`
+  RPC (rolls back on `INSUFFICIENT_CREDITS`, never charges on AI failure). Marks
+  `quiz_sessions.living_deck_refresh_triggered = true` on success. Free users (or
+  Pro without consent) instead get `upsellMessage: UIMessages.livingDeckUpsell`.
+  The result page shows a "new cards added" banner or the upsell message
+  accordingly.
 
-### B2. [P0] Deep Dive generation mode (Pro) — defined but dead
+### B2. [P0] [DONE] Deep Dive generation mode (Pro) — defined but dead
 `GenerationMode.DEEP_DIVE` exists in `contracts.ts` + the `decks.generation_mode`
 CHECK, and `/api/generate` *accepts* a `generationMode`, but:
 - the upload UI (`PdfUploadFlow.tsx`) **never sends it** (only `extractedText` +
@@ -55,14 +65,27 @@ CHECK, and `/api/generate` *accepts* a `generationMode`, but:
 - **Effort:** Medium — add a mode toggle (Pro-gated) in the upload flow, pass it
   through, and branch the prompt (e.g. more cards / deeper explanations) in
   `generate-cards.ts`.
+- **Resolution:** `PdfUploadFlow.tsx` now has a Pro-gated Standard/Deep Dive
+  toggle (disabled with an upsell hint for free users) and sends `generationMode`
+  to `/api/generate`. The route force-downgrades non-Pro requests to `standard`
+  server-side (never trusts the client), and `generateFlashcardsFromText()` branches
+  the DeepSeek prompt for `deep_dive` to produce richer explanations/examples per
+  card. `decks.generation_mode` is persisted via `create_deck_with_cards_and_charge()`,
+  and the deck-detail page shows a "Deep Dive" badge when set.
 
-### B3. [P0] PDF export (Pro) — not built
+### B3. [P0] [DONE] PDF export (Pro) — not built
 `TierLimits.pro.pdfExport: true` is advertised; there is no export endpoint and no
 button anywhere.
 - **Effort:** Medium — a `GET /api/decks/[id]/export` that renders cards to PDF
   (server-side) + a Pro-gated button.
+- **Resolution:** Added `GET /api/decks/[id]/export` (`@react-pdf/renderer`,
+  `src/lib/pdf/DeckPdfDocument.tsx`), gated on `TierLimits[tier].pdfExport`,
+  rate-limited, returning the deck's cards as a downloadable PDF
+  (`application/pdf`, `Content-Disposition: attachment` — documented as the one
+  binary-response exception to the `ApiResponse<T>` envelope). Deck-detail page
+  has a Pro-gated "Export PDF" button.
 
-### B4. [P0] 3 of the 4 "Ways to earn" on `/rewards` do nothing
+### B4. [P0] [DONE] 3 of the 4 "Ways to earn" on `/rewards` do nothing
 Only **signup referral** actually credits (via `/api/referral/claim` +
 `auth/callback` → `claim_referral`). The other three cards on the rewards page are
 decorative:
@@ -75,12 +98,39 @@ decorative:
 - **Effort:** Medium each. `profile_complete` is the easiest (award once when
   name+course first set). `deck_share` depends on B5. `app_review` needs admin UI
   (see E4).
+- **Resolution:** All three now work via a shared `claim_self_referral_event()`
+  RPC (atomic, mirrors `claim_referral()`, self-guarded to `auth.uid()`,
+  cap-checked via the existing `check_referral_cap()`):
+  - **`profile_complete`** — `POST /api/rewards/claim-profile-complete` awards
+    +3 credits the first time both `full_name` and `course` are set; wired into
+    the settings save flow.
+  - **`deck_share`** — `POST /api/decks/[id]/share` flips `decks.is_public`,
+    and if `card_count >= ReferralCaps.deck_share.minCards` awards +5 credits
+    once per deck (enforced by a new unique index
+    `ux_referral_deck_share_once_per_deck`). Deck-detail page has a make
+    public/private toggle with a copyable `Routes.publicDeck(id)` link.
+  - **`app_review`** — `POST /api/rewards/submit-review` inserts into the new
+    `app_reviews` table (one review per user); `/rewards` shows a star-rating +
+    text submission form, or the review's pending/approved/rejected status.
+    Admin approval via `GET /api/admin/reviews` + `POST
+    /api/admin/reviews/verify` (new `verify_app_review()` RPC, mirrors
+    `approve_payment()`/`reject_payment()`) awards +15 credits and logs to
+    `admin_action_log`. New "Pending Reviews" section on `/admin`.
+  - The `/rewards` page now reflects real earned/claimable state for all three
+    cards instead of being decorative.
 
-### B5. [P1] Public / shared decks — reserved but unbuilt
+### B5. [P1] [DONE] Public / shared decks — reserved but unbuilt
 `decks.is_public` and `Deck.is_public` exist ("reserved for future sharing"), but
 there's no make-public toggle, no public deck viewer, and no share link. Blocks the
 `deck_share` earn method (B4).
 - **Effort:** Medium — a public-read RLS policy/route, a viewer page, a toggle.
+- **Resolution:** Added additive RLS policies ("decks: anyone read public",
+  "flashcards: anyone read of public deck") scoped to `is_public = true` (owner
+  policies untouched, so writes stay owner-only). New read-only viewer at
+  `Routes.publicDeck(id)` (`src/app/public/decks/[id]/page.tsx`) for
+  anonymous/any visitors, with a friendly not-found state for private/missing
+  decks. The share toggle from B4's `deck_share` flow lives on the deck-detail
+  page and surfaces this link.
 
 ---
 
@@ -165,8 +215,8 @@ expiry date. Once Pro, always Pro until an admin changes it.
   `subscription_expires_at` for Pro profiles whose `subscription_expires_at`
   has passed. Scheduled as the `crammable-pro-expiry-downgrade` daily pg_cron
   job (midnight UTC), alongside the existing `pro_monthly_credit_refresh` job.
-  **Requires re-running `schema.sql` against the live Supabase project** to
-  install the function and cron job.
+  Schema re-run against the live Supabase project is **complete** — the
+  function, cron job, and all B1–B5 schema additions (see below) are live.
 
 ### E4. [P1] No admin tooling beyond payments
 The admin dashboard only approves/rejects payments. There is no UI for: verifying
@@ -186,18 +236,21 @@ neither exists. (An auditable consent timestamp is also worth adding — current
 
 ## Suggested order of attack
 
-| # | Item | Why first | Effort |
-|---|---|---|---|
-| 1 | **C1** Pro card-cap bug | A paid promise is broken right now | S |
-| 2 | **E2** Fill `gcashNumber` | Hard launch blocker — nobody can pay | trivial |
-| 3 | **A1** Delete-deck button | Endpoint already exists; pure UI | S |
-| 4 | **D2** Rename deck | Tiny route + affordance | S |
-| 5 | **E3** Pro expiry cron | Subscriptions never actually end | S |
-| 6 | **D1** Flashcard editing | Core content management gap | M |
-| 7 | **B1** Living Decks | The flagship Pro feature, fully spec'd | M |
-| 8 | **B2 / B3** Deep Dive / PDF export | Remaining Pro promises | M |
-| 9 | **B4** Profile-complete + review + deck-share earns | Rewards page is mostly decorative | M |
-| 10 | **D3 / E1 / E4 / E5** History, notifications, admin, account | Depth + compliance | M+ |
+| # | Item | Why first | Effort | Status |
+|---|---|---|---|---|
+| 1 | **C1** Pro card-cap bug | A paid promise is broken right now | S | ✅ Done |
+| 2 | **E2** Fill `gcashNumber` | Hard launch blocker — nobody can pay | trivial | ✅ Done |
+| 3 | **A1** Delete-deck button | Endpoint already exists; pure UI | S | |
+| 4 | **D2** Rename deck | Tiny route + affordance | S | |
+| 5 | **E3** Pro expiry cron | Subscriptions never actually end | S | ✅ Done |
+| 6 | **D1** Flashcard editing | Core content management gap | M | |
+| 7 | **B1** Living Decks | The flagship Pro feature, fully spec'd | M | ✅ Done |
+| 8 | **B2 / B3** Deep Dive / PDF export | Remaining Pro promises | M | ✅ Done |
+| 9 | **B4** Profile-complete + review + deck-share earns | Rewards page is mostly decorative | M | ✅ Done |
+| 10 | **D3 / E1 / E4 / E5** History, notifications, admin, account | Depth + compliance | M+ | |
+
+**B5** (public/shared decks) was completed alongside B4, since the deck-share
+earn method depends on it.
 
 ---
 

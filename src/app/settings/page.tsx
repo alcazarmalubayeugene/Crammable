@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { authHeaders } from "@/lib/api/auth-headers";
 import {
   ApiErrorCode,
   ApiPaths,
@@ -12,6 +13,8 @@ import {
   SubscriptionTier,
   TableNames,
   Validation,
+  type ApiResponse,
+  type ClaimProfileCompleteResult,
 } from "@/lib/contracts";
 
 interface MinProfile {
@@ -38,6 +41,7 @@ function SettingsContent() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [creditsAwarded, setCreditsAwarded] = useState(0);
 
   // logout state
   const [loggingOut, setLoggingOut] = useState(false);
@@ -93,6 +97,7 @@ function SettingsContent() {
     setSaving(true);
     setSaveError("");
     setSaveSuccess(false);
+    setCreditsAwarded(0);
 
     const supabase = getSupabaseBrowserClient();
     const {
@@ -100,19 +105,32 @@ function SettingsContent() {
     } = await supabase.auth.getUser();
     if (!user) { window.location.href = Routes.login; return; }
 
-    const { error } = await supabase
-      .from(TableNames.profiles)
-      .update({ full_name: fullName.trim() || null, course: course.trim() || null })
-      .eq("id", user.id);
-
-    setSaving(false);
-    if (error) {
+    let data: ApiResponse<ClaimProfileCompleteResult>;
+    try {
+      const res = await fetch(ApiPaths.claimProfileComplete, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await authHeaders()),
+        } as HeadersInit,
+        body: JSON.stringify({ fullName: fullName.trim(), course: course.trim() }),
+      });
+      data = await res.json();
+    } catch {
+      setSaving(false);
       setSaveError("Failed to save. Please try again.");
       return;
     }
 
-    setProfile((p) => p ? { ...p, full_name: fullName.trim() || null, course: course.trim() || null } : p);
+    setSaving(false);
+    if (!data.success) {
+      setSaveError(data.error.message);
+      return;
+    }
+
+    setProfile((p) => p ? { ...p, full_name: data.fullName, course: data.course, token_balance: data.newBalance } : p);
     setSaveSuccess(true);
+    if (data.creditsAwarded > 0) setCreditsAwarded(data.creditsAwarded);
     setTimeout(() => setSaveSuccess(false), 3000);
   }
 
@@ -478,6 +496,7 @@ function SettingsContent() {
             {saveSuccess && (
               <p style={{ fontSize: 13, color: "#5C7A35", fontWeight: 600, margin: 0 }}>
                 ✓ Profile saved!
+                {creditsAwarded > 0 && ` +${creditsAwarded} credits for completing your profile!`}
               </p>
             )}
 

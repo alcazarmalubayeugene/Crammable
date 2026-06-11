@@ -117,6 +117,48 @@ export async function deleteDeck(deckId: string): Promise<number> {
 }
 
 /**
+ * Set a deck's is_public flag (B5 sharing). Session-client update — RLS scopes
+ * the write to the deck's owner. Returns the updated deck, or null if the deck
+ * doesn't exist / isn't owned by the caller.
+ */
+export async function setDeckPublic(deckId: string, isPublic: boolean): Promise<Deck | null> {
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase
+    .from(TableNames.decks)
+    .update({ is_public: isPublic })
+    .eq("id", deckId)
+    .select("*")
+    .maybeSingle();
+  if (error) throw toDbError(error, "Failed to update deck visibility.");
+  return (data as Deck) ?? null;
+}
+
+/**
+ * A public deck + its cards for the read-only public viewer (B5). Relies on
+ * the additive "anyone read public" RLS policies (schema §5) — the session
+ * client returns the row even for an unauthenticated/anonymous visitor as long
+ * as decks.is_public = true. Returns null if the deck doesn't exist or isn't
+ * public.
+ */
+export async function getPublicDeckWithCards(
+  deckId: string
+): Promise<{ deck: Deck; cards: Flashcard[] } | null> {
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase
+    .from(TableNames.decks)
+    .select(`*, ${TableNames.flashcards}(*)`)
+    .eq("id", deckId)
+    .eq("is_public", true)
+    .maybeSingle();
+  if (error) throw toDbError(error, "Failed to load deck.");
+  if (!data) return null;
+
+  const { [TableNames.flashcards]: cards, ...deck } = data as Deck &
+    Record<typeof TableNames.flashcards, Flashcard[]>;
+  return { deck: deck as Deck, cards: (cards as Flashcard[]) ?? [] };
+}
+
+/**
  * Persist a generated deck + its cards AND charge one credit, atomically, via
  * the create_deck_with_cards_and_charge() RPC (schema §4.14). The deck insert,
  * card inserts, card_count sync and deduct_credit() all commit in a single

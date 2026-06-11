@@ -3,7 +3,9 @@ import {
   PaymentStatus,
   SubscriptionTier,
   TableNames,
+  type AdminAppReviewRow,
   type AdminPaymentRow,
+  type AppReview,
   type PaymentSubmission,
 } from "@/lib/contracts";
 import { toDbError } from "@/lib/db/errors";
@@ -95,4 +97,47 @@ export async function rejectPayment(
   });
   if (error) throw toDbError(error, "Failed to reject payment.");
   return { userId: data as string };
+}
+
+/** Pending app reviews (B4) joined with the submitter's email, oldest first (FIFO). */
+export async function listPendingAppReviews(): Promise<AdminAppReviewRow[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from(TableNames.appReviews)
+    .select(`*, user:${TableNames.profiles}!user_id(email)`)
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
+  if (error) throw toDbError(error, "Failed to load pending reviews.");
+
+  return ((data as Array<AppReview & { user: { email: string } | null }>) ?? []).map((row) => {
+    const { user, ...review } = row;
+    return { ...review, userEmail: user?.email ?? "" } satisfies AdminAppReviewRow;
+  });
+}
+
+/**
+ * Approve or reject an app review atomically via verify_app_review() (schema
+ * §4.16): claims the row (status='pending' guard), and on approve also inserts
+ * the referral_events ledger row + grants credits — all in one transaction.
+ * Returns the reviewed user's id and the credits awarded (0 on reject).
+ *
+ * @throws {DbError} VALIDATION_ERROR if the review isn't pending.
+ */
+export async function verifyAppReview(
+  adminId: string,
+  reviewId: string,
+  approve: boolean,
+  credits: number,
+  notes?: string
+): Promise<{ userId: string; creditsAwarded: number }> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("verify_app_review", {
+    p_admin_id: adminId,
+    p_review_id: reviewId,
+    p_approve: approve,
+    p_credits: credits,
+    p_notes: notes ?? null,
+  });
+  if (error) throw toDbError(error, "Failed to verify review.");
+  return { userId: data as string, creditsAwarded: approve ? credits : 0 };
 }
