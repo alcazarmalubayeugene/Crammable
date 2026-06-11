@@ -3,6 +3,7 @@ import {
   ApiPaths,
   LivingDeck,
   SubscriptionTier,
+  TierLimits,
   UIMessages,
   type SubmitQuizResultData,
   type SubmitQuizResultRequest,
@@ -14,6 +15,7 @@ import { checkRateLimit } from "@/lib/supabase/server";
 import {
   submitQuizResult,
   getQuizSession,
+  getDeckById,
   markLivingDeckRefreshTriggered,
   getWeakCardsForDeck,
   insertReinforcementCardsAndCharge,
@@ -72,18 +74,24 @@ export async function POST(request: Request): Promise<Response> {
       if (profile.subscription_tier === SubscriptionTier.PRO && profile.consent_deepseek) {
         try {
           const session = await getQuizSession(sessionId);
-          if (session) {
+          const deck = session ? await getDeckById(session.deck_id, user.id) : null;
+          // Respect the tier's per-deck card cap — a refresh must never push a
+          // deck past TierLimits.pro.maxCardsPerDeck. `room` is how many new
+          // reinforcement cards still fit; skip entirely when the deck is full.
+          const maxCards = TierLimits[profile.subscription_tier].maxCardsPerDeck;
+          const room = deck
+            ? Math.max(0, Math.min(LivingDeck.maxWeakCardsPerRefresh, maxCards - deck.card_count))
+            : 0;
+          if (session && deck && room > 0) {
             const weakCards = await getWeakCardsForDeck(session.deck_id);
             if (weakCards.length > 0) {
-              const { cards } = await generateReinforcementCards(
-                weakCards,
-                LivingDeck.maxWeakCardsPerRefresh,
-              );
-              if (cards.length > 0) {
+              const { cards } = await generateReinforcementCards(weakCards, room);
+              const capped = cards.slice(0, room);
+              if (capped.length > 0) {
                 const { insertedCount } = await insertReinforcementCardsAndCharge(
                   user.id,
                   session.deck_id,
-                  cards,
+                  capped,
                 );
                 await markLivingDeckRefreshTriggered(sessionId);
                 livingDeckRefreshTriggered = true;

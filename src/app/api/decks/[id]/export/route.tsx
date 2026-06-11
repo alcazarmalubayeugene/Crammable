@@ -28,7 +28,7 @@ export async function GET(_req: NextRequest, { params }: Ctx): Promise<Response>
     }
 
     const { id } = await params;
-    const result = await getDeckWithCards(id);
+    const result = await getDeckWithCards(id, user.id);
     if (!result) {
       return apiFail(ApiErrorCode.FORBIDDEN, "Deck not found.", 404);
     }

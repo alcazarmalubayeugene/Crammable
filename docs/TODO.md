@@ -4,10 +4,13 @@ Items intentionally postponed. Each has enough context to pick up later.
 Frontend page status is in `FRONTEND.md`. Unimplemented backend routes are tracked in
 `docs/PROJECT-DOCUMENTATION.md §9`.
 
-> **Status note (2026-06-10):** items **2, 6b, 9, 10, 11 are now DONE** — this file
-> had gone stale. The only item below still genuinely open is **#8 (Living Deck)**.
-> For the broader list of unbuilt/advertised-but-missing features (Pro features,
-> reward methods, card editing, etc.) see **`docs/MISSING_FEATURES.md`**.
+> **Status note (2026-06-11):** **every item in this file is now DONE**, including
+> **#8 (Living Deck)**. This file is kept only as a historical record of the
+> original backend roadmap. The broader advertised-feature set (Pro features,
+> reward methods, card/deck editing, admin tooling, account export/delete) is also
+> implemented — see **`docs/MISSING_FEATURES.md`** for that status. The one
+> remaining product gap is **deck-delete UI** (endpoint exists, no button) —
+> tracked in `docs/MISSING_FEATURES.md` A1 and `docs/BASIC_UI.md`.
 
 ---
 
@@ -73,7 +76,24 @@ Frontend page status is in `FRONTEND.md`. Unimplemented backend routes are track
 
 ## Premium features
 
-### 8. Living Deck (Pro only)  ← unblocked by §7
+### ~~8. Living Deck (Pro only)~~ ✅ Done (2026-06-11)
+- **Built:** `POST /api/quiz/result` now gates on `subscription_tier === 'pro'` +
+  `consent_deepseek` + `scorePercent < LivingDeck.scorePercentThreshold` (70). On a
+  weak result it calls `getWeakCardsForDeck()`, sends them to
+  `generateReinforcementCards()` (DeepSeek, new-angle prompt), and inserts the
+  cards + charges 1 credit atomically via the `insert_reinforcement_cards_and_charge()`
+  RPC (schema §4.14c) — so an AI failure or `INSUFFICIENT_CREDITS` rolls back with no
+  charge. A per-deck card-cap guard prevents exceeding `TierLimits.pro.maxCardsPerDeck`.
+  Free users get `upsellMessage` (`UIMessages.livingDeckUpsell`) instead. The quiz
+  result page renders the reinforcement notice / upsell.
+- **Files:** `src/app/api/quiz/result/route.ts`, `src/lib/db/flashcards.ts`
+  (`insertReinforcementCardsAndCharge`), `src/lib/deepseek/generate-cards.ts`
+  (`generateReinforcementCards`), `src/app/quiz/[deckId]/result/page.tsx`,
+  `schema.sql` (§4.14c), `contracts.ts` (`LivingDeck.scorePercentThreshold`,
+  `SubmitQuizResultData.upsellMessage`).
+
+<details><summary>Original spec (historical)</summary>
+
 - **What:** After a quiz where the student misses cards, automatically generate new
   angles on those weak topics using DeepSeek. Pro-only; gate it in the quiz result handler.
 - **Approach:**
@@ -90,10 +110,8 @@ Frontend page status is in `FRONTEND.md`. Unimplemented backend routes are track
   - Free users: set `livingDeckRefreshTriggered: false`, include `UIMessages.livingDeckUpsell`
     in a separate `upsellMessage` field (add to `SubmitQuizResultData` in contracts first).
   - Return `livingDeckRefreshTriggered: true` + `reinforcedCardCount` when it fires.
-- **Files:** `src/app/api/quiz/result/route.ts` (trigger point — `livingDeckRefreshTriggered`
-  is already wired as `false`); `src/lib/db/flashcards.ts` (`getWeakCardsForDeck`,
-  `insertFlashcards`); `src/lib/db/rpc.ts` (`deductCredit`); `src/lib/contracts.ts`
-  (add `upsellMessage?: string` to `SubmitQuizResultData`).
+
+</details>
 
 ---
 

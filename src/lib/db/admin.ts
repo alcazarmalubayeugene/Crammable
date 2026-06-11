@@ -116,7 +116,11 @@ export async function listUsers(search?: string): Promise<AdminUserRow[]> {
     .limit(50);
 
   if (search) {
-    query = query.ilike("email", `%${search}%`);
+    // Escape LIKE metacharacters so a search containing % or _ is matched
+    // literally rather than as a wildcard (the value is already parameterised by
+    // PostgREST, so this is about correct matching, not SQL injection). \ first.
+    const escaped = search.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+    query = query.ilike("email", `%${escaped}%`);
   }
 
   const { data, error } = await query;

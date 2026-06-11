@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: Ctx): Promise<Response>
     await enforceRateLimit(user.id, "/api/decks/[id]/flashcards");
 
     const { id } = await params;
-    const deck = await getDeckById(id);
+    const deck = await getDeckById(id, user.id);
     if (!deck) {
       return apiFail(ApiErrorCode.FORBIDDEN, "Deck not found.", 404);
     }
@@ -39,7 +39,12 @@ export async function POST(request: Request, { params }: Ctx): Promise<Response>
       );
     }
 
-    const body = (await request.json()) as CreateFlashcardRequest;
+    let body: CreateFlashcardRequest;
+    try {
+      body = (await request.json()) as CreateFlashcardRequest;
+    } catch {
+      return apiFail(ApiErrorCode.VALIDATION_ERROR, "Invalid request body.", 400);
+    }
     const { card, cardCount } = await createFlashcard(id, user.id, {
       front: body.front ?? "",
       back: body.back ?? "",

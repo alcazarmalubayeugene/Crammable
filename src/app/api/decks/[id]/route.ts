@@ -9,6 +9,7 @@ import {
 import { handleApiError, apiSuccess, apiFail } from "@/lib/api/errors";
 import { assertSameOrigin } from "@/lib/api/csrf";
 import { requireAuth } from "@/lib/auth/helpers";
+import { enforceRateLimit } from "@/lib/supabase/server";
 import { getDeckWithCards, deleteDeck, renameDeck } from "@/lib/db/decks";
 
 export const runtime = "nodejs";
@@ -22,9 +23,9 @@ type Ctx = { params: Promise<{ id: string }> };
 
 export async function GET(_req: NextRequest, { params }: Ctx): Promise<Response> {
   try {
-    await requireAuth();
+    const { user } = await requireAuth();
     const { id } = await params;
-    const result = await getDeckWithCards(id);
+    const result = await getDeckWithCards(id, user.id);
     if (!result) {
       return apiFail(ApiErrorCode.FORBIDDEN, "Deck not found.", 404);
     }
@@ -39,10 +40,16 @@ export async function PATCH(request: NextRequest, { params }: Ctx): Promise<Resp
     const csrf = assertSameOrigin(request);
     if (csrf) return csrf;
 
-    await requireAuth();
+    const { user } = await requireAuth();
+    await enforceRateLimit(user.id, "/api/decks/[id]");
     const { id } = await params;
 
-    const body = (await request.json()) as RenameDeckRequest;
+    let body: RenameDeckRequest;
+    try {
+      body = (await request.json()) as RenameDeckRequest;
+    } catch {
+      return apiFail(ApiErrorCode.VALIDATION_ERROR, "Invalid request body.", 400);
+    }
     const title = body.title?.trim() ?? "";
     if (!title) {
       return apiFail(ApiErrorCode.VALIDATION_ERROR, "Deck title is required.", 400);

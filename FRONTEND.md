@@ -17,50 +17,64 @@
 | `/forgot-password` | `src/app/forgot-password/page.tsx` | ✅ Done | Email form → triggers password reset email. Enumeration-safe, 60s resend cooldown, authed-user guard. |
 | `/settings?mode=reset-password` | `src/app/settings/page.tsx` | ✅ Done | Detects `?mode=reset-password`, renders new-password form (confirm field + show/hide), handles success/expired-link/validation cases. |
 | `/dashboard` | `src/app/dashboard/page.tsx` | ✅ Done | User dashboard — credits, plan, deck list |
-| `/decks/new` | `src/app/decks/new/page.tsx` | ✅ Done | PDF upload → AI generation flow (PdfUploadFlow) |
-| `/decks/[id]` | `src/app/decks/[id]/page.tsx` | ✅ Done | Deck detail — flip-card viewer, quiz CTA |
+| `/decks/new` | `src/app/decks/new/page.tsx` | ✅ Done | PDF upload → AI generation flow (PdfUploadFlow); Deep Dive (Pro) toggle |
+| `/decks/[id]` | `src/app/decks/[id]/page.tsx` | ✅ Done | Deck detail — flip-card viewer; **rename deck**, **add/edit/delete card**, **share + copy public link**, **export PDF (Pro)**, **study-weak-cards mode**, **quiz history**, quiz CTA. ⚠️ no **delete-deck** control yet (endpoint exists) |
+| `/public/decks/[id]` | `src/app/public/decks/[id]/page.tsx` | ✅ Done | Read-only public deck viewer (no auth, no edit/quiz) |
 | `/quiz/[deckId]` | `src/app/quiz/[deckId]/page.tsx` | ✅ Done | Quiz session — MC / Identification / Mixed |
-| `/quiz/[deckId]/result` | `src/app/quiz/[deckId]/result/page.tsx` | ✅ Done | Score, missed-card review, retry/back actions |
+| `/quiz/[deckId]/result` | `src/app/quiz/[deckId]/result/page.tsx` | ✅ Done | Score, missed-card review, **Living Deck reinforcement notice / Pro upsell**, retry/back |
 | `/upgrade` | `src/app/upgrade/page.tsx` | ✅ Done | GCash manual payment — 13-digit ref number form |
-| `/rewards` | `src/app/rewards/page.tsx` | ✅ Done | Referral code, ways to earn, claim code, history |
-| `/settings` | `src/app/settings/page.tsx` | ✅ Done | Edit name/course, account info, sign out |
-| `/admin` | `src/app/admin/page.tsx` | ✅ Done | Admin-only — approve/reject GCash payments |
+| `/rewards` | `src/app/rewards/page.tsx` | ✅ Done | Referral code, **all 4 earn methods** (signup, share-a-deck, write-a-review, complete-profile), claim code, history |
+| `/settings` | `src/app/settings/page.tsx` | ✅ Done | Edit name/course (+ **profile-complete reward**), change password, **export my data**, **delete account**, sign out |
+| `/admin` | `src/app/admin/page.tsx` | ✅ Done | Admin-only — approve/reject payments, **verify app reviews**, **user list + grant credits**, **audit log**. ⚠️ reachable only by URL (no nav link) |
+
+> **Global chrome gaps** (see `docs/BASIC_UI.md`): no `not-found.tsx` / `error.tsx` /
+> `loading.tsx`, no shared `<Navbar>`/`<Footer>` (re-implemented per page), no admin
+> nav link.
 
 ---
 
 ## API Routes the Frontend Calls
 
 All paths come from `ApiPaths` in `contracts.ts`. The frontend calls these via
-`fetch()` — the backend team owns the implementation. Routes marked ⚠️ are not
-yet implemented by the backend; the UI will show an error gracefully until they are.
+`fetch()`. **As of 2026-06-11 every endpoint the UI calls is implemented** and every
+page has been migrated off direct Supabase reads (the dashboard/deck-detail pages now
+use the API; only the dashboard's own-profile read stays a direct RLS-scoped query, by
+design, since there is no profile route).
 
 | Endpoint | Method | Used by page | Backend status |
 |---|---|---|---|
-| `/api/auth/forgot-password` | POST | `/forgot-password` | ✅ Implemented |
-| `/api/auth/reset-password` | POST | `/settings?mode=reset-password` | ✅ Implemented |
-| `/api/upload` | POST | `/decks/new` | ✅ Implemented |
-| `/api/generate` | POST | `/decks/new` | ✅ Implemented (live; atomic deck-create + credit charge) |
-| `/api/decks` | GET | `/dashboard` | ✅ Implemented — dashboard migrated to it |
-| `/api/decks/[id]` | GET | `/decks/[id]` | ✅ Implemented — ⚠️ page still reads Supabase directly (migrate: TODO 6b) |
-| `/api/quiz/[id]` | POST | `/quiz/[deckId]` | ✅ Implemented — page migrated (server builds questions) |
-| `/api/quiz/result` | POST | `/quiz/[deckId]` | ✅ Implemented — atomic + idempotent; page migrated |
-| `/api/referral/claim` | POST | `/rewards` | ⚠️ Not yet (backend) |
-| `/api/payment/submit` | POST | `/upgrade` | ⚠️ Not yet (backend) |
-| `/api/admin/payments` | GET | `/admin` | ⚠️ Not yet (backend) |
-| `/api/admin/payments/approve` | POST | `/admin` | ⚠️ Not yet (backend) |
-| `/api/admin/payments/reject` | POST | `/admin` | ⚠️ Not yet (backend) |
+| `/api/auth/forgot-password` · `/reset-password` · `/resend-confirmation` | POST | auth pages | ✅ |
+| `/api/upload` · `/api/generate` | POST | `/decks/new` | ✅ (generate: atomic deck-create + credit charge; Deep Dive mode) |
+| `/api/decks` | GET | `/dashboard` | ✅ |
+| `/api/decks/[id]` | GET / PATCH (rename) / DELETE | `/decks/[id]` | ✅ (GET+PATCH wired in UI; **DELETE has no UI button yet**) |
+| `/api/decks/[id]/flashcards` | POST | `/decks/[id]` | ✅ add card |
+| `/api/flashcards/[id]` | PATCH / DELETE | `/decks/[id]` | ✅ edit / delete card |
+| `/api/decks/[id]/share` | POST / DELETE | `/decks/[id]` | ✅ share / unshare (+ deck_share reward) |
+| `/api/decks/[id]/export` | GET | `/decks/[id]` | ✅ PDF export (Pro-gated) |
+| `/api/public/decks/[id]` | GET | `/public/decks/[id]` | ✅ unauthenticated read-only |
+| `/api/quiz/[id]` · `/api/quiz/result` | POST | `/quiz/[deckId]` | ✅ (server builds questions; atomic + idempotent submit; Living Deck) |
+| `/api/quiz/history` | GET | `/decks/[id]` | ✅ per-deck history |
+| `/api/referral/claim` | POST | `/rewards` | ✅ |
+| `/api/rewards/submit-review` | POST | `/rewards` | ✅ write-a-review earn |
+| `/api/rewards/claim-profile-complete` | POST | `/settings` | ✅ profile-complete earn |
+| `/api/payment/submit` | POST | `/upgrade` | ✅ |
+| `/api/account/export` · `/api/account/delete` | GET / POST | `/settings` | ✅ data export / account deletion |
+| `/api/admin/payments` (+ `/approve`, `/reject`) | GET / POST | `/admin` | ✅ |
+| `/api/admin/reviews` (+ `/verify`) | GET / POST | `/admin` | ✅ app-review verification |
+| `/api/admin/users` (+ `/grant-credits`) | GET / POST | `/admin` | ✅ user list + credit grants |
+| `/api/admin/audit-log` | GET | `/admin` | ✅ audit trail |
 
-> **Note for teammates:** When you implement a route, remove the ⚠️ above and
-> update the corresponding page if it was reading from Supabase directly as a workaround.
-> **Outstanding FE migration:** `/decks/[id]` page still reads Supabase directly even though
-> `GET /api/decks/[id]` exists — see `docs/TODO.md` item 6b and `docs/HANDOFF.md`.
+> Payment approve/reject also surface to the student live via a Supabase Realtime
+> subscription on `payment_submissions` (`src/app/PaymentNotifications.tsx`, mounted in
+> the root layout) — no page reload needed.
 
 ---
 
 ## Frontend spec — forgot-password & reset-password flow
 
-> **Backend is fully ready.** Both routes are implemented and tested. You only need
-> to build the two UI pieces described below. Do not touch any backend files.
+> **✅ Both UI pieces are now built** (`/forgot-password` page and the
+> `/settings?mode=reset-password` handler — see the Pages table above). The spec below
+> is retained as a reference for how the flow is wired.
 
 ### Full flow (so you understand what you're wiring up)
 
@@ -395,12 +409,20 @@ changes everywhere automatically.
 | v.02 | Security hardening — user_id double-filter on Supabase queries, load timeouts, login redirect fix, referral input sanitization, sign-out confirmation, dashboard deck shortcut |
 | v.03 | DeepSeek flashcard generation live (frontend) — merged prompt/AI-Gen branch, added openai package, full generate route (auth + Supabase persistence + credit deduction), PdfUploadFlow wired to callGenerate, PDF_EXTRACTION_TEST_MODE off, version badge moved to bottom-right. Backend — registration fixes (error mapping, course/consent/name persistence via metadata-aware `handle_new_user` trigger) + stuck-confirmation recovery (self-serve resend-confirmation, self-healing profiles on login, admin auth runbook) |
 | v.04 | Merged Christian's `main` backend push (deck/auth fixes + atomic Supabase RPCs) into `FrontEnd`, AI-consent gate (signup persistence + upload checkbox screen). New: `/forgot-password` page + `/settings?mode=reset-password` flow (full spec implementation — enumeration-safe, cooldown, expired-link handling). Migrated `/dashboard` and `/decks/[id]` off direct Supabase reads onto `GET /api/decks` and `GET /api/decks/[id]` (#6b). Dashboard navbar brought in line with the master doc — added Rewards/Settings links, "Earn more →" / "Upgrade →" contextual CTAs, credits pill kept as a non-clickable status display (not a link, per §19/§9.1). Plus 6 small lint/cleanup fixes (`<a>` → `<Link>`, unescaped apostrophes, dead `shareUrl` var, lazy-init refactor on quiz-result to drop a cascading-render warning). All typecheck + lint clean. |
+| v.05 | **Feature completion (B/C/D/E) + security hardening.** Deck-detail rebuilt — rename, add/edit/delete card, share + copy public link, PDF export (Pro), study-weak-cards mode, per-deck quiz history. Deep Dive (Pro) toggle in upload flow; Living Deck reinforcement notice / upsell on quiz result; public read-only deck viewer (`/public/decks/[id]`). Rewards page gained all 4 earn methods (share-a-deck, write-a-review, complete-profile); settings gained data export + account deletion; admin gained review verification, user list + grant credits, and audit log. Backend: `app_reviews` table + new atomic RPCs (Living Deck, self-referral earns, review verify, account deletion), Pro-expiry cron, payment Realtime. Security audit: closed a public-deck IDOR (owner-scoped deck lookups), CSRF/JSON/rate-limit gaps on new routes, trimmed public projection, pinned function `search_path`. Full schema applied live; typecheck + lint + 75 tests green. |
 
 ---
 
 ## For Claude (Session Lifeline)
 
-**Last session: 2026-06-07**
+> **Current status (2026-06-11):** every page and every backend route the UI calls is
+> built — `/upgrade`, `/admin`, `/rewards`, Living Deck UI, deck/card editing, share,
+> export, history, account export/delete are all live (see the Pages & API tables above).
+> The remaining UI gaps are catalogued in **`docs/BASIC_UI.md`**: the **delete-deck button**
+> (endpoint exists, no UI), app-wide **404/error/loading pages**, an **admin nav link**, and
+> a **shared `<Navbar>`/`<Footer>` component**. The dated log below is historical.
+
+**Last session (historical): 2026-06-07**
 
 ### What happened
 - Merged Christian's `main` push (`6dc199f` deck/auth fixes + atomic Supabase RPCs, `3e4aa71` doc sync) into `FrontEnd` — resolved the `signup/route.ts` / `PdfUploadFlow.tsx` conflict by keeping his DB-trigger-based consent fix (typo-free, live-tested) and salvaging the frontend consent-gate UI
@@ -411,10 +433,18 @@ changes everywhere automatically.
 - `App.version` bumped `v.03` → `v.04`
 - Full `tsc --noEmit` pass clean, `eslint` clean on every touched file
 
-### Pending
-- **Tell Christian/backend:** Supabase's built-in dev email service caps at ~2 emails/hour — found while testing `/forgot-password` repeatedly. Either raise the dev-project rate limit or start planning custom SMTP (Resend/SendGrid) before launch; both forgot-password and signup-confirmation emails ride on it. Not urgent today, but a real pre-launch blocker (already flagged in the master doc's blocker list).
-- Everything assigned-and-unblocked for frontend is now done. Remaining frontend work (`/upgrade`, `/admin`, `/rewards` wiring, Living Deck UI) is blocked on backend routes that don't exist yet (`docs/TODO.md` #9, #10, #11, #8) — don't start, you'd be building against 404s.
-- Optional unassigned polish (deck-detail UX, quiz-flow progress bar, toasts/empty-states, mobile pass, shared design system) — real gaps, not urgent, Yujin's call when he wants to pick one up.
+### Pending (as of 2026-06-11)
+- **Delete-deck UI** — `DELETE /api/decks/[id]` is built but no page calls it; add a
+  confirm + `fetch(ApiPaths.deck(id), { method: "DELETE" })` on `/decks/[id]` (and/or the
+  dashboard cards) → redirect to the dashboard. The single open product gap (`MISSING_FEATURES` A1).
+- **App-wide chrome** — no `not-found.tsx` / `error.tsx` / `loading.tsx`; no shared
+  `<Navbar>`/`<Footer>` (re-implemented inline per page); no admin nav link gated on `is_admin`.
+  See `docs/BASIC_UI.md §3`.
+- **Pre-launch (backend/ops):** Supabase's built-in dev email service caps at ~2 emails/hour
+  (hit while testing `/forgot-password`). Raise the limit or move to custom SMTP (Resend/SendGrid)
+  before launch — both forgot-password and signup-confirmation emails ride on it.
+- **Optional polish:** quiz-flow progress bar, more toasts/empty-states, mobile pass, a shared
+  design system — real gaps, not urgent.
 
 ### Key paths
 - DeepSeek lib: `src/lib/deepseek/` (client, generate-cards, index)

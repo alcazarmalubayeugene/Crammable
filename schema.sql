@@ -422,6 +422,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.generate_unique_referral_code()
 RETURNS TEXT
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 DECLARE
   code          TEXT;
@@ -521,6 +522,7 @@ $$;
 CREATE OR REPLACE FUNCTION public.set_updated_at()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 BEGIN
   NEW.updated_at = now();
@@ -547,6 +549,7 @@ CREATE TRIGGER decks_set_updated_at
 CREATE OR REPLACE FUNCTION public.prevent_privilege_escalation()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 BEGIN
   IF current_user IN ('service_role', 'postgres', 'supabase_admin') THEN
@@ -581,6 +584,7 @@ CREATE TRIGGER block_privilege_escalation
 CREATE OR REPLACE FUNCTION public.protect_immutable_profile_fields()
 RETURNS TRIGGER
 LANGUAGE plpgsql
+SET search_path = public
 AS $$
 BEGIN
   IF current_user IN ('service_role', 'postgres', 'supabase_admin') THEN
@@ -1033,6 +1037,7 @@ CREATE OR REPLACE FUNCTION public.apply_card_review(
 )
 RETURNS VOID
 LANGUAGE sql
+SET search_path = public
 AS $$
   UPDATE public.flashcards
   SET    times_seen       = times_seen + 1,

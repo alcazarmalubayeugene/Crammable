@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { defineConfig, configDefaults } from "vitest/config";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -11,6 +11,9 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    // Integration tests (tests/integration/**) hit the real Supabase project and
+    // are run separately via `npm run test:int` (vitest.int.config.ts).
+    exclude: [...configDefaults.exclude, "tests/integration/**"],
   },
   resolve: {
     alias: {

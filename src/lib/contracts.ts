@@ -29,7 +29,7 @@
 
 export const App = {
   name:         "Crammable",
-  version:      "v.04",                  // bump by 0.1 on every meaningful frontend update
+  version:      "v.05",                  // bump by 0.1 on every meaningful frontend update
   tagline:      "Turn any document into a flashcard deck — in seconds.",
   supportEmail: "support@crammable.ph",  // update once domain is live
   gcashName:    "Crammable",             // name displayed in GCash payment screen
@@ -316,8 +316,10 @@ export const RateLimits: Record<string, RateLimitRule> = {
   "/api/decks/[id]/export":     { windowMinutes: 60,   maxRequests: 10  },
   [ApiPaths.claimProfileComplete]: { windowMinutes: 1440, maxRequests: 5 }, // 24-hour window
   [ApiPaths.submitAppReview]:      { windowMinutes: 1440, maxRequests: 2 }, // 24-hour window
+  "/api/decks/[id]":            { windowMinutes: 60,   maxRequests: 60  }, // rename (PATCH)
   "/api/decks/[id]/flashcards": { windowMinutes: 60,   maxRequests: 60  },
   "/api/flashcards/[id]":       { windowMinutes: 60,   maxRequests: 120 },
+  [ApiPaths.adminVerifyReview]: { windowMinutes: 60,   maxRequests: 120 },
   [ApiPaths.adminUsers]:        { windowMinutes: 60,   maxRequests: 200 },
   [ApiPaths.adminGrantCredits]: { windowMinutes: 60,   maxRequests: 60  },
   [ApiPaths.adminAuditLog]:     { windowMinutes: 60,   maxRequests: 200 },
@@ -501,7 +503,7 @@ export interface Deck {
   card_count:      number;            // cached count — updated after generation and refresh
   generation_mode: GenerationMode;
   pdf_type:        PdfType;           // for analytics on parsing success rates
-  is_public:       boolean;           // reserved for future sharing feature
+  is_public:       boolean;           // B5 public sharing — true exposes the deck at /public/decks/[id]
   created_at:      string;
   updated_at:      string;
 }

@@ -172,8 +172,10 @@ export function toDbError(
         return dbError(ApiErrorCode.VALIDATION_ERROR, "You have already used a referral code.");
       }
       if (raw.includes("ux_referral_deck_share_once_per_deck")) {
-        // claim_self_referral_event(): this deck already earned its one-time deck_share credit.
-        return dbError(ApiErrorCode.VALIDATION_ERROR, "This deck has already earned a sharing reward.");
+        // claim_self_referral_event(): this deck already earned its one-time deck_share
+        // credit. Same semantics as a cap — callers (share route) treat it as
+        // "no additional credit", not a failure.
+        return dbError(ApiErrorCode.REFERRAL_CAP_REACHED, "This deck has already earned a sharing reward.");
       }
       if (raw.includes("one_review_per_user")) {
         // app_reviews insert: user already has a review row (any status).

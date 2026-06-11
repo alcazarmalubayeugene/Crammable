@@ -136,9 +136,15 @@ npm run dev          # local dev server
 npm run build        # production build (must pass before deploy)
 npm run typecheck    # tsc --noEmit — run after every change
 npm run lint
+npm test             # 75 unit tests (Vitest, Supabase mocked, offline)
+npm run test:int     # 10 integration tests vs the live project (needs .env.local)
 npx supabase start   # local Supabase stack
 npx supabase db reset  # re-apply schema.sql + migrations locally
 ```
+
+> `test:int` (`vitest.int.config.ts`, `tests/integration/**`) hits the **real** Supabase
+> project — it creates and deletes throwaway users and verifies RLS / triggers / the
+> privileged-RPC lockdown / atomic credit charge. The default `npm test` excludes it.
 
 ---
 

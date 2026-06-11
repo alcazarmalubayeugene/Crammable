@@ -29,7 +29,12 @@ export async function PATCH(request: Request, { params }: Ctx): Promise<Response
     await enforceRateLimit(user.id, "/api/flashcards/[id]");
 
     const { id } = await params;
-    const body = (await request.json()) as UpdateFlashcardRequest;
+    let body: UpdateFlashcardRequest;
+    try {
+      body = (await request.json()) as UpdateFlashcardRequest;
+    } catch {
+      return apiFail(ApiErrorCode.VALIDATION_ERROR, "Invalid request body.", 400);
+    }
 
     const card = await updateFlashcard(id, {
       front: body.front,

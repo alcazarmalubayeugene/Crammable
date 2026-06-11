@@ -26,7 +26,7 @@ export async function POST(request: Request, { params }: Ctx): Promise<Response>
     await enforceRateLimit(user.id, "/api/decks/[id]/share");
 
     const { id } = await params;
-    const deck = await getDeckById(id);
+    const deck = await getDeckById(id, user.id);
     if (!deck) {
       return apiFail(ApiErrorCode.FORBIDDEN, "Deck not found.", 404);
     }
@@ -63,13 +63,16 @@ export async function POST(request: Request, { params }: Ctx): Promise<Response>
   }
 }
 
-export async function DELETE(_req: NextRequest, { params }: Ctx): Promise<Response> {
+export async function DELETE(req: NextRequest, { params }: Ctx): Promise<Response> {
   try {
+    const csrf = assertSameOrigin(req);
+    if (csrf) return csrf;
+
     const { user } = await requireAuth();
     await enforceRateLimit(user.id, "/api/decks/[id]/share");
 
     const { id } = await params;
-    const deck = await getDeckById(id);
+    const deck = await getDeckById(id, user.id);
     if (!deck) {
       return apiFail(ApiErrorCode.FORBIDDEN, "Deck not found.", 404);
     }

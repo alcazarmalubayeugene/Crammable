@@ -16,6 +16,34 @@ core feature · **[P2]** nice-to-have / compliance.
 
 ---
 
+> ## ✅ STATUS UPDATE — 2026-06-11
+>
+> **Almost every gap below has since been implemented** (on the `backend` branch +
+> audit fixes). Current status of each item:
+>
+> | Item | Status | Item | Status |
+> |---|---|---|---|
+> | **A1** Delete-deck UI | ❌ **STILL OPEN** (endpoint exists, no button) | **D1** Flashcard editing | ✅ Done |
+> | **B1** Living Decks | ✅ Done | **D2** Deck rename | ✅ Done |
+> | **B2** Deep Dive | ✅ Done | **D3** Quiz history | ✅ Done |
+> | **B3** PDF export | ✅ Done | **D4** Study-weak-cards mode | ✅ Done |
+> | **B4** All 3 earn methods | ✅ Done | **E1** Payment notifications | ✅ Done (Realtime toast) |
+> | **B5** Public/shared decks | ✅ Done | **E2** GCash number | ✅ Done |
+> | **C1** Pro card cap | ✅ Done | **E3** Pro-expiry cron | ✅ Done |
+> | | | **E4** Admin tooling | ✅ Done (users/reviews/audit/grant) |
+> | | | **E5** Account export + delete | ✅ Done |
+>
+> **The only remaining product gap is A1 — there is no UI to delete a deck**, even
+> though `DELETE /api/decks/[id]` is fully built. See `docs/BASIC_UI.md` for the full
+> UI gap analysis (also flagged there: no 404/error/loading pages, no admin nav link,
+> no shared nav component).
+>
+> The per-item sections below are kept as the historical analysis; the table above is
+> the authoritative current status. Items already marked `[DONE]` inline were done
+> earlier (2026-06-10).
+
+---
+
 ## A. Backend exists, but no UI calls it (quick wins)
 
 ### A1. [P1] Delete a deck — endpoint orphaned

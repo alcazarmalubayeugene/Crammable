@@ -1,5 +1,6 @@
 import {
   ApiErrorCode,
+  ApiPaths,
   ReferralCaps,
   ReferralEventType,
   Validation,
@@ -9,6 +10,7 @@ import {
 import { apiFail, apiSuccess, handleApiError } from "@/lib/api/errors";
 import { assertSameOrigin } from "@/lib/api/csrf";
 import { requireAdmin } from "@/lib/auth/helpers";
+import { enforceRateLimit } from "@/lib/supabase/server";
 import { verifyAppReview } from "@/lib/db/admin";
 
 export const runtime = "nodejs";
@@ -27,6 +29,8 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     const { user } = await requireAdmin();
+
+    await enforceRateLimit(user.id, ApiPaths.adminVerifyReview);
 
     const reviewId = (body.reviewId ?? "").trim();
     if (!reviewId) {

@@ -102,8 +102,10 @@ export async function POST(req: NextRequest, { params }: Ctx): Promise<Response>
       return apiFail(ApiErrorCode.VALIDATION_ERROR, "Invalid quiz type.", 400);
     }
 
-    // RLS: getDeckById returns null if the deck belongs to another user
-    const deck = await getDeckById(deckId);
+    // Owner-scoped: getDeckById filters by user_id, so a deck belonging to
+    // another user (incl. their public decks) returns null → 404. Quizzes run
+    // only on your own decks.
+    const deck = await getDeckById(deckId, user.id);
     if (!deck) {
       return apiFail(ApiErrorCode.FORBIDDEN, "Deck not found.", 404);
     }
