@@ -5,13 +5,10 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* This app uses a fixed cream/brown theme (no dark-mode design) — opt out of
+     the OS dark-mode preference so Tailwind `dark:` variants and the browser's
+     own dark-mode color inversion don't override our inline colors. */
+  color-scheme: light;
 }
 
 body {
