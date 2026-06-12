@@ -22,6 +22,9 @@ export interface QuizResultData {
   scorePercent:   number;
   correctCount:   number;
   totalQuestions: number;
+  livingDeckRefreshTriggered: boolean;
+  reinforcedCardCount?: number;
+  upsellMessage?: string;
   answers: Array<{
     front:      string;
     back:       string;
@@ -43,7 +46,7 @@ interface LocalAnswer {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function looslyCorrect(user: string, correct: string): boolean {
+function looselyCorrect(user: string, correct: string): boolean {
   return user.trim().toLowerCase() === correct.trim().toLowerCase();
 }
 
@@ -159,7 +162,7 @@ export default function QuizPage() {
     } else {
       if (!typedAnswer.trim()) return;
       userAnswer = typedAnswer;
-      correct = looslyCorrect(userAnswer, q.correctAnswer);
+      correct = looselyCorrect(userAnswer, q.correctAnswer);
     }
 
     setAnswers((prev) => [
@@ -209,6 +212,9 @@ export default function QuizPage() {
         scorePercent?: number;
         correctCount?: number;
         totalQuestions?: number;
+        livingDeckRefreshTriggered?: boolean;
+        reinforcedCardCount?: number;
+        upsellMessage?: string;
         error?: { message: string };
       };
 
@@ -224,6 +230,9 @@ export default function QuizPage() {
         scorePercent:   data.scorePercent ?? 0,
         correctCount:   data.correctCount ?? 0,
         totalQuestions: data.totalQuestions ?? currentAnswers.length,
+        livingDeckRefreshTriggered: data.livingDeckRefreshTriggered ?? false,
+        reinforcedCardCount: data.reinforcedCardCount,
+        upsellMessage: data.upsellMessage,
         answers:        currentAnswers.map((a) => ({
           front:      a.front,
           back:       a.back,

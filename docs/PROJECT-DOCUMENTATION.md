@@ -49,39 +49,73 @@ and the roadmap. (Deferred work is tracked separately in `docs/TODO.md`.)
 | Signup | `src/app/api/auth/signup/route.ts` | ✅ |
 | Login | `src/app/api/auth/login/route.ts` | ✅ (self-heals missing profile) |
 | Logout | `src/app/api/auth/logout/route.ts` | ✅ |
-| Forgot / reset password | `src/app/api/auth/forgot-password/route.ts`, `reset-password/route.ts` | ✅ (forgot-password **page** not built — see TODO) |
+| Forgot / reset password | `src/app/api/auth/forgot-password/route.ts`, `reset-password/route.ts` | ✅ (both `/forgot-password` page and `/settings?mode=reset-password` handler built) |
 | Resend confirmation | `src/app/api/auth/resend-confirmation/route.ts` | ✅ (new) |
 | OAuth/email callback | `src/app/api/auth/callback/route.ts` | ✅ |
 
-### Database (deployed to Supabase & verified)
+### Database (deployed to Supabase & verified — full schema applied 2026-06-11)
 
-- **9 tables:** `profiles`, `decks`, `flashcards`, `quiz_sessions`, `quiz_answers`,
-  `payment_submissions`, `referral_events`, `rate_limit_log`, `admin_action_log`.
-- **RLS** enabled on every table with per-user and admin policies.
+- **10 tables:** `profiles`, `decks`, `flashcards`, `quiz_sessions`, `quiz_answers`,
+  `payment_submissions`, `referral_events`, `rate_limit_log`, `admin_action_log`,
+  **`app_reviews`** (B4 in-app reviews). `admin_action_log` extended with
+  `target_user_id` / `credits_amount` and nullable `payment_id` (for `credit_grant` /
+  `account_deleted` actions); `referral_events` gained `deck_id` (deck_share attribution).
+- **RLS** enabled on every table with per-user and admin policies, plus additive
+  "anyone read public" SELECT policies on `decks` / `flashcards` (B5 public sharing).
 - **Triggers:** auto-create profile on signup (`handle_new_user`), `updated_at` maintenance,
   privilege-escalation guard, immutable-field guard.
 - **Functions:** `deduct_credit`, `grant_credits`, `check_referral_cap`, `check_rate_limit`,
   `is_current_user_admin`, `generate_unique_referral_code`, `handle_new_user`,
-  `ensure_profile` (self-heal), plus the atomic `approve_payment` / `reject_payment` /
-  `apply_card_review` from the integration layer.
-- **pg_cron** job to clean old rate-limit logs.
+  `ensure_profile` (self-heal), `submit_quiz_result`, `create_deck_with_cards_and_charge`,
+  `claim_referral`, `apply_card_review`, `approve_payment` / `reject_payment`, plus the
+  newer **`insert_reinforcement_cards_and_charge`** (Living Deck, atomic),
+  **`claim_self_referral_event`** (profile-complete / deck-share earns),
+  **`verify_app_review`** (admin review verification), **`admin_grant_credits`**,
+  **`prepare_account_deletion`** (E5), and **`downgrade_expired_pro`** (Pro-expiry cron).
+- **pg_cron jobs:** clean old rate-limit logs, `pro_monthly_credit_refresh`,
+  **`crammable-pro-expiry-downgrade`** (daily — flips lapsed Pro → free).
+- **Realtime:** `payment_submissions` added to the `supabase_realtime` publication so the
+  client gets live approve/reject notifications (E1).
+- **Security:** all server-only `SECURITY DEFINER` functions have `EXECUTE` revoked from
+  `anon`/`authenticated`; `search_path` is pinned (`= public`) on every function as of
+  2026-06-11.
 
 ### Feature API routes
 
 | Route | File | Status |
 |---|---|---|
-| `POST /api/upload` | `src/app/api/upload/route.ts` | ✅ PDF upload → text extraction → OCR detection; deletes source from Storage (RA 10173) |
+| `POST /api/upload` | `src/app/api/upload/route.ts` | ✅ PDF → in-memory text extraction → OCR detection. The PDF is parsed from the request buffer and **never written to Storage** (stronger than the old "delete after extraction" — nothing to delete). Auth/consent/rate-limit always enforced + CSRF + size pre-check (2026-06-10) |
 | `POST /api/generate` | `src/app/api/generate/route.ts` | ✅ DeepSeek generation; tier + deck-limit enforcement; `createDeckWithCards` + `deductCredit` |
 | `GET /api/decks` | `src/app/api/decks/route.ts` | ✅ User's decks, session-client RLS |
 | `GET /api/decks/[id]` | `src/app/api/decks/[id]/route.ts` | ✅ Deck + cards; 404 for non-owned (no ownership leak) |
 | `DELETE /api/decks/[id]` | `src/app/api/decks/[id]/route.ts` | ✅ Cascade-deletes flashcards/sessions via FK |
 | `POST /api/quiz/[id]` | `src/app/api/quiz/[id]/route.ts` | ✅ Server-side question builder; same-category MC distractors; creates `quiz_sessions` row |
-| `POST /api/quiz/result` | `src/app/api/quiz/result/route.ts` | ✅ Rate-limited; persists `quiz_answers`; `apply_card_review` per card; closes session |
-| `POST /api/payment/submit` | — | ⚠️ Not built — see TODO §9 |
-| `GET /api/admin/payments` | — | ⚠️ Not built |
-| `POST /api/admin/payments/approve` | — | ⚠️ Not built |
-| `POST /api/admin/payments/reject` | — | ⚠️ Not built |
-| `POST /api/referral/claim` | — | ⚠️ Not built |
+| `POST /api/quiz/result` | `src/app/api/quiz/result/route.ts` | ✅ Rate-limited; one atomic `submit_quiz_result` RPC; **score re-derived server-side** from `flashcards.back` (2026-06-10) |
+| `POST /api/payment/submit` | `src/app/api/payment/submit/route.ts` | ✅ 13-digit ref + amount/method validation; 2/24h; one pending per user; never auto-activates Pro |
+| `GET /api/admin/payments` | `src/app/api/admin/payments/route.ts` | ✅ `requireAdmin`; joins `userEmail`; computes `minutesSinceSubmission` |
+| `POST /api/admin/payments/approve` | `src/app/api/admin/payments/approve/route.ts` | ✅ atomic `approve_payment` RPC (verify → Pro → +30 credits → audit) |
+| `POST /api/admin/payments/reject` | `src/app/api/admin/payments/reject/route.ts` | ✅ atomic `reject_payment` RPC (reason shown to student) |
+| `POST /api/referral/claim` | `src/app/api/referral/claim/route.ts` | ✅ atomic `claim_referral` RPC (single source w/ `auth/callback`); unique-index backstop (2026-06-10) |
+| `PATCH /api/decks/[id]` | `src/app/api/decks/[id]/route.ts` | ✅ rename deck (D2); owner-scoped; rate-limited |
+| `POST /api/decks/[id]/flashcards` | `…/flashcards/route.ts` | ✅ add card (D1); tier card-cap enforced |
+| `PATCH·DELETE /api/flashcards/[id]` | `src/app/api/flashcards/[id]/route.ts` | ✅ edit / delete card (D1); recomputes `card_count` |
+| `POST·DELETE /api/decks/[id]/share` | `…/share/route.ts` | ✅ make public / unpublish (B5) + atomic `deck_share` reward |
+| `GET /api/decks/[id]/export` | `…/export/route.tsx` | ✅ PDF export (B3), Pro-gated, `@react-pdf/renderer` |
+| `GET /api/public/decks/[id]` | `src/app/api/public/decks/[id]/route.ts` | ✅ unauthenticated read-only public deck (B5); projection trimmed (no owner PII) |
+| `GET /api/quiz/history` | `src/app/api/quiz/history/route.ts` | ✅ per-deck/user completed-quiz history (D3) |
+| `POST /api/rewards/submit-review` | `…/submit-review/route.ts` | ✅ submit in-app review (B4); admin verifies |
+| `POST /api/rewards/claim-profile-complete` | `…/claim-profile-complete/route.ts` | ✅ profile-complete earn (B4) |
+| `GET /api/admin/reviews` (+ `/verify`) | `src/app/api/admin/reviews/**` | ✅ list + atomic `verify_app_review` (E4) |
+| `GET /api/admin/users` (+ `/grant-credits`) | `src/app/api/admin/users/**` | ✅ user list (LIKE-escaped search) + atomic `admin_grant_credits` (E4) |
+| `GET /api/admin/audit-log` | `src/app/api/admin/audit-log/route.ts` | ✅ admin action trail (E4) |
+| `GET /api/account/export` · `POST /api/account/delete` | `src/app/api/account/**` | ✅ RA-10173 data export + account deletion (E5) |
+| `POST /api/quiz/result` (Living Deck) | `…/quiz/result/route.ts` | ✅ Pro+consent weak-score refresh via `insert_reinforcement_cards_and_charge` (B1) |
+
+> **Feature set is now essentially complete.** The advertised gaps formerly tracked in
+> `docs/MISSING_FEATURES.md` (Living Decks, Deep Dive, PDF export, all reward methods,
+> deck/card editing, quiz history, admin tooling, account export/delete) are **all built** —
+> see the 2026-06-11 status banner in that file. The one remaining product gap is a
+> **delete-deck UI** (endpoint exists, no button); UI gaps are catalogued in `docs/BASIC_UI.md`.
 
 ### Configuration & dependencies
 
@@ -107,15 +141,22 @@ Supabase mocked).
 |---|---|
 | `src/lib/db/errors.ts` | `DbError` (carries `ApiErrorCode` + HTTP status); `toDbError()` maps SQLSTATEs (23505/23514/23503) and `RAISE EXCEPTION` sentinels to typed errors; logs raw cause on 500-class faults. |
 | `src/lib/api/errors.ts` | `handleApiError(err)` standard route `catch` (AuthError→401/403, DbError→its code, ZodError→400, unknown→opaque 500); `apiSuccess<T>()`. |
-| `src/lib/db/rpc.ts` | Service-role wrappers: `deductCredit`, `grantCredits`, `checkReferralCap`. |
+| `src/lib/db/rpc.ts` | Service-role wrappers: `deductCredit`, `grantCredits`, `checkReferralCap`, `claimReferral` (atomic referral attribution), `claimSelfReferralEvent` (profile-complete / deck-share earns). |
 | `src/lib/db/rate-limit.ts` | `checkRateLimit` / `enforceRateLimit` (reads `RateLimits[endpoint]`). |
-| `src/lib/db/profiles.ts` | `getProfileById`, `updateOwnProfile` (whitelisted), `getProfileIdByReferralCode`, `setReferredBy`. |
-| `src/lib/db/decks.ts` | deck CRUD incl. `createDeckWithCards` (compensating delete). |
-| `src/lib/db/flashcards.ts` | `insertFlashcards`, `getWeakCardsForDeck`, `applyCardReview` (atomic RPC). |
-| `src/lib/db/quiz.ts` | quiz session create/answer/complete. |
-| `src/lib/db/payments.ts` | `createPaymentSubmission`, `listUserPayments`. |
-| `src/lib/db/referrals.ts` | `logReferralEvent`, `listReferralEventsForCurrentUser`. |
-| `src/lib/db/admin.ts` | `listPendingPayments`, `approvePayment`, `rejectPayment` (atomic RPCs). |
+| `src/lib/db/profiles.ts` | `updateOwnProfile` (whitelisted), `getProfileIdByReferralCode`. |
+| `src/lib/db/decks.ts` | deck CRUD incl. `createDeckWithCardsAndCharge` (atomic RPC); **owner-scoped** `getDeckById`/`getDeckWithCards` (explicit `user_id` filter — not just RLS, since the B5 public-read policy would otherwise leak others' public decks); `renameDeck`, `setDeckPublic`, `getPublicDeckWithCards` (trimmed projection). |
+| `src/lib/db/flashcards.ts` | `insertFlashcards`, `getFlashcardsForDeck`, `getWeakCardsForDeck`, `applyCardReview`, plus card CRUD (`createFlashcard`/`updateFlashcard`/`deleteFlashcard` + `recomputeDeckCardCount`) and `insertReinforcementCardsAndCharge` (Living Deck, atomic RPC). |
+| `src/lib/db/quiz.ts` | `createQuizSession`, `submitQuizResult` (atomic RPC), `getQuizSession`, `markLivingDeckRefreshTriggered`, `listQuizSessionsForUser` (history). |
+| `src/lib/db/payments.ts` | `createPaymentSubmission`. |
+| `src/lib/db/referrals.ts` | `listReferralEventsForCurrentUser`. |
+| `src/lib/db/reviews.ts` | `createAppReview`, `getOwnAppReview` (B4 in-app reviews). |
+| `src/lib/db/account.ts` | `exportAccountData`, `deleteAccount` (E5 — uses `prepare_account_deletion` + `auth.admin.deleteUser`). |
+| `src/lib/db/admin.ts` | `listPendingPayments`, `approvePayment`, `rejectPayment`, plus E4: `listUsers`, `grantCreditsAsAdmin`, `listAuditLog`, `listPendingAppReviews`, `verifyAppReview` (atomic RPCs). |
+
+> **Note (2026-06-10):** unused, untested helpers were pruned — `getProfileById`,
+> `setReferredBy`, `updateDeckCardCount`, `getQuizSessionById`, `getPaymentById`,
+> `listUserPayments`, `logReferralEvent`. The referral ledger insert now happens inside
+> the `claim_referral` RPC, not a separate `logReferralEvent` call.
 | `src/lib/db/validate.ts` | `ensureMaxLength`, `ensureMaxItems` write-path guards. |
 | `src/lib/db/index.ts` | Barrel — import from `@/lib/db`. |
 
@@ -145,14 +186,18 @@ Postgres functions (supabase-js issues one HTTP request per call, no multi-state
   the `approve_payment`/`reject_payment`/`apply_card_review` functions to exist.
 - `as` casts throughout (fix = generated Supabase types — intentionally deferred during active
   schema work).
-- No automated tests for the DB functions themselves (recommend pgTAP / test-DB integration).
-- `deduct + persist` still non-atomic (target: `create_deck_with_cards_and_charge()` for #5).
+- ~~No automated tests for the DB functions themselves~~ — addressed 2026-06-11: a live
+  integration suite (`npm run test:int`) now exercises RLS, the privilege/immutable triggers,
+  the EXECUTE lockdown, and `create_deck_with_cards_and_charge` against the real project
+  (see §5).
+- ~~`deduct + persist` still non-atomic~~ — done: `create_deck_with_cards_and_charge()`.
 - Validation enforces max length only — empty/blank `front`/`back` still pass.
 
-### Test status (integration layer)
+### Test status
 
-Vitest: ~60 tests across 9 files passing (Supabase mocked). `tsc --noEmit` and `eslint src/lib tests`
-clean. Integration tests (`npm run test:int`) need a live/local Supabase and were not run.
+- **Unit (mocked):** `npm test` — 75 tests across 11 files, Supabase mocked, offline.
+- **Integration (live DB):** `npm run test:int` — 10 tests against the real project (see §5).
+- `tsc --noEmit` and `eslint` clean.
 
 ---
 
@@ -197,9 +242,46 @@ npm run dev          # http://localhost:3000 (leave running)
 npm run build        # production build
 npm run typecheck    # tsc --noEmit
 npm run lint         # eslint
-npm test             # vitest run (unit)
-npm run test:int     # integration tests (needs Supabase env)
+npm test             # vitest run — 75 unit tests (Supabase mocked, offline)
+npm run test:int     # vitest run --config vitest.int.config.ts — live-DB integration (see below)
 ```
+
+### Integration test suite (`npm run test:int`) — live DB
+
+Runs against the **real** Supabase project named in `.env.local` (no mocks). Kept in a
+separate config (`vitest.int.config.ts`) and directory (`tests/integration/`) so `npm test`
+stays fast and offline; the default `vitest.config.ts` excludes `tests/integration/**`.
+
+- **Requires** `.env.local` with `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
+  and `SUPABASE_SERVICE_ROLE_KEY`. `tests/integration/setup.ts` loads `.env.local` into
+  `process.env` (Vitest doesn't do this automatically) and hard-fails if a key is missing.
+- **Self-cleaning:** each run creates two throwaway confirmed users via the admin API
+  (`inttest+…@crammable-inttest.dev`), waits for the `handle_new_user` trigger to provision
+  their profiles, and **deletes them in `afterAll`** (cascading their decks/cards/payments).
+  Files run sequentially (`fileParallelism: false`) since they share one live DB.
+- **What it verifies** (`tests/integration/authorization.int.test.ts`, 10 tests) — the
+  security properties the **database** enforces, which the mocked unit tests can't:
+  1. Provisioning — `handle_new_user` gives a new profile starting credits, an 8-char
+     referral code, free tier, non-admin.
+  2. Deck RLS isolation — a user (and anon) cannot read another user's **private** deck.
+  3. B5 public decks — once published, anyone can **read** the deck, but only the owner can
+     rename / unpublish / delete it (RLS write stays owner-only).
+  4. Flashcard RLS — public-deck cards readable cross-user but not editable/deletable;
+     private-deck cards invisible cross-user.
+  5. Triggers — a user can't self-grant `is_admin`/`pro` or mutate `token_balance` /
+     `referral_code` (`prevent_privilege_escalation` / `protect_immutable_profile_fields`).
+  6. EXECUTE lockdown — authenticated callers are rejected calling `grant_credits` /
+     `deduct_credit` / `approve_payment` directly via `/rest/v1/rpc`.
+  7. Atomic credit economy — `create_deck_with_cards_and_charge` debits exactly one credit,
+     and at a 0 balance it errors and creates **no orphan deck** (full rollback).
+  8. Payment RLS — one-pending-submission-per-user is enforced; B can't read A's submission.
+- **Scope gap (deliberate):** the route-level IDOR fix on the share / flashcard-create /
+  quiz-start handlers is enforced by the **route** (the owner-scoped `getDeckById`), **not by
+  RLS** — at the raw RLS layer a foreign-card insert isn't blocked (the flashcards `WITH CHECK`
+  only validates `user_id = auth.uid()`). Verifying that fix faithfully needs an **HTTP-level
+  test against a running server** (auth-cookie session driving the real endpoints), which is
+  not yet built. The suite documents this in its header and covers everything the DB itself
+  guarantees. The mocked unit suite + `tsc` cover the route handlers' logic.
 
 **Smoke-test signup** (second terminal — use a REAL email; Supabase rejects `@example.com`/
 `@test.com`):
@@ -298,6 +380,52 @@ select (select count(*) from auth.users) as auth_users,
 ---
 
 ## 7. Change log / session history
+
+### 2026-06-11 — feature completion (B/C/D/E) + security-audit hardening
+
+Two strands: the `backend` branch shipped the remaining advertised features, and an
+audit pass hardened them. All verified green: `tsc --noEmit`, `eslint`, Vitest 75/75.
+
+**Features shipped (all of `docs/MISSING_FEATURES.md` except A1 delete-deck UI)**
+- **B1 Living Deck** — Pro+consent weak-score quiz refresh via the atomic
+  `insert_reinforcement_cards_and_charge()` RPC; free users get an upsell.
+- **B2 Deep Dive** — Pro-gated generation mode (toggle in `PdfUploadFlow`, branched prompt).
+- **B3 PDF export** — `GET /api/decks/[id]/export` (`@react-pdf/renderer`), Pro-gated.
+- **B4 reward methods** — share-a-deck, write-a-review (admin-verified), complete-profile,
+  via `claim_self_referral_event()` / `verify_app_review()` + the new `app_reviews` table.
+- **B5 public/shared decks** — `is_public` toggle, public viewer page, additive RLS policies.
+- **C1/E2/E3** — Pro card cap (60), GCash number set, Pro-expiry cron (done 2026-06-10).
+- **D1–D4** — flashcard CRUD, deck rename, quiz history, study-weak-cards mode.
+- **E1** — payment Realtime notifications (`PaymentNotifications.tsx`).
+- **E4** — admin user list + grant credits + review verification + audit log.
+- **E5** — account data export + deletion (`prepare_account_deletion` + `auth.admin.deleteUser`).
+
+**Security-audit fixes (this session)**
+- **🔴 Authorization (IDOR) regression closed.** The B5 "anyone read public" RLS policy made
+  `getDeckById`/`getDeckWithCards` return *other users'* public decks, and several routes used
+  "lookup returned null?" as their ownership gate — enabling credit-farming on share and card
+  injection into others' public decks. Both accessors are now explicitly `user_id`-scoped, and
+  all six call sites pass `user.id`.
+- **CSRF** added to the share-unshare DELETE; **malformed-JSON → 400** on the new write routes;
+  **rate limits** added to deck-rename and admin-review-verify.
+- **Public deck projection trimmed** (no owner `user_id`/`source_filename`/study internals).
+- **`search_path = public` pinned** on the 5 legacy functions flagged by Supabase advisors
+  (`schema.sql`; the matching live `ALTER FUNCTION` is pending — run it via the SQL Editor).
+- Admin user-search `ilike` now escapes LIKE metacharacters.
+
+**Live DB:** the full schema (10 tables, all functions, public-read policies, the
+`crammable-pro-expiry-downgrade` cron, and the `payment_submissions` Realtime publication) was
+verified **already applied** to `gjrdlmxlqngqcnflygcp`. Only outstanding live change: the
+`search_path` `ALTER FUNCTION`s above.
+
+**Integration test suite (live DB).** Added `npm run test:int` — `vitest.int.config.ts` +
+`tests/integration/**` running 10 tests against the real project (RLS isolation, B5 public-read
+SELECT-only, privilege/immutable triggers, privileged-RPC EXECUTE lockdown, atomic
+credit-charge rollback, payment RLS). Self-cleaning throwaway users; the default `npm test`
+excludes it. The route-level IDOR fix still needs an HTTP-level test (see §5 scope gap).
+
+**New docs:** `docs/BASIC_UI.md` (UI inventory + gap analysis). `docs/MISSING_FEATURES.md`,
+`docs/TODO.md`, and this file updated to reflect the above.
 
 ### 2026-05-31 — git reconciliation, attribution cleanup, test pass
 - **Reconciled a diverged `main`** (4 local vs 6 remote commits) *without* force-push: carried
@@ -678,28 +806,22 @@ adds anon/authenticated — so any new `SECURITY DEFINER` function in `public` i
 
 ## 9. Not yet built / roadmap
 
-See `docs/TODO.md` for full approach notes on each item. Priority order:
+> **Updated 2026-06-11.** **The entire backend feature roadmap is now built**, including
+> **Living Deck (#8)**, Deep Dive, PDF export, public/shared decks, all reward methods,
+> deck/card editing, quiz history, Pro-expiry enforcement, admin tooling, and account
+> export/deletion. The full schema is applied to the live project. See the 2026-06-11
+> status banner in **`docs/MISSING_FEATURES.md`**.
 
-**Backend routes (unblocked)**
-- **Living Deck** (`src/app/api/quiz/result/route.ts` — trigger already wired as `false`) —
-  Pro-only; after a quiz with `scorePercent < 70`, calls `getWeakCardsForDeck()`, sends to
-  DeepSeek, inserts reinforcement cards, deducts 1 credit. TODO item 8.
-- **`POST /api/payment/submit`** — GCash reference validation, pending-check, insert, rate
-  limit. New `src/app/api/payment/submit/route.ts`. TODO item 9.
-- **Admin payment routes** (`GET /api/admin/payments`, approve, reject) — gate behind
-  `requireAdmin()`; use atomic `approvePayment()` / `rejectPayment()` RPCs from
-  `src/lib/db/admin.ts`. TODO item 10.
-- **`POST /api/referral/claim`** — validate code, `checkReferralCap()`, `grantCredits()`,
-  `logReferralEvent()`, rate limit. TODO item 11.
+**Still open — product (UI)**
+- **Delete-deck UI** — `DELETE /api/decks/[id]` exists but no page calls it
+  (`MISSING_FEATURES` A1). Plus app-wide chrome gaps (no 404/error/loading pages, no admin
+  nav link, no shared nav component) — see **`docs/BASIC_UI.md`**.
 
-**Frontend migrations (unblocked)**
-- **`/forgot-password` page** — spec in `FRONTEND.md`; backend routes exist. TODO item 2.
-- **Dashboard + deck-detail off Supabase-direct** — swap `getSupabaseBrowserClient()` reads
-  for `GET /api/decks` and `GET /api/decks/[id]`. TODO item 6b.
-
-**Data-access / architecture**
-- `create_deck_with_cards_and_charge()` SECURITY DEFINER RPC — fold deck insert + flashcard
-  insert + `deduct_credit` into a single atomic Postgres transaction (currently three separate
-  HTTP calls with a compensating delete as interim mitigation).
+**Still open — data-access / architecture**
 - Generated Supabase types — eliminate the `as` casts throughout the data-access layer.
-- Integration test suite against a real local Supabase stack (`npm run test:int`).
+- ~~Integration test suite against a real Supabase stack~~ — **built** (`npm run test:int`,
+  10 tests vs the live project; see §5). Remaining: **HTTP-level route tests** (drive the real
+  endpoints with an auth-cookie session) to cover route-layer guards like the IDOR fix that
+  RLS alone doesn't enforce.
+- Living Deck reinforcement runs inline in the quiz-submit request (adds DeepSeek latency);
+  could be moved to an async/background path.

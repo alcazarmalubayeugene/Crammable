@@ -1,21 +1,36 @@
 import {
   ApiErrorCode,
   ApiPaths,
+  LivingDeck,
+  SubscriptionTier,
+  TierLimits,
   UIMessages,
   type SubmitQuizResultData,
   type SubmitQuizResultRequest,
 } from "@/lib/contracts";
 import { handleApiError, apiSuccess, apiFail } from "@/lib/api/errors";
+import { assertSameOrigin } from "@/lib/api/csrf";
 import { requireAuth } from "@/lib/auth/helpers";
 import { checkRateLimit } from "@/lib/supabase/server";
-import { submitQuizResult } from "@/lib/db/quiz";
+import {
+  submitQuizResult,
+  getQuizSession,
+  getDeckById,
+  markLivingDeckRefreshTriggered,
+  getWeakCardsForDeck,
+  insertReinforcementCardsAndCharge,
+} from "@/lib/db";
+import { generateReinforcementCards } from "@/lib/deepseek/generate-cards";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request): Promise<Response> {
   try {
-    const { user } = await requireAuth();
+    const csrf = assertSameOrigin(request);
+    if (csrf) return csrf;
+
+    const { user, profile } = await requireAuth();
 
     const rate = await checkRateLimit(user.id, ApiPaths.submitQuizResult);
     if (!rate.allowed) {
@@ -49,12 +64,57 @@ export async function POST(request: Request): Promise<Response> {
       answers,
     );
 
-    // Living Deck (TODO 8) is not yet wired — always false for now.
+    // Living Deck (B1): on a weak result, Pro users with consent get a
+    // reinforcement refresh; everyone else sees an upsell instead.
+    let livingDeckRefreshTriggered = false;
+    let reinforcedCardCount: number | undefined;
+    let upsellMessage: string | undefined;
+
+    if (scorePercent < LivingDeck.scorePercentThreshold) {
+      if (profile.subscription_tier === SubscriptionTier.PRO && profile.consent_deepseek) {
+        try {
+          const session = await getQuizSession(sessionId);
+          const deck = session ? await getDeckById(session.deck_id, user.id) : null;
+          // Respect the tier's per-deck card cap — a refresh must never push a
+          // deck past TierLimits.pro.maxCardsPerDeck. `room` is how many new
+          // reinforcement cards still fit; skip entirely when the deck is full.
+          const maxCards = TierLimits[profile.subscription_tier].maxCardsPerDeck;
+          const room = deck
+            ? Math.max(0, Math.min(LivingDeck.maxWeakCardsPerRefresh, maxCards - deck.card_count))
+            : 0;
+          if (session && deck && room > 0) {
+            const weakCards = await getWeakCardsForDeck(session.deck_id);
+            if (weakCards.length > 0) {
+              const { cards } = await generateReinforcementCards(weakCards, room);
+              const capped = cards.slice(0, room);
+              if (capped.length > 0) {
+                const { insertedCount } = await insertReinforcementCardsAndCharge(
+                  user.id,
+                  session.deck_id,
+                  capped,
+                );
+                await markLivingDeckRefreshTriggered(sessionId);
+                livingDeckRefreshTriggered = true;
+                reinforcedCardCount = insertedCount;
+              }
+            }
+          }
+        } catch {
+          // AI failure or INSUFFICIENT_CREDITS — the RPC rolls back any partial
+          // insert, so no credit is charged. Silently skip the refresh.
+        }
+      } else {
+        upsellMessage = UIMessages.livingDeckUpsell;
+      }
+    }
+
     return apiSuccess<SubmitQuizResultData>({
       scorePercent,
       correctCount,
       totalQuestions,
-      livingDeckRefreshTriggered: false,
+      livingDeckRefreshTriggered,
+      ...(reinforcedCardCount !== undefined ? { reinforcedCardCount } : {}),
+      ...(upsellMessage !== undefined ? { upsellMessage } : {}),
     });
   } catch (err) {
     return handleApiError(err);

@@ -3,24 +3,17 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { App, Routes } from "@/lib/contracts";
+import { QUIZ_RESULT_KEY, type QuizResultData } from "@/app/quiz/[deckId]/page";
 
-// ── mirrored from quiz/[deckId]/page.tsx ─────────────────────────────────────
+// ── shared styles ─────────────────────────────────────────────────────────────
 
-interface QuizResultData {
-  deckId: string;
-  deckTitle: string;
-  scorePercent: number;
-  correctCount: number;
-  totalQuestions: number;
-  answers: Array<{
-    front: string;
-    back: string;
-    userAnswer: string | null;
-    isCorrect: boolean;
-  }>;
-}
-
-const QUIZ_RESULT_KEY = "crammable_quiz_result";
+const cardStyle = {
+  background: "#FFFCF7",
+  border: "1.5px solid #E0C9A8",
+  borderRadius: 16,
+  padding: "18px 20px",
+  marginBottom: 24,
+} as const;
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -197,6 +190,38 @@ export default function QuizResultPage() {
             </p>
           )}
         </div>
+
+        {/* Living Deck refresh banner */}
+        {result.livingDeckRefreshTriggered && (
+          <div style={{ ...cardStyle, borderColor: "#5C7A35", background: "#EDF5E4" }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: "#3A5020", margin: "0 0 4px" }}>
+              🌱 Living Deck refreshed
+            </p>
+            <p style={{ fontSize: 13, color: "#5C7A35", margin: 0, lineHeight: 1.5 }}>
+              {result.reinforcedCardCount ?? 0} new{" "}
+              {result.reinforcedCardCount === 1 ? "card was" : "cards were"} added to help
+              reinforce your weak areas. (1 credit used)
+            </p>
+          </div>
+        )}
+
+        {/* Pro upsell for Living Decks */}
+        {result.upsellMessage && (
+          <div style={{ ...cardStyle, borderColor: "#C47A2E", background: "#FFF6EB" }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: "#2E1A0C", margin: "0 0 4px" }}>
+              ✨ Living Decks (Pro)
+            </p>
+            <p style={{ fontSize: 13, color: "#8A6E52", margin: "0 0 10px", lineHeight: 1.5 }}>
+              {result.upsellMessage}
+            </p>
+            <a
+              href={Routes.upgrade}
+              style={{ color: "#C47A2E", fontWeight: 600, fontSize: 13, textDecoration: "none" }}
+            >
+              Upgrade to Pro →
+            </a>
+          </div>
+        )}
 
         {/* Stats row */}
         <div

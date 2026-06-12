@@ -18,17 +18,15 @@
 export { DbError, dbError, toDbError } from "@/lib/db/errors";
 
 // Credit / referral RPCs
-export { deductCredit, grantCredits, checkReferralCap } from "@/lib/db/rpc";
+export { deductCredit, grantCredits, checkReferralCap, claimReferral, claimSelfReferralEvent } from "@/lib/db/rpc";
 
 // Rate limiting
 export { checkRateLimit, enforceRateLimit } from "@/lib/db/rate-limit";
 
 // Profiles
 export {
-  getProfileById,
   updateOwnProfile,
   getProfileIdByReferralCode,
-  setReferredBy,
   type EditableProfileFields,
 } from "@/lib/db/profiles";
 
@@ -39,9 +37,11 @@ export {
   getDeckById,
   getDeckWithCards,
   countDecksForUser,
-  updateDeckCardCount,
   deleteDeck,
+  renameDeck,
   createDeckWithCardsAndCharge,
+  setDeckPublic,
+  getPublicDeckWithCards,
   type NewDeckInput,
 } from "@/lib/db/decks";
 
@@ -51,34 +51,57 @@ export {
   getFlashcardsForDeck,
   getWeakCardsForDeck,
   applyCardReview,
+  insertReinforcementCardsAndCharge,
+  createFlashcard,
+  updateFlashcard,
+  deleteFlashcard,
+  recomputeDeckCardCount,
+  type NewFlashcardInput,
+  type FlashcardEdits,
 } from "@/lib/db/flashcards";
 
 // Quiz
 export {
   createQuizSession,
-  getQuizSessionById,
   submitQuizResult,
+  getQuizSession,
+  markLivingDeckRefreshTriggered,
+  listQuizSessionsForUser,
   type NewQuizSessionInput,
 } from "@/lib/db/quiz";
 
 // Payments (student side)
 export {
   createPaymentSubmission,
-  listUserPayments,
   type NewPaymentInput,
 } from "@/lib/db/payments";
 
 // Referrals
 export {
-  logReferralEvent,
   listReferralEventsForCurrentUser,
-  type NewReferralEventInput,
 } from "@/lib/db/referrals";
 
-// Admin payment verification
+// App reviews (B4)
+export {
+  createAppReview,
+  getOwnAppReview,
+} from "@/lib/db/reviews";
+
+// Admin payment verification + user management (E4)
 export {
   listPendingPayments,
-  getPaymentById,
   approvePayment,
   rejectPayment,
+  listPendingAppReviews,
+  verifyAppReview,
+  listUsers,
+  grantCreditsAsAdmin,
+  listAuditLog,
 } from "@/lib/db/admin";
+
+// Account export / deletion (E5)
+export {
+  exportAccountData,
+  deleteAccount,
+  type AccountExportData,
+} from "@/lib/db/account";

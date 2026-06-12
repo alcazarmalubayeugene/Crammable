@@ -1,5 +1,4 @@
 import { createSessionClient } from "@/lib/supabase/server";
-import { internalErrorResponse } from "@/lib/auth/errors";
 
 /**
  * POST /api/auth/logout

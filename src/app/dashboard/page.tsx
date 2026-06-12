@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { ApiPaths, Routes, SubscriptionTier, TableNames } from "@/lib/contracts";
+import { ApiPaths, App, Routes, SubscriptionTier, TableNames } from "@/lib/contracts";
 
 interface Profile {
   full_name: string | null;
@@ -63,7 +63,7 @@ export default function DashboardPage() {
   async function handleLogout() {
     const supabase = getSupabaseBrowserClient();
     await supabase.auth.signOut();
-    window.location.href = "/";
+    window.location.href = Routes.home;
   }
 
   if (loading) {
@@ -86,7 +86,7 @@ export default function DashboardPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 24 }}>🦫</span>
             <span style={{ fontFamily: "var(--font-lora, serif)", fontWeight: 700, fontSize: 18, color: "#FAF2E4" }}>
-              Crammable
+              {App.name}
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>

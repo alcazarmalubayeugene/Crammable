@@ -59,27 +59,43 @@ export async function listDecksForUser(userId: string): Promise<Deck[]> {
   return (data as Deck[]) ?? [];
 }
 
-/** Single deck by id (RLS guarantees ownership). null if not found. */
-export async function getDeckById(deckId: string): Promise<Deck | null> {
+/**
+ * Single deck by id, scoped to its owner. Returns null when the deck doesn't
+ * exist OR isn't owned by `userId`.
+ *
+ * The explicit `.eq("user_id", userId)` is load-bearing, not just an index hint:
+ * since the B5 "decks: anyone read public" RLS SELECT policy, RLS alone would
+ * return another user's PUBLIC deck here, so callers that use this as an
+ * ownership gate (share, flashcards-create, quiz-start) must not rely on RLS.
+ */
+export async function getDeckById(deckId: string, userId: string): Promise<Deck | null> {
   const supabase = await createSessionClient();
   const { data, error } = await supabase
     .from(TableNames.decks)
     .select("*")
     .eq("id", deckId)
+    .eq("user_id", userId)
     .maybeSingle();
   if (error) throw toDbError(error, "Failed to load deck.");
   return (data as Deck) ?? null;
 }
 
-/** Deck + its flashcards for the deck viewer. null when the deck doesn't exist. */
+/**
+ * Deck + its flashcards for the OWNER's deck viewer/export. Owner-scoped (see
+ * getDeckById on why the explicit user_id filter is required, not just RLS).
+ * Use getPublicDeckWithCards() for the unauthenticated public viewer instead.
+ * null when the deck doesn't exist or isn't owned by `userId`.
+ */
 export async function getDeckWithCards(
-  deckId: string
+  deckId: string,
+  userId: string
 ): Promise<{ deck: Deck; cards: Flashcard[] } | null> {
   const supabase = await createSessionClient();
   const { data, error } = await supabase
     .from(TableNames.decks)
     .select(`*, ${TableNames.flashcards}(*)`)
     .eq("id", deckId)
+    .eq("user_id", userId)
     .maybeSingle();
   if (error) throw toDbError(error, "Failed to load deck.");
   if (!data) return null;
@@ -101,19 +117,6 @@ export async function countDecksForUser(userId: string): Promise<number> {
   return count ?? 0;
 }
 
-/** Keep the cached card_count in sync after generation or a Living Deck refresh. */
-export async function updateDeckCardCount(
-  deckId: string,
-  cardCount: number
-): Promise<void> {
-  const supabase = await createSessionClient();
-  const { error } = await supabase
-    .from(TableNames.decks)
-    .update({ card_count: cardCount })
-    .eq("id", deckId);
-  if (error) throw toDbError(error, "Failed to update deck card count.");
-}
-
 /**
  * Delete a deck (flashcards/quiz rows cascade via FK). Returns the number of
  * rows deleted — 0 when the deck doesn't exist or isn't owned by the caller
@@ -127,6 +130,72 @@ export async function deleteDeck(deckId: string): Promise<number> {
     .eq("id", deckId);
   if (error) throw toDbError(error, "Failed to delete deck.");
   return count ?? 0;
+}
+
+/**
+ * Rename a deck (D2). Session-client update — RLS scopes the write to the
+ * deck's owner. Returns the updated deck, or null if the deck doesn't exist /
+ * isn't owned by the caller.
+ */
+export async function renameDeck(deckId: string, title: string): Promise<Deck | null> {
+  ensureMaxLength(title, Validation.deck.titleMaxLength, "Deck title");
+
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase
+    .from(TableNames.decks)
+    .update({ title })
+    .eq("id", deckId)
+    .select("*")
+    .maybeSingle();
+  if (error) throw toDbError(error, "Failed to rename deck.");
+  return (data as Deck) ?? null;
+}
+
+/**
+ * Set a deck's is_public flag (B5 sharing). Session-client update — RLS scopes
+ * the write to the deck's owner. Returns the updated deck, or null if the deck
+ * doesn't exist / isn't owned by the caller.
+ */
+export async function setDeckPublic(deckId: string, isPublic: boolean): Promise<Deck | null> {
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase
+    .from(TableNames.decks)
+    .update({ is_public: isPublic })
+    .eq("id", deckId)
+    .select("*")
+    .maybeSingle();
+  if (error) throw toDbError(error, "Failed to update deck visibility.");
+  return (data as Deck) ?? null;
+}
+
+/**
+ * A public deck + its cards for the read-only public viewer (B5). Relies on
+ * the additive "anyone read public" RLS policies (schema §5) — the session
+ * client returns the row even for an unauthenticated/anonymous visitor as long
+ * as decks.is_public = true. Returns null if the deck doesn't exist or isn't
+ * public.
+ */
+export async function getPublicDeckWithCards(
+  deckId: string
+): Promise<{ deck: Deck; cards: Flashcard[] } | null> {
+  const supabase = await createSessionClient();
+  // Project only the display fields the public viewer needs — never expose the
+  // owner's user_id, the source_filename, or per-card study internals
+  // (difficulty_score, is_reinforcement, last_reviewed_at) to anonymous visitors.
+  const { data, error } = await supabase
+    .from(TableNames.decks)
+    .select(
+      `id, title, card_count, created_at, ${TableNames.flashcards}(id, front, back, category, tags)`
+    )
+    .eq("id", deckId)
+    .eq("is_public", true)
+    .maybeSingle();
+  if (error) throw toDbError(error, "Failed to load deck.");
+  if (!data) return null;
+
+  const { [TableNames.flashcards]: cards, ...deck } = data as Deck &
+    Record<typeof TableNames.flashcards, Flashcard[]>;
+  return { deck: deck as Deck, cards: (cards as Flashcard[]) ?? [] };
 }
 
 /**

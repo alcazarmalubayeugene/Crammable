@@ -6,10 +6,12 @@ import {
   ApiErrorCode,
   ApiPaths,
   App,
+  GenerationMode,
   MAX_UPLOAD_SIZE_MB,
   OcrThresholds,
   PdfType,
   Routes,
+  SubscriptionTier,
   TableNames,
   UIMessages,
   type ApiResponse,
@@ -67,6 +69,11 @@ export function PdfUploadFlow() {
   const [consentSaving, setConsentSaving] = useState(false);
   const [consentError, setConsentError] = useState("");
 
+  // ── Generation mode (B2: Deep Dive, Pro-only) ───────────────────────────────────
+  const [subscriptionTier, setSubscriptionTier] = useState<(typeof SubscriptionTier)[keyof typeof SubscriptionTier]>(SubscriptionTier.FREE);
+  const [generationMode, setGenerationMode] = useState<GenerationMode>(GenerationMode.STANDARD);
+  const isPro = subscriptionTier === SubscriptionTier.PRO;
+
   useEffect(() => {
     async function checkConsent() {
       const supabase = getSupabaseBrowserClient();
@@ -74,10 +81,13 @@ export function PdfUploadFlow() {
       if (!user) { setConsentChecked(true); return; }
       const { data } = await supabase
         .from(TableNames.profiles)
-        .select("consent_deepseek")
+        .select("consent_deepseek, subscription_tier")
         .eq("id", user.id)
         .single();
       setHasConsented(data?.consent_deepseek === true);
+      if (data?.subscription_tier) {
+        setSubscriptionTier(data.subscription_tier as (typeof SubscriptionTier)[keyof typeof SubscriptionTier]);
+      }
       setConsentChecked(true);
     }
     checkConsent();
@@ -133,7 +143,11 @@ export function PdfUploadFlow() {
       setStatusLine("Sending to DeepSeek and generating flashcards…");
       setErrorMessage("");
 
-      const payload: GenerateRequest = { extractedText, pdfType };
+      const payload: GenerateRequest = {
+        extractedText,
+        pdfType,
+        ...(generationMode === GenerationMode.DEEP_DIVE ? { generationMode } : {}),
+      };
       const headers = await authHeaders({ "Content-Type": "application/json" });
       const res = await fetch(ApiPaths.generate, {
         method: "POST",
@@ -177,7 +191,7 @@ export function PdfUploadFlow() {
       setStatusLine(UIMessages.creditDeducted(data.creditsRemaining));
       router.push(Routes.deck(data.deckId));
     },
-    [router],
+    [router, generationMode],
   );
 
   const uploadPdf = useCallback(
@@ -421,18 +435,67 @@ export function PdfUploadFlow() {
       </header>
 
       {phase === "idle" && (
-        <label className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 px-6 py-12 transition hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/50 dark:hover:border-zinc-500">
-          <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
-            Choose a PDF file
-          </span>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/pdf,.pdf"
-            className="sr-only"
-            onChange={onFileSelected}
-          />
-        </label>
+        <>
+          <fieldset className="mb-4 flex flex-col gap-2 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
+            <legend className="px-1 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Generation mode
+            </legend>
+            <label className="flex cursor-pointer items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+              <input
+                type="radio"
+                name="generationMode"
+                checked={generationMode === GenerationMode.STANDARD}
+                onChange={() => setGenerationMode(GenerationMode.STANDARD)}
+                className="mt-1"
+              />
+              <span>
+                <span className="font-medium">Standard</span> — concise, exam-ready flashcards.
+              </span>
+            </label>
+            <label
+              className={`flex items-start gap-2 text-sm ${
+                isPro
+                  ? "cursor-pointer text-zinc-700 dark:text-zinc-300"
+                  : "cursor-not-allowed text-zinc-400 dark:text-zinc-600"
+              }`}
+            >
+              <input
+                type="radio"
+                name="generationMode"
+                checked={generationMode === GenerationMode.DEEP_DIVE}
+                onChange={() => isPro && setGenerationMode(GenerationMode.DEEP_DIVE)}
+                disabled={!isPro}
+                className="mt-1"
+              />
+              <span>
+                <span className="font-medium">Deep Dive (Pro)</span> — thorough explanations,
+                examples, and common pitfalls for each card.
+                {!isPro && (
+                  <>
+                    {" "}
+                    <a href={Routes.upgrade} className="text-amber-700 underline dark:text-amber-400">
+                      Upgrade to Pro
+                    </a>{" "}
+                    to unlock.
+                  </>
+                )}
+              </span>
+            </label>
+          </fieldset>
+
+          <label className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-zinc-300 bg-zinc-50 px-6 py-12 transition hover:border-zinc-400 dark:border-zinc-700 dark:bg-zinc-900/50 dark:hover:border-zinc-500">
+            <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Choose a PDF file
+            </span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="sr-only"
+              onChange={onFileSelected}
+            />
+          </label>
+        </>
       )}
 
       {(phase === "uploading" || phase === "generating") && (

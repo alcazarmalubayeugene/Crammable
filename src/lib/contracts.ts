@@ -29,11 +29,11 @@
 
 export const App = {
   name:         "Crammable",
-  version:      "v.05",                  // bump by 0.1 on every meaningful frontend update
+  version:      "v.06",                  // bump by 0.1 on every meaningful frontend update
   tagline:      "Turn any document into a flashcard deck — in seconds.",
   supportEmail: "support@crammable.ph",  // update once domain is live
   gcashName:    "Crammable",             // name displayed in GCash payment screen
-  gcashNumber:  "",                      // TODO: fill in before launch
+  gcashNumber:  "09691816930",
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -88,8 +88,10 @@ export type PaymentMethod = (typeof PaymentMethod)[keyof typeof PaymentMethod];
 
 /** Admin action types — stored in admin_action_log.action */
 export const AdminAction = {
-  APPROVED: "approved",
-  REJECTED: "rejected",
+  APPROVED:        "approved",
+  REJECTED:        "rejected",
+  CREDIT_GRANT:    "credit_grant",
+  ACCOUNT_DELETED: "account_deleted",
 } as const;
 export type AdminAction = (typeof AdminAction)[keyof typeof AdminAction];
 
@@ -118,6 +120,7 @@ export const TableNames = {
   referralEvents:     "referral_events",
   rateLimitLog:       "rate_limit_log",
   adminActionLog:     "admin_action_log",
+  appReviews:         "app_reviews",
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -159,13 +162,29 @@ export const ApiPaths = {
   generate:            "/api/generate",
   decks:               "/api/decks",
   deck:                (id: string) => `/api/decks/${id}`,
+  deckShare:           (id: string) => `/api/decks/${id}/share`,
+  deckExport:          (id: string) => `/api/decks/${id}/export`,
+  deckFlashcards:      (id: string) => `/api/decks/${id}/flashcards`,
+  flashcard:           (id: string) => `/api/flashcards/${id}`,
+  publicDeck:          (id: string) => `/api/public/decks/${id}`,
   startQuiz:           (id: string) => `/api/quiz/${id}`,
   submitQuizResult:    "/api/quiz/result",
+  quizHistory:         "/api/quiz/history",
   claimReferral:       "/api/referral/claim",
   submitPayment:       "/api/payment/submit",
   adminPayments:       "/api/admin/payments",
   adminApprovePayment: "/api/admin/payments/approve",
   adminRejectPayment:  "/api/admin/payments/reject",
+  claimProfileComplete:  "/api/rewards/claim-profile-complete",
+  submitAppReview:       "/api/rewards/submit-review",
+  adminReviews:          "/api/admin/reviews",
+  adminVerifyReview:     "/api/admin/reviews/verify",
+  adminUsers:            "/api/admin/users",
+  adminGrantCredits:     "/api/admin/users/grant-credits",
+  adminAuditLog:         "/api/admin/audit-log",
+  accountExport:         "/api/account/export",
+  accountDelete:         "/api/account/delete",
+  authSignup:             "/api/auth/signup",
   authLogin:              "/api/auth/login",
   authResendConfirmation: "/api/auth/resend-confirmation",
   authForgotPassword:     "/api/auth/forgot-password",
@@ -188,6 +207,9 @@ export const Routes = {
   upgrade:    "/upgrade",
   rewards:    "/rewards",
   settings:   "/settings",
+
+  // Public (no auth required)
+  publicDeck: (id: string) => `/public/decks/${id}`,
 
   // Admin
   admin:      "/admin",
@@ -218,7 +240,9 @@ export const TierLimits = {
   [SubscriptionTier.PRO]: {
     monthlyCredits:   30,
     maxDecks:         Infinity,   // NOTE: Infinity serialises to null in JSON — compare with === Infinity in logic
-    maxCardsPerDeck:  Infinity,
+    // Finite (not Infinity) on purpose: bounds DeepSeek cost/latency and the
+    // O(n^2) quiz distractor selection. Still far above the free cap.
+    maxCardsPerDeck:  60,
     maxUploadPages:   Infinity,   // no page cap — the 10 MB file size is the only upload limit
     maxUploadSizeMb:  MAX_UPLOAD_SIZE_MB,
     deepDive:         true,
@@ -288,6 +312,19 @@ export const RateLimits: Record<string, RateLimitRule> = {
   [ApiPaths.claimReferral]:    { windowMinutes: 1440, maxRequests: 5   },
   [ApiPaths.adminPayments]:    { windowMinutes: 60,   maxRequests: 200 },
   [ApiPaths.authLogin]:        { windowMinutes: 15,   maxRequests: 10  },
+  "/api/decks/[id]/share":      { windowMinutes: 1440, maxRequests: 5   }, // 24-hour window
+  "/api/decks/[id]/export":     { windowMinutes: 60,   maxRequests: 10  },
+  [ApiPaths.claimProfileComplete]: { windowMinutes: 1440, maxRequests: 5 }, // 24-hour window
+  [ApiPaths.submitAppReview]:      { windowMinutes: 1440, maxRequests: 2 }, // 24-hour window
+  "/api/decks/[id]":            { windowMinutes: 60,   maxRequests: 60  }, // rename (PATCH)
+  "/api/decks/[id]/flashcards": { windowMinutes: 60,   maxRequests: 60  },
+  "/api/flashcards/[id]":       { windowMinutes: 60,   maxRequests: 120 },
+  [ApiPaths.adminVerifyReview]: { windowMinutes: 60,   maxRequests: 120 },
+  [ApiPaths.adminUsers]:        { windowMinutes: 60,   maxRequests: 200 },
+  [ApiPaths.adminGrantCredits]: { windowMinutes: 60,   maxRequests: 60  },
+  [ApiPaths.adminAuditLog]:     { windowMinutes: 60,   maxRequests: 200 },
+  [ApiPaths.accountExport]:     { windowMinutes: 60,   maxRequests: 5   },
+  [ApiPaths.accountDelete]:     { windowMinutes: 1440, maxRequests: 3   }, // 24-hour window
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -348,10 +385,11 @@ export const Validation = {
     filenameMaxLength: 255,
   },
   flashcard: {
-    frontMaxLength: 500,
-    backMaxLength:  1000,
-    maxTags:        5,
-    tagMaxLength:   30,
+    frontMaxLength:    500,
+    backMaxLength:     1000,
+    maxTags:           5,
+    tagMaxLength:      30,
+    categoryMaxLength: 50,
   },
   profile: {
     fullNameMaxLength: 100,
@@ -359,6 +397,13 @@ export const Validation = {
   },
   adminNotes: {
     maxLength: 500,
+  },
+  adminCreditGrant: {
+    minAmount: 1,
+    maxAmount: 1000,  // sane ceiling on a single manual grant — fat-finger guard
+  },
+  appReview: {
+    textMaxLength: 1000,
   },
 } as const;
 
@@ -371,6 +416,8 @@ export const LivingDeck = {
   weakCardThreshold:      0.7,
   /** Max weak cards sent to DeepSeek per refresh (cost control) */
   maxWeakCardsPerRefresh: 5,
+  /** A quiz score below this triggers a Living Deck refresh attempt */
+  scorePercentThreshold:  70,
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -399,8 +446,13 @@ export const UIMessages = {
   livingDeckRefreshed: (count: number) => `${count} card${count === 1 ? "" : "s"} reinforced with new angles on this topic.`,
   livingDeckUpsell:    "Upgrade to Pro to have your deck automatically adapt to your weak areas.",
 
+  // Pro feature gating
+  proFeatureLocked:    "This feature is available on Pro. Upgrade to unlock it.",
+
   // Referral
   referralCredited:  (name: string, credits: number) => `+${credits} credits — ${name} signed up with your link!`,
+  // Shown to the person ENTERING a code: the referrer (not the claimer) is credited.
+  referralClaimThanks: (credits: number) => `Thanks! Your referrer earned +${credits} credits for referring you.`,
 
   // AI disclaimer — REQUIRED on every generated deck page (non-negotiable)
   aiDisclaimer:      "AI-generated content may contain errors. Always verify against your official course materials and textbooks. Do not rely on these cards as your sole study source.",
@@ -413,6 +465,10 @@ export const UIMessages = {
   aiUnavailable:     "AI processing is temporarily unavailable. Your document is saved — try again in a few minutes.",
   rateLimited:       "You've reached the request limit for this action. Please wait before trying again.",
   genericError:      "Something went wrong. Please try again or contact support.",
+
+  // Account (E5)
+  accountDeleteConfirm: "This permanently deletes your account, decks, flashcards, and quiz history. This cannot be undone. Continue?",
+  accountDeleted:       "Your account has been deleted. We're sorry to see you go.",
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -447,7 +503,7 @@ export interface Deck {
   card_count:      number;            // cached count — updated after generation and refresh
   generation_mode: GenerationMode;
   pdf_type:        PdfType;           // for analytics on parsing success rates
-  is_public:       boolean;           // reserved for future sharing feature
+  is_public:       boolean;           // B5 public sharing — true exposes the deck at /public/decks/[id]
   created_at:      string;
   updated_at:      string;
 }
@@ -511,7 +567,21 @@ export interface ReferralEvent {
   credits_awarded: number;
   verified:        boolean;          // admin sets true for 'app_review' events before credits issue
   month_key:       string;           // format: "YYYY-MM" — always use toMonthKey() to generate
+  deck_id:         string | null;    // set for 'deck_share' events; identifies the shared deck
   created_at:      string;
+}
+
+/** A user-submitted in-app review (B4 "Write a review" earn method). */
+export interface AppReview {
+  id:          string;
+  user_id:     string;
+  rating:      number;        // 1-5
+  review_text: string;        // ≤ Validation.appReview.textMaxLength
+  status:      "pending" | "approved" | "rejected";
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  admin_notes: string | null;
+  created_at:  string;
 }
 
 export interface RateLimitLog {
@@ -522,12 +592,14 @@ export interface RateLimitLog {
 }
 
 export interface AdminActionLog {
-  id:         string;
-  admin_id:   string;
-  payment_id: string;
-  action:     AdminAction;
-  notes:      string | null;
-  created_at: string;
+  id:              string;
+  admin_id:        string | null;
+  payment_id:      string | null;       // null for non-payment actions (credit_grant, account_deleted)
+  target_user_id:  string | null;       // set for credit_grant / account_deleted
+  credits_amount:  number | null;       // set for credit_grant
+  action:          AdminAction;
+  notes:           string | null;
+  created_at:      string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -615,6 +687,46 @@ export interface DeckDetailResult {
   cards: Flashcard[];
 }
 
+// ── PATCH /api/decks/[id] ─────────────────────────────────────────────────────
+export interface RenameDeckRequest {
+  title: string;  // ≤ Validation.deck.titleMaxLength
+}
+
+export interface RenameDeckResult {
+  deck: Deck;
+}
+
+// ── POST /api/decks/[id]/flashcards ───────────────────────────────────────────
+export interface CreateFlashcardRequest {
+  front:    string;   // ≤ Validation.flashcard.frontMaxLength
+  back:     string;   // ≤ Validation.flashcard.backMaxLength
+  tags?:    string[]; // ≤ Validation.flashcard.maxTags, each ≤ Validation.flashcard.tagMaxLength
+  category?: string;
+}
+
+export interface CreateFlashcardResult {
+  card:      Flashcard;
+  cardCount: number;
+}
+
+// ── PATCH /api/flashcards/[id] ────────────────────────────────────────────────
+export interface UpdateFlashcardRequest {
+  front?:    string;
+  back?:     string;
+  tags?:     string[];
+  category?: string;
+}
+
+export interface UpdateFlashcardResult {
+  card: Flashcard;
+}
+
+// ── DELETE /api/flashcards/[id] ───────────────────────────────────────────────
+export interface DeleteFlashcardResult {
+  flashcardId: string;
+  cardCount:   number;
+}
+
 // ── POST /api/quiz/[id] ───────────────────────────────────────────────────────
 export interface StartQuizRequest {
   quizType: QuizType;
@@ -651,6 +763,17 @@ export interface SubmitQuizResultData {
   totalQuestions:             number;
   livingDeckRefreshTriggered: boolean;
   reinforcedCardCount?:       number;   // only present when livingDeckRefreshTriggered = true
+  upsellMessage?:             string;   // shown to non-Pro users instead of a refresh
+}
+
+// ── GET /api/quiz/history ─────────────────────────────────────────────────────
+/** A completed quiz session, with the deck title joined for display. */
+export interface QuizHistoryRow extends QuizSession {
+  deckTitle: string;
+}
+
+export interface QuizHistoryResult {
+  sessions: QuizHistoryRow[];
 }
 
 // ── POST /api/referral/claim ──────────────────────────────────────────────────
@@ -705,6 +828,98 @@ export interface RejectPaymentRequest {
 
 // (Reject success has no extra payload — { success: true } is sufficient)
 
+// ── Rewards (B4): self-claimed + admin-verified earn methods ─────────────────
+export interface ClaimRewardResult {
+  creditsAwarded: number;
+  newBalance:     number;
+}
+
+// ── POST /api/rewards/claim-profile-complete ──────────────────────────────────
+export interface ClaimProfileCompleteRequest {
+  fullName: string;
+  course:   string;
+}
+
+export interface ClaimProfileCompleteResult extends ClaimRewardResult {
+  fullName: string | null;
+  course:   string | null;
+}
+
+// ── POST /api/decks/[id]/share ────────────────────────────────────────────────
+export interface ShareDeckResult {
+  isPublic:       boolean;
+  creditsAwarded: number;
+}
+
+// ── POST /api/rewards/submit-review ───────────────────────────────────────────
+export interface SubmitAppReviewRequest {
+  rating:     number;   // 1-5
+  reviewText: string;   // ≤ Validation.appReview.textMaxLength
+}
+
+// ── GET /api/admin/reviews ─────────────────────────────────────────────────────
+export interface AdminAppReviewRow extends AppReview {
+  userEmail: string;   // joined from profiles
+}
+
+export interface AdminReviewsListResult {
+  reviews: AdminAppReviewRow[];
+}
+
+// ── POST /api/admin/reviews/verify ─────────────────────────────────────────────
+export interface VerifyReviewRequest {
+  reviewId: string;
+  approve:  boolean;
+  notes?:   string;
+}
+
+export interface VerifyReviewResult {
+  userId:         string;
+  creditsAwarded: number;
+}
+
+// ── GET /api/admin/users (E4) ──────────────────────────────────────────────────
+/** Minimal profile fields for the admin user-management list. */
+export interface AdminUserRow {
+  id:                string;
+  email:             string;
+  full_name:         string | null;
+  subscription_tier: SubscriptionTier;
+  token_balance:     number;
+  is_admin:          boolean;
+  created_at:        string;
+}
+
+export interface AdminUsersListResult {
+  users: AdminUserRow[];
+}
+
+// ── POST /api/admin/users/grant-credits (E4) ───────────────────────────────────
+export interface GrantCreditsRequest {
+  userId:  string;
+  amount:  number;   // Validation.adminCreditGrant.minAmount..maxAmount
+  notes?:  string;   // ≤ Validation.adminNotes.maxLength
+}
+
+export interface GrantCreditsResult {
+  userId:     string;
+  newBalance: number;
+}
+
+// ── GET /api/admin/audit-log (E4) ──────────────────────────────────────────────
+export interface AdminAuditLogRow extends AdminActionLog {
+  adminEmail:      string | null;   // joined from profiles via admin_id
+  targetUserEmail: string | null;   // joined from profiles via target_user_id
+  paymentReference: string | null;  // joined from payment_submissions via payment_id
+}
+
+export interface AdminAuditLogResult {
+  actions: AdminAuditLogRow[];
+}
+
+// ── POST /api/account/delete (E5) ───────────────────────────────────────────────
+// (No success payload — { success: true } is sufficient)
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 16 — SHARED UTILITY TYPES
 // ─────────────────────────────────────────────────────────────────────────────
@@ -739,6 +954,9 @@ export const ApiErrorCode = {
   // Payment
   INVALID_REFERENCE_NUMBER: "INVALID_REFERENCE_NUMBER",
   PAYMENT_ALREADY_PENDING:  "PAYMENT_ALREADY_PENDING",
+
+  // Rewards
+  REVIEW_ALREADY_SUBMITTED: "REVIEW_ALREADY_SUBMITTED",
 
   // AI / processing
   AI_UNAVAILABLE:           "AI_UNAVAILABLE",    // DeepSeek timeout / downtime

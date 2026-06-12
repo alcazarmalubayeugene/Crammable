@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ApiPaths, Routes } from "@/lib/contracts";
+import { ApiPaths, App, Routes } from "@/lib/contracts";
 
 export default function LoginPage() {
   const [email, setEmail]       = useState("");
@@ -80,10 +80,10 @@ export default function LoginPage() {
           <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
             <span style={{ fontSize: 24 }}>🦫</span>
             <span style={{ fontFamily: "var(--font-lora, serif)", fontWeight: 700, fontSize: 18, color: "#FAF2E4" }}>
-              Crammable
+              {App.name}
             </span>
           </Link>
-          <Link href="/signup" style={{ fontSize: 13, color: "#C49A6C", textDecoration: "none" }}>
+          <Link href={Routes.signup} style={{ fontSize: 13, color: "#C49A6C", textDecoration: "none" }}>
             No account yet?{" "}
             <span style={{ color: "#C47A2E", fontWeight: 600 }}>Sign up free</span>
           </Link>
@@ -184,7 +184,7 @@ export default function LoginPage() {
 
             <p style={{ textAlign: "center", fontSize: 13, color: "#8A6E52", margin: 0 }}>
               Don&apos;t have an account?{" "}
-              <Link href="/signup" style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>
+              <Link href={Routes.signup} style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>
                 Sign up free
               </Link>
             </p>

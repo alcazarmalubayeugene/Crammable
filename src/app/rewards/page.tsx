@@ -13,8 +13,10 @@ import {
   UIMessages,
   Validation,
   type ApiResponse,
+  type AppReview,
   type ClaimReferralResult,
   type ReferralEvent,
+  type SubmitAppReviewRequest,
 } from "@/lib/contracts";
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -90,6 +92,13 @@ export default function RewardsPage() {
   // copy feedback
   const [copied, setCopied] = useState(false);
 
+  // app review form
+  const [appReview, setAppReview] = useState<AppReview | null>(null);
+  const [reviewRating, setReviewRating] = useState(5);
+  const [reviewText, setReviewText] = useState("");
+  const [reviewError, setReviewError] = useState("");
+  const [submittingReview, setSubmittingReview] = useState(false);
+
   useEffect(() => {
     async function load() {
       const supabase = getSupabaseBrowserClient();
@@ -101,7 +110,7 @@ export default function RewardsPage() {
         return;
       }
 
-      const [profileRes, historyRes] = await Promise.all([
+      const [profileRes, historyRes, reviewRes] = await Promise.all([
         supabase
           .from(TableNames.profiles)
           .select("token_balance, full_name, referral_code, referred_by")
@@ -113,6 +122,10 @@ export default function RewardsPage() {
           .eq("referrer_id", user.id)
           .order("created_at", { ascending: false })
           .limit(20),
+        supabase
+          .from(TableNames.appReviews)
+          .select("*")
+          .maybeSingle(),
       ]);
 
       const profileData = profileRes.data as MinProfile;
@@ -128,10 +141,46 @@ export default function RewardsPage() {
         setReferrerName(referrer?.full_name ?? "a classmate");
       }
 
+      setAppReview((reviewRes.data as AppReview | null) ?? null);
       setLoading(false);
     }
     load();
   }, []);
+
+  async function handleSubmitReview(e: React.FormEvent) {
+    e.preventDefault();
+    const text = reviewText.trim();
+    if (!text) {
+      setReviewError("Please write a short review.");
+      return;
+    }
+    if (text.length > Validation.appReview.textMaxLength) {
+      setReviewError(`Review must be ${Validation.appReview.textMaxLength} characters or less.`);
+      return;
+    }
+    setReviewError("");
+    setSubmittingReview(true);
+    try {
+      const res = await fetch(ApiPaths.submitAppReview, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await authHeaders()),
+        } as HeadersInit,
+        body: JSON.stringify({ rating: reviewRating, reviewText: text } satisfies SubmitAppReviewRequest),
+      });
+      const data = (await res.json()) as ApiResponse<AppReview>;
+      if (!data.success) {
+        setReviewError(data.error.message);
+        return;
+      }
+      setAppReview(data);
+    } catch {
+      setReviewError(UIMessages.genericError);
+    } finally {
+      setSubmittingReview(false);
+    }
+  }
 
   async function copyCode() {
     if (!profile?.referral_code) return;
@@ -165,9 +214,7 @@ export default function RewardsPage() {
         setClaimError(data.error.message);
         return;
       }
-      setClaimSuccess(
-        UIMessages.referralCredited("your referrer", data.creditsAwarded),
-      );
+      setClaimSuccess(UIMessages.referralClaimThanks(data.creditsAwarded));
       setProfile((p) => p ? { ...p, token_balance: data.newBalance, referred_by: "claimed" } : p);
       setClaimCode("");
     } catch {
@@ -383,53 +430,159 @@ export default function RewardsPage() {
             marginBottom: 32,
           }}
         >
-          {EARN_METHODS.map((method) => (
-            <div
-              key={method.type}
-              style={{
-                background: "#FFFCF7",
-                border: "1.5px solid #E0C9A8",
-                borderRadius: 14,
-                padding: "18px 20px",
-                display: "flex",
-                gap: 14,
-                alignItems: "flex-start",
-              }}
-            >
-              <span style={{ fontSize: 22, lineHeight: 1.4 }}>{method.icon}</span>
-              <div style={{ flex: 1 }}>
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 8,
-                    marginBottom: 4,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <span style={{ fontSize: 14, fontWeight: 600, color: "#2E1A0C" }}>
-                    {method.label}
-                  </span>
-                  <span
+          {EARN_METHODS.map((method) => {
+            const profileCompleteEarned = history.some(
+              (e) => e.event_type === ReferralEventType.PROFILE_COMPLETE
+            );
+            const deckShareCount = history.filter(
+              (e) => e.event_type === ReferralEventType.DECK_SHARE
+            ).length;
+
+            return (
+              <div
+                key={method.type}
+                style={{
+                  background: "#FFFCF7",
+                  border: "1.5px solid #E0C9A8",
+                  borderRadius: 14,
+                  padding: "18px 20px",
+                  display: "flex",
+                  gap: 14,
+                  alignItems: "flex-start",
+                }}
+              >
+                <span style={{ fontSize: 22, lineHeight: 1.4 }}>{method.icon}</span>
+                <div style={{ flex: 1 }}>
+                  <div
                     style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: "#5C7A35",
-                      background: "#EDF5E4",
-                      borderRadius: 20,
-                      padding: "2px 8px",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      marginBottom: 4,
+                      flexWrap: "wrap",
                     }}
                   >
-                    +{method.credits} credits
-                  </span>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: "#2E1A0C" }}>
+                      {method.label}
+                    </span>
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: "#5C7A35",
+                        background: "#EDF5E4",
+                        borderRadius: 20,
+                        padding: "2px 8px",
+                      }}
+                    >
+                      +{method.credits} credits
+                    </span>
+                  </div>
+                  <p style={{ fontSize: 13, color: "#8A6E52", margin: "0 0 4px", lineHeight: 1.5 }}>
+                    {method.desc}
+                  </p>
+                  <p style={{ fontSize: 11, color: "#C49A6C", margin: "0 0 8px" }}>{method.cap}</p>
+
+                  {/* PROFILE_COMPLETE: earned status / CTA */}
+                  {method.type === ReferralEventType.PROFILE_COMPLETE && (
+                    profileCompleteEarned ? (
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#5C7A35" }}>✓ Earned</span>
+                    ) : (
+                      <a href={Routes.settings} style={{ fontSize: 12, fontWeight: 700, color: "#C47A2E", textDecoration: "none" }}>
+                        Go to Settings →
+                      </a>
+                    )
+                  )}
+
+                  {/* DECK_SHARE: earned count / CTA */}
+                  {method.type === ReferralEventType.DECK_SHARE && (
+                    deckShareCount > 0 ? (
+                      <span style={{ fontSize: 12, fontWeight: 700, color: "#5C7A35" }}>
+                        ✓ Earned {deckShareCount}x
+                      </span>
+                    ) : (
+                      <a href={Routes.dashboard} style={{ fontSize: 12, fontWeight: 700, color: "#C47A2E", textDecoration: "none" }}>
+                        Go to your decks →
+                      </a>
+                    )
+                  )}
+
+                  {/* APP_REVIEW: status / form */}
+                  {method.type === ReferralEventType.APP_REVIEW && (
+                    appReview ? (
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: appReview.status === "approved" ? "#5C7A35"
+                            : appReview.status === "rejected" ? "#EF4444" : "#C49A6C",
+                        }}
+                      >
+                        {appReview.status === "approved" ? "✓ Approved"
+                          : appReview.status === "rejected" ? "✗ Rejected"
+                          : "Pending verification"}
+                      </span>
+                    ) : (
+                      <form onSubmit={handleSubmitReview} style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
+                        <div style={{ display: "flex", gap: 4 }}>
+                          {[1, 2, 3, 4, 5].map((star) => (
+                            <button
+                              key={star}
+                              type="button"
+                              onClick={() => setReviewRating(star)}
+                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, padding: 0, color: star <= reviewRating ? "#C47A2E" : "#E0C9A8" }}
+                              aria-label={`${star} star${star > 1 ? "s" : ""}`}
+                            >
+                              {star <= reviewRating ? "★" : "☆"}
+                            </button>
+                          ))}
+                        </div>
+                        <textarea
+                          value={reviewText}
+                          onChange={(e) => setReviewText(e.target.value)}
+                          maxLength={Validation.appReview.textMaxLength}
+                          placeholder="What do you like about Crammable?"
+                          rows={2}
+                          style={{
+                            background: "#FAF2E4",
+                            border: "1.5px solid #E0C9A8",
+                            borderRadius: 8,
+                            padding: "8px 10px",
+                            fontSize: 13,
+                            color: "#2E1A0C",
+                            fontFamily: "var(--font-dm-sans, sans-serif)",
+                            outline: "none",
+                            resize: "vertical",
+                          }}
+                        />
+                        <button
+                          type="submit"
+                          disabled={submittingReview}
+                          style={{
+                            alignSelf: "flex-start",
+                            background: submittingReview ? "#C49A6C" : "#C47A2E",
+                            color: "#FAF2E4",
+                            border: "none",
+                            borderRadius: 8,
+                            padding: "7px 16px",
+                            fontSize: 12,
+                            fontWeight: 600,
+                            cursor: submittingReview ? "not-allowed" : "pointer",
+                            fontFamily: "var(--font-dm-sans, sans-serif)",
+                          }}
+                        >
+                          {submittingReview ? "Submitting…" : "Submit review"}
+                        </button>
+                        {reviewError && (
+                          <p style={{ fontSize: 12, color: "#EF4444", margin: 0 }}>{reviewError}</p>
+                        )}
+                      </form>
+                    )
+                  )}
                 </div>
-                <p style={{ fontSize: 13, color: "#8A6E52", margin: "0 0 4px", lineHeight: 1.5 }}>
-                  {method.desc}
-                </p>
-                <p style={{ fontSize: 11, color: "#C49A6C", margin: 0 }}>{method.cap}</p>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* ── Claim a referral code ── */}

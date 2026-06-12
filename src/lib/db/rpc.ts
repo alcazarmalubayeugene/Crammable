@@ -73,3 +73,61 @@ export async function checkReferralCap(
   if (error) throw toDbError(error, "Failed to check referral cap.");
   return data as boolean;
 }
+
+/**
+ * claim_referral(): atomic, single-source referral attribution (schema §4.14b).
+ * Locks the referred profile, re-checks referred_by/self/cap, inserts the ledger
+ * event, credits the referrer, and stamps referred_by — all in one transaction.
+ * Both referral paths (the /api/referral/claim route and the auth/callback
+ * auto-process) MUST go through this so they can't double-award (audit 2.1).
+ *
+ * @throws {DbError} SELF_REFERRAL (400) · VALIDATION_ERROR (400, ALREADY_REFERRED)
+ *                   · REFERRAL_CAP_REACHED (409) · INTERNAL_ERROR (USER_NOT_FOUND)
+ */
+export async function claimReferral(
+  referredId: string,
+  referrerId: string,
+  eventType: ReferralEventType,
+  monthKey: string,
+  credits: number
+): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin.rpc("claim_referral", {
+    p_referred_id: referredId,
+    p_referrer_id: referrerId,
+    p_event_type: eventType,
+    p_month_key: monthKey,
+    p_credits: credits,
+  });
+  if (error) throw toDbError(error, "Failed to claim referral.");
+}
+
+/**
+ * claim_self_referral_event() (schema §4.14d): atomic self-earned reward for
+ * the B4 "Ways to earn" methods that aren't referrer/referred attributions —
+ * profile_complete and deck_share. Records a verified=true referral_events row
+ * (referrer_id = referred_id = userId) and grants credits in one transaction.
+ * Returns the new token_balance.
+ *
+ * @throws {DbError} REFERRAL_CAP_REACHED (409) when the monthly/lifetime cap
+ *                   (or, for deck_share, the once-per-deck unique index) blocks
+ *                   another credit for this event type.
+ */
+export async function claimSelfReferralEvent(
+  userId: string,
+  eventType: typeof ReferralEventType.PROFILE_COMPLETE | typeof ReferralEventType.DECK_SHARE,
+  credits: number,
+  monthKey: string,
+  deckId?: string
+): Promise<number> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("claim_self_referral_event", {
+    p_user_id: userId,
+    p_event_type: eventType,
+    p_credits: credits,
+    p_month_key: monthKey,
+    p_deck_id: deckId ?? null,
+  });
+  if (error) throw toDbError(error, "Failed to grant reward.");
+  return data as number;
+}

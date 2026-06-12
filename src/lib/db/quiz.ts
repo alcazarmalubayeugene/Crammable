@@ -1,6 +1,7 @@
 import { createSessionClient } from "@/lib/supabase/server";
 import {
   TableNames,
+  type QuizHistoryRow,
   type QuizSession,
   type QuizType,
   type SubmitQuizAnswer,
@@ -41,20 +42,6 @@ export async function createQuizSession(
   return data as QuizSession;
 }
 
-/** Fetch a session by id (RLS: own sessions only). null if not found. */
-export async function getQuizSessionById(
-  sessionId: string
-): Promise<QuizSession | null> {
-  const supabase = await createSessionClient();
-  const { data, error } = await supabase
-    .from(TableNames.quizSessions)
-    .select("*")
-    .eq("id", sessionId)
-    .maybeSingle();
-  if (error) throw toDbError(error, "Failed to load quiz session.");
-  return (data as QuizSession) ?? null;
-}
-
 /**
  * Atomically + idempotently finalise a quiz via the submit_quiz_result() RPC
  * (schema §4.13). In one transaction it locks the session, re-checks
@@ -89,4 +76,65 @@ export async function submitQuizResult(
     totalQuestions: Number(row?.total_questions ?? 0),
     scorePercent: Number(row?.score_percent ?? 0),
   };
+}
+
+/** Fetch a quiz session by id (RLS-scoped to its owner). Returns null if not found. */
+export async function getQuizSession(sessionId: string): Promise<QuizSession | null> {
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase
+    .from(TableNames.quizSessions)
+    .select("*")
+    .eq("id", sessionId)
+    .maybeSingle();
+  if (error) throw toDbError(error, "Failed to load quiz session.");
+  return (data as QuizSession | null) ?? null;
+}
+
+/**
+ * Stamp a quiz session as having triggered a Living Deck refresh. Plain
+ * session-client update — quiz_sessions RLS already permits an owner to
+ * update their own row (auth.uid() = user_id).
+ */
+export async function markLivingDeckRefreshTriggered(sessionId: string): Promise<void> {
+  const supabase = await createSessionClient();
+  const { error } = await supabase
+    .from(TableNames.quizSessions)
+    .update({ living_deck_refresh_triggered: true })
+    .eq("id", sessionId);
+  if (error) throw toDbError(error, "Failed to update quiz session.");
+}
+
+/**
+ * A user's completed quiz history (D3), newest first, with the deck title
+ * joined for display. RLS scopes quiz_sessions to the caller's own rows, so
+ * userId is only used for the explicit filter (clarity + index hit).
+ * Optionally scoped to a single deck for a deck-detail history section.
+ */
+export async function listQuizSessionsForUser(
+  userId: string,
+  deckId?: string,
+  limit: number = 20
+): Promise<QuizHistoryRow[]> {
+  const supabase = await createSessionClient();
+  let query = supabase
+    .from(TableNames.quizSessions)
+    .select(`*, ${TableNames.decks}(title)`)
+    .eq("user_id", userId)
+    .not("completed_at", "is", null)
+    .order("completed_at", { ascending: false })
+    .limit(limit);
+
+  if (deckId) {
+    query = query.eq("deck_id", deckId);
+  }
+
+  const { data, error } = await query;
+  if (error) throw toDbError(error, "Failed to load quiz history.");
+
+  return ((data as Array<QuizSession & { decks: { title: string } | null }>) ?? []).map(
+    ({ decks, ...session }) => ({
+      ...session,
+      deckTitle: decks?.title ?? "",
+    })
+  );
 }

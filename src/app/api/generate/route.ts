@@ -1,6 +1,7 @@
 import {
   ApiErrorCode,
   ApiPaths,
+  GenerationMode,
   PdfType,
   SubscriptionTier,
   TierLimits,
@@ -10,6 +11,7 @@ import {
   type GenerateResult,
 } from "@/lib/contracts";
 import { apiFail, handleApiError } from "@/lib/api/errors";
+import { assertSameOrigin } from "@/lib/api/csrf";
 import {
   generateFlashcardsFromText,
   isDeepSeekConfigured,
@@ -26,17 +28,17 @@ export const dynamic = "force-dynamic";
 // the request mid-call. Keep DEEPSEEK_REQUEST_TIMEOUT_MS comfortably under this.
 export const maxDuration = 60;
 
-const DEFAULT_MAX_CARDS = 20;
-
 function maxCardsForTier(
   tier: (typeof SubscriptionTier)[keyof typeof SubscriptionTier],
 ): number {
-  const limit = TierLimits[tier].maxCardsPerDeck;
-  return limit === Infinity ? DEFAULT_MAX_CARDS : limit;
+  return TierLimits[tier].maxCardsPerDeck;
 }
 
 export async function POST(request: Request): Promise<Response> {
   try {
+    const csrf = assertSameOrigin(request);
+    if (csrf) return csrf;
+
     if (!isDeepSeekConfigured()) {
       return apiFail(ApiErrorCode.AI_UNAVAILABLE, UIMessages.aiUnavailable, 503);
     }
@@ -96,10 +98,18 @@ export async function POST(request: Request): Promise<Response> {
 
     const maxCards = maxCardsForTier(profile.subscription_tier);
 
+    // Deep Dive (B2) is Pro-only — never trust the client's tier. A free user
+    // requesting deep_dive is silently downgraded to standard rather than
+    // erroring, since the request itself is otherwise valid.
+    const generationMode: GenerationMode =
+      body.generationMode === GenerationMode.DEEP_DIVE && TierLimits[profile.subscription_tier].deepDive
+        ? GenerationMode.DEEP_DIVE
+        : GenerationMode.STANDARD;
+
     let cards: Awaited<ReturnType<typeof generateFlashcardsFromText>>["cards"];
     let aiTitle: string | null = null;
     try {
-      const result = await generateFlashcardsFromText(extractedText, maxCards);
+      const result = await generateFlashcardsFromText(extractedText, maxCards, generationMode);
       cards = result.cards;
       aiTitle = result.title;
     } catch (err) {
@@ -133,7 +143,7 @@ export async function POST(request: Request): Promise<Response> {
       {
         userId: user.id,
         title,
-        generationMode: body.generationMode,
+        generationMode,
         pdfType,
       },
       cards,
