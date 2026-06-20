@@ -66,7 +66,7 @@ export default function QuizResultPage() {
           fontFamily: "var(--font-body, sans-serif)",
         }}
       >
-        <span style={{ fontSize: "calc(48px * var(--font-scale))" }}>🦫</span>
+        <img src="/capy/capy-idle.svg" alt="" width={59} height={48} style={{ height: "calc(48px * var(--font-scale))", width: "auto" }} />
         <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>No quiz results found.</p>
         <a
           href={Routes.quiz(deckId)}
@@ -119,7 +119,7 @@ export default function QuizResultPage() {
               <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
             </a>
             <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
-            <span style={{ fontSize: "calc(24px * var(--font-scale))" }}>🦫</span>
+            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
             <span
               style={{
                 fontFamily: "var(--font-display, serif)",

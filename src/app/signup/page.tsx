@@ -159,7 +159,7 @@ export default function SignupPage() {
       <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)" }}>
         <div style={{ maxWidth: 1024, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-            <span style={{ fontSize: "calc(24px * var(--font-scale))" }}>🦫</span>
+            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
             <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
               {App.name}
             </span>
@@ -176,7 +176,7 @@ export default function SignupPage() {
         <div style={{ width: "100%", maxWidth: 480 }}>
 
           <div style={{ textAlign: "center", marginBottom: 28 }}>
-            <div style={{ fontSize: "calc(48px * var(--font-scale))", marginBottom: 12 }}>🦫</div>
+            <img src="/capy/capy-idle.svg" alt="" width={59} height={48} style={{ height: "calc(48px * var(--font-scale))", width: "auto", marginBottom: 12 }} />
             <h1 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(26px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
               Create your account
             </h1>

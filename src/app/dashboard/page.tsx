@@ -85,7 +85,7 @@ export default function DashboardPage() {
       <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)", position: "sticky", top: 0, zIndex: 50 }}>
         <div style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: "calc(24px * var(--font-scale))" }}>🦫</span>
+            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
             <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
               {App.name}
             </span>
@@ -186,7 +186,7 @@ export default function DashboardPage() {
         {decks.length === 0 ? (
           /* Empty state */
           <div className="anim-fade-up-3" style={{ background: "var(--bg-card)", border: "1.5px dashed var(--border)", borderRadius: 20, padding: "60px 24px", textAlign: "center" }}>
-            <div style={{ fontSize: "calc(56px * var(--font-scale))", marginBottom: 16 }}>🦫</div>
+            <img src="/capy/capy-idle.svg" alt="" width={68} height={56} style={{ height: "calc(56px * var(--font-scale))", width: "auto", marginBottom: 16 }} />
             <h2 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(20px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
               No decks yet
             </h2>
