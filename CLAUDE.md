@@ -7,6 +7,14 @@ alwaysApply: true
 
 # CLAUDE.md — Crammable Backend
 
+> ⚠️ **MANDATORY — read before anything else this session:** the frontend session built a
+> working AI "teaching lesson" feature on wrong quiz answers, then reverted it (it touched
+> `contracts.ts`/`schema.sql` from a frontend-scoped session — not your call to keep or not,
+> just flagging why it's gone). The full design, the DeepSeek token-cost reasoning, and the
+> actual working code are written up in **`docs/PROPOSAL_QUIZ_EXPLANATION.md`** — open it
+> and decide whether to pick it up. This note can be deleted once you've seen it and made
+> that call (with the human dev, not unilaterally).
+
 Guidance for Claude Code (and humans) working on the Crammable backend. Read this before touching API routes, the database, or anything that talks to DeepSeek.
 
 Crammable is a flashcard app for Philippine students: upload a PDF → AI generates flashcards → quiz yourself. Next.js (App Router) on Vercel, Supabase (Postgres + Auth + Storage + RLS), DeepSeek for generation. Payments are manual GCash with admin verification.
