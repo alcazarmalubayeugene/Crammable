@@ -146,7 +146,7 @@ export async function grantCreditsAsAdmin(
     p_amount: amount,
     p_notes: notes ?? null,
   });
-  if (error) throw toDbError(error, "Failed to grant credits.");
+  if (error) throw toDbError(error, "Failed to grant Capycoins.");
   return data as number;
 }
 

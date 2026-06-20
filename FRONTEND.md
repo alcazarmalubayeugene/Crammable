@@ -24,7 +24,7 @@
 | `/quiz/[deckId]/result` | `src/app/quiz/[deckId]/result/page.tsx` | ✅ Done | Score, missed-card review, **Living Deck reinforcement notice / Pro upsell**, retry/back |
 | `/upgrade` | `src/app/upgrade/page.tsx` | ✅ Done | GCash manual payment — 13-digit ref number form |
 | `/rewards` | `src/app/rewards/page.tsx` | ✅ Done | Referral code, **all 4 earn methods** (signup, share-a-deck, write-a-review, complete-profile), claim code, history |
-| `/settings` | `src/app/settings/page.tsx` | ✅ Done | Edit name/course (+ **profile-complete reward**), change password, **export my data**, **delete account**, sign out |
+| `/settings` | `src/app/settings/page.tsx` | ✅ Done | Edit name/course (+ **profile-complete reward**), change password, **Preferred style** (dark mode / font size / font picker, live-preview + explicit save), **delete account**, sign out. Export-my-data was removed per product decision (see Known fixes). |
 | `/admin` | `src/app/admin/page.tsx` | ✅ Done | Admin-only — approve/reject payments, **verify app reviews**, **user list + grant credits**, **audit log**. ⚠️ reachable only by URL (no nav link) |
 
 > **Global chrome gaps** (see `docs/BASIC_UI.md`): no `not-found.tsx` / `error.tsx` /
@@ -58,7 +58,7 @@ design, since there is no profile route).
 | `/api/rewards/submit-review` | POST | `/rewards` | ✅ write-a-review earn |
 | `/api/rewards/claim-profile-complete` | POST | `/settings` | ✅ profile-complete earn |
 | `/api/payment/submit` | POST | `/upgrade` | ✅ |
-| `/api/account/export` · `/api/account/delete` | GET / POST | `/settings` | ✅ data export / account deletion |
+| `/api/account/delete` | POST | `/settings` | ✅ account deletion. (`/api/account/export` was removed — see Known fixes.) |
 | `/api/admin/payments` (+ `/approve`, `/reject`) | GET / POST | `/admin` | ✅ |
 | `/api/admin/reviews` (+ `/verify`) | GET / POST | `/admin` | ✅ app-review verification |
 | `/api/admin/users` (+ `/grant-credits`) | GET / POST | `/admin` | ✅ user list + credit grants |
@@ -382,8 +382,61 @@ Whenever a bug is fixed, it **must** be documented here with three things:
 
 ---
 
+#### Dev server stuck "loading" forever after clearing the Turbopack cache
+- **What broke:** `localhost:3000` hung loading indefinitely. The terminal showed a Rust panic — `Persisting failed: Unable to write SST file`, `thread 'tokio-runtime-worker' panicked`.
+- **Why:** `.next/` (including Turbopack's persistent cache at `.next/dev/cache/turbopack`) was deleted with `rm -rf .next` **while the dev server was still running and holding open file handles into that cache**. Deleting files out from under a live writer corrupted the on-disk cache. Separately, on Windows `npm run dev` spawns a tree of processes (the `npm` wrapper → `next` CLI → the actual server → a separate PostCSS worker) — stopping only the top-level task left orphaned children holding port 3000, so even a clean restart kept failing with "port already in use" until every PID in the tree was killed.
+- **Watch out for:** Always stop the dev server first and confirm it's fully exited *before* deleting `.next/`. On Windows, if a restart won't bind to the port, don't assume one `kill`/`TaskStop` got everything — check `Get-CimInstance Win32_Process -Filter "ProcessId=..."` for each PID's `CommandLine` to find the whole process tree (wrapper + CLI + server + PostCSS worker) and kill all of them together.
+
+---
+
+#### Font picker changed the button highlight but never changed the actual font
+- **What broke:** Picking a font pairing in Settings → Preferred style updated the selected-button styling immediately, but the page's actual text kept rendering in the old font. Dark mode and font-size live-previewed correctly — only the font pairing silently failed.
+- **Why:** `FONT_PAIRS` defined each pairing as `display: "var(--font-playfair)"` etc., and the preview/commit code set `--font-display: var(--font-playfair)` — a CSS variable whose value is itself another `var()` reference (double indirection). Single-level variable writes (theme, font-scale) repainted live, but this chained assignment did not reliably trigger a repaint in this app's setup.
+- **Resolution:** Added `resolveFontVar()` in `src/lib/theme/ThemeProvider.tsx`, which uses `getComputedStyle(document.body).getPropertyValue(...)` to resolve the `next/font` variable to its literal computed value *before* writing it to `--font-display`/`--font-body`, eliminating the second indirection level.
+- **Watch out for:** Never assign one CSS custom property to another custom property's `var()` reference if the *consumer* also reads it via `var()` — resolve to a concrete value first, or test that the chain actually repaints. This bug was invisible from the button state alone; always check the actual rendered output, not just which control is highlighted as selected.
+
+---
+
+#### New animations appeared completely inert — "nothing moves, ever"
+- **What broke:** After porting the concept HTML's hover-lift, button-press, and fade-up entrance animations into `globals.css`, none of them played in the browser at all — not on hover, not on click, not on page load.
+- **Why:** All three animation rules were wrapped in `@media (prefers-reduced-motion: no-preference)`, the standard accessibility convention for skipping motion when a user's OS has "reduce motion" turned on. The testing machine had that OS setting enabled, so the entire block was a no-op — confirmed by the fact that once `prefers-reduced-motion` was identified as the cause, ungating just the hover/press rules made those work immediately, isolating the issue precisely.
+- **Resolution:** Hover-lift and button-press stayed ungated (judged low risk for motion-sensitive users). For the fade-up entrance animation, asked the product owner directly whether to respect or override reduce-motion — **explicit decision: always play it, override the OS preference** — so the `@media` wrapper was removed from the `fadeUp` keyframes/classes entirely.
+- **Watch out for:** If a future animation addition "does nothing" in testing, check the OS/browser's reduce-motion setting before assuming the CSS is broken — it's very easy to chase a phantom bug here. Any new animation added later needs an explicit decision (not a default) on whether it should respect `prefers-reduced-motion`.
+
+---
+
+#### `/decks/new` upload card was nearly unreadable in dark mode (Tailwind `dark:` classes never adapted to the theme system)
+- **What broke:** The whole "Upload PDF" card on `/decks/new` looked grayed-out/disabled in dark mode — heading and body text barely visible against the card background, even though nothing was actually disabled.
+- **Why:** `PdfUploadFlow.tsx` predates this session's `[data-theme="dark"]` CSS-variable theming system and was never migrated — it still used Tailwind's `text-zinc-900`/`dark:text-zinc-50`-style utility classes everywhere. Tailwind's `dark:` variant fires off its own strategy (OS `prefers-color-scheme` by default, not this app's `data-theme` attribute toggle), so when a user picked "Dark" in Settings but their OS was light, Tailwind kept rendering the light-mode near-black text (`zinc-900`) against the now-dark card background — unreadable.
+- **Resolution:** Rewrote every color-related class in the component (~30 instances: headings, body text, borders, backgrounds, the generation-mode picker, dropzone, OCR/paste/result/error states) to inline styles using the app's CSS variable tokens (`var(--text)`, `var(--bg-card)`, `var(--border)`, `var(--success)`, `var(--error)`, etc.), matching every other page in the app. Kept Tailwind classes only for layout (`flex`, `gap-*`, `rounded-*`, `p-*`) which aren't theme-dependent.
+- **Watch out for:** Never use Tailwind's `dark:` variant in this app — it does not track the app's actual dark-mode toggle. Any new component must use the `var(--token)` CSS variables from `globals.css`, never raw Tailwind color utilities (`text-zinc-*`, `bg-white`, etc.), or it will silently break the moment a user's OS preference disagrees with their in-app theme choice.
+
+---
+
+#### Deep Dive (Pro) card's "Upgrade →" / "PRO" badge could push past the card's right border
+- **What broke:** On the `/decks/new` Generation Mode picker, the non-Pro "Deep Dive (Pro)" card's trailing "Upgrade →" label (and the "PRO" badge in its title) could overflow past the card's right edge instead of staying inside the rounded border, especially at narrower widths — the row had no fallback once its fixed-width children (icon, badge, "Upgrade →") plus the squeezed title/description text exceeded the card's width.
+- **Why:** The card's outer flex row had no `flexWrap`, so once `minWidth: 0` on the description span ran out of room to shrink further (text can only wrap down to its longest single word), the row had nowhere left to go but overflow horizontally. The inner title row (`"Deep Dive (Pro)"` + the "PRO" badge) had the same gap — no `flexWrap`, no `flexShrink: 0` on the badge — so it was vulnerable to the identical failure mode one level down.
+- **Resolution:** Added `flexWrap: "wrap"` to both the outer card row and the inner title row, `flexShrink: 0` on every fixed-size child (icon, checkmark, "PRO" badge, "Upgrade →"), and explicit `boxSizing: "border-box"` on both Generation Mode cards. Now if the row genuinely doesn't fit, the trailing label/badge drops to its own line inside the card instead of spilling past the border. Applied to the Standard card too for parity, even though its content is short enough to rarely trigger it.
+- **Watch out for:** Any flex row mixing one `flex: 1; minWidth: 0` text block with multiple fixed-width siblings (icons, badges, trailing labels) needs `flexWrap: "wrap"` as the real fix — `minWidth: 0` alone only stops the *text* from forcing overflow, it does nothing once the fixed-width siblings alone already don't fit.
+
+---
+
+#### Hover-lift stopped working on any card that also had the fade-up entrance animation
+- **What broke:** Dashboard/Settings cards with both `anim-fade-up*` and `hover-lift` classes stopped lifting on hover — but a card with `hover-lift` alone (e.g. the dashboard's "+ New deck" button) still worked fine.
+- **Why:** The `fadeUp` keyframes animated `transform: translateY(...)` with fill-mode `both`. A CSS animation — even after it finishes — keeps overriding any property it touched as long as its fill-mode keeps applying, which silently blocks a separate `:hover { transform: ... }` rule from a different class on the same element. `hover-lift` and `fadeUp` were both fighting over `transform`; `fadeUp` always won.
+- **Resolution:** Changed `fadeUp` to animate `margin-top` instead of `transform` (same visual slide-up effect, different property), freeing `transform` for `hover-lift` to control exclusively.
+- **Watch out for:** Never have two different animation/transition mechanisms target the same CSS property on the same element — one (usually the `animation`, due to fill-mode) will silently and permanently win, and the bug looks exactly like "hover stopped working" with no console error. If a future animation needs to move an element, prefer a property `hover-lift`/other transitions don't also touch.
+
+---
+
 ## Notes for Teammates
 
+- **Proposal for backend dev: AI "teaching lesson" on wrong quiz answers** — built and
+  working during the 2026-06-18→20 session, then reverted 2026-06-21 because it required
+  editing `contracts.ts`/`schema.sql` from a frontend-scoped session. Full writeup —
+  the feature, the DeepSeek token-cost reasoning, and the actual working code to copy —
+  is in `docs/PROPOSAL_QUIZ_EXPLANATION.md`. Not currently in the live codebase; pick it
+  up if you want it, the design work is already done.
 - **Quiz questions** are currently generated client-side from the deck's flashcards.
   When `/api/quiz/[id]` is ready, replace the `buildQuestions()` call in
   `src/app/quiz/[deckId]/page.tsx` with a `fetch(ApiPaths.startQuiz(deckId))`.
@@ -420,20 +473,82 @@ changes everywhere automatically.
 | v.04 | Merged Christian's `main` backend push (deck/auth fixes + atomic Supabase RPCs) into `FrontEnd`, AI-consent gate (signup persistence + upload checkbox screen). New: `/forgot-password` page + `/settings?mode=reset-password` flow (full spec implementation — enumeration-safe, cooldown, expired-link handling). Migrated `/dashboard` and `/decks/[id]` off direct Supabase reads onto `GET /api/decks` and `GET /api/decks/[id]` (#6b). Dashboard navbar brought in line with the master doc — added Rewards/Settings links, "Earn more →" / "Upgrade →" contextual CTAs, credits pill kept as a non-clickable status display (not a link, per §19/§9.1). Plus 6 small lint/cleanup fixes (`<a>` → `<Link>`, unescaped apostrophes, dead `shareUrl` var, lazy-init refactor on quiz-result to drop a cascading-render warning). All typecheck + lint clean. |
 | v.05 | Merged latest `main` (referral/claim route + schema.sql update). Fixed duplicate `App` import in `layout.tsx` (introduced by merge conflict). Removed erroneous `"extends": "expo/tsconfig.base"` from `tsconfig.json`. Added referred-by entry to `/rewards` History section — if `profile.referred_by` is set, fetches referrer's `full_name` and shows "Referred by [name] · +10 credits" row. |
 | v.06 | **Merged `main`'s feature-completion push (B/C/D/E) + security hardening.** Deck-detail rebuilt — rename, add/edit/delete card, share + copy public link, PDF export (Pro), study-weak-cards mode, per-deck quiz history (kept FrontEnd's existing delete-deck button, ported onto main's rebuilt page). Deep Dive (Pro) toggle in upload flow; Living Deck reinforcement notice / upsell on quiz result; public read-only deck viewer (`/public/decks/[id]`). Rewards page gained all 4 earn methods (share-a-deck, write-a-review, complete-profile — kept FrontEnd's "Referred by [name]" history entry alongside them); settings gained data export + account deletion; admin gained review verification, user list + grant credits, and audit log. Backend: `app_reviews` table + new atomic RPCs (Living Deck, self-referral earns, review verify, account deletion), Pro-expiry cron, payment Realtime. Security audit: closed a public-deck IDOR (owner-scoped deck lookups), CSRF/JSON/rate-limit gaps on new routes, trimmed public projection, pinned function `search_path`. Full schema applied live; typecheck + lint + 75 tests green. |
+| v.07 | **Theming + polish pass.** New "Preferred style" section in Settings — dark mode (Night Lamp palette), font-size adjuster, and a 5-pairing font picker, all wired through a new `ThemeProvider` (`src/lib/theme/ThemeProvider.tsx`) with live-preview-then-explicit-Save UX (anti-flash inline script in `layout.tsx`, localStorage-only persistence, whole app re-themed via CSS custom properties, not per-page). Header/nav fixed to span the full width and sit at the screen corners (`maxWidth: 1200` → `"100%"` across all app pages); the active page's own nav label now bolds/colors itself; every header nav link/button got a hover state (`.nav-link` class in `globals.css`). New hover-lift / button-press / fade-up animation system ported from the design concept (fade-up explicitly overrides `prefers-reduced-motion` per product decision — see Known fixes). **Export-my-data removed entirely** per product decision — deleted `/api/account/export`, `exportAccountData()`, its tests, and the Settings UI for it. Renamed all user-facing "credits" copy to "Capycoins" (display text only — `deduct_credit()`, `ApiErrorCode.INSUFFICIENT_CREDITS`, `token_balance`, and other internal identifiers were deliberately left unchanged). Added 3 new Capy character images (`public/capy/teaching-capy.png`, `congrats-capy.png`, `capycoin.png`) — teaching-capy on a wrong quiz answer, congrats-capy on a perfect quiz score, capycoin replacing the 🪙 emoji on every balance display. Typecheck/build/72-test suite all green (3 export tests removed). |
+| v.08 | **Dark-mode bug fix + UI polish.** Fixed `/decks/new`'s upload card being nearly unreadable in dark mode — `PdfUploadFlow.tsx` never migrated off Tailwind `dark:` classes (see Known fixes); rewrote it fully onto the CSS-variable theme tokens and redesigned its Generation-mode picker as clickable radio-cards (was a native `<fieldset>`/`<legend>`) with a smooth `Upgrade to Pro` link/badge for non-Pro users instead of a disabled control. Fixed a real CSS bug where `hover-lift` silently stopped working on any card that also had a `fadeUp` entrance animation (see Known fixes — both were fighting over `transform`). Settings: nav now shows email instead of display name; "Sign out" relabeled "Log out of all devices" with explicit `scope: "global"`; added entrance animation + non-moving hover states (chip/btn-outline/btn-solid CSS classes) across Settings and the dashboard; dashboard's 👋 now does a single gentle wave on hover (not constant); Capycoin icons enlarged and now fill their containers edge-to-edge instead of floating with padding. Typecheck/build/72-test suite all green. *(A wrong-answer "teaching lesson" feature — a per-card `explanation` baked in at generation time, plus a `flashcards.explanation` schema column/RPC change and a new `/api/quiz/explain` route — was built and then fully reverted later the same day: those files are backend-owned per the project's doc-ownership boundary, and the change had not been applied to the live Supabase project. See the 2026-06-20 revert note below.)* |
 
 ---
 
 ## For Claude (Session Lifeline)
 
-> **Current status (2026-06-12):** `main`'s full feature-completion push (B/C/D/E +
-> security hardening) has been merged into `FrontEnd`. Every page and every backend
-> route the UI calls is built and wired — `/upgrade`, `/admin`, `/rewards`, Living Deck
-> UI, deck/card editing, share, export, history, account export/delete, and the
-> delete-deck button (FrontEnd already had this; kept it through the merge onto main's
-> rebuilt `/decks/[id]` page). The remaining gaps are app-wide chrome only — see Pending
-> below. The dated log below is historical.
+> **Current status (2026-06-20):** All app pages and backend routes the UI calls are
+> built and wired. This was a 2-day session (FrontEnd, Personal PC) covering theming
+> (dark mode / font size / font picker), nav alignment + hover states, the export-data
+> feature's full removal, a new animation system, a credits→Capycoins terminology
+> rename, new Capy character art, and a real dark-mode contrast bug fix. A wrong-answer
+> AI "teaching lesson" feature was also built (baked into deck generation) but was
+> **fully reverted later the same session** — it had touched `contracts.ts`/`schema.sql`,
+> files this project's doc-ownership boundary marks backend-owned, and the schema change
+> had never been applied to the live Supabase project. The remaining gaps are still
+> app-wide chrome only — see Pending below. The dated log below is historical.
 
-**Last session: 2026-06-12**
+**Last session: 2026-06-18 → 2026-06-20 ~10:10PM [Personal PC] — ~2-day session**
+
+### What happened
+- Added a "Preferred style" section to `/settings` — dark mode, font-size adjuster,
+  5-pairing font picker — backed by a new `ThemeProvider` (localStorage-only, live
+  preview + explicit Save). See `src/lib/theme/ThemeProvider.tsx`.
+- Fixed header/nav alignment (full-width, corner-anchored) and gave the active page's
+  own nav label a bold/colored state; added a `.nav-link` hover class and applied it to
+  every header nav link/button across all pages.
+- Removed the export-my-data feature entirely (route, db function, tests, UI).
+- Added a hover-lift / button-press / fade-up animation system (fade-up explicitly
+  overrides `prefers-reduced-motion` — product decision, not an accessibility oversight).
+- Renamed all user-facing "credits" copy to "Capycoins" (display text only).
+- Added 3 new Capy character images wired into the quiz wrong-answer banner, the
+  perfect-score result, and every Capycoin balance display.
+- `App.version` bumped `v.06` → `v.07` partway through, then `v.07` → `v.08` for the
+  second half below.
+- **Fixed `/decks/new`'s dark-mode contrast bug** — `PdfUploadFlow.tsx` had never been
+  migrated off Tailwind `dark:` classes, so its text was nearly unreadable in dark mode.
+  Rewrote the whole component onto the CSS-variable theme tokens and redesigned its
+  Generation-mode picker as clickable radio-cards instead of a native
+  `<fieldset>`/`<legend>` (see Known fixes for both).
+- **Built, then reverted same session: wrong-answer "teaching lesson."** DeepSeek
+  generated a per-card `explanation` at deck-generation time (free, baked in), with a
+  live on-demand `POST /api/quiz/explain` fallback for older cards. This touched
+  `contracts.ts` (new `ApiPaths`/`RateLimits`/interfaces) and `schema.sql` (new
+  `flashcards.explanation` column + both insert RPCs) — files the project's doc-ownership
+  boundary marks backend-owned, never edited by the frontend session. Caught before the
+  schema change was ever applied to the live Supabase project. **Reverted in full**
+  (contracts.ts, schema.sql, generate-cards.ts, the new `/api/quiz/explain` route,
+  `db/decks.ts`, `db/flashcards.ts`, the quiz page's explanation UI/fetch logic, and the
+  two test fixtures that had picked up the new required field) — confirmed clean via
+  `tsc --noEmit` and the full 72-test suite. The quiz wrong-answer banner UI fix from
+  earlier in the session (neutral styling, single box, Capy art) was **not** reverted —
+  that part never touched backend files.
+- Fixed a real CSS bug: `hover-lift` silently stopped working on any element that also
+  had a `fadeUp` entrance animation — both were fighting over `transform` (see Known
+  fixes).
+- Settings/dashboard polish: nav shows email instead of display name; "Sign out" →
+  "Log out of all devices" (explicit `scope: "global"`); entrance animations + smoother
+  non-moving hover states (`.chip`, `.btn-outline`, `.btn-solid` in `globals.css`)
+  across Settings; dashboard's 👋 only waves on hover now (was constant/distracting);
+  Capycoin icons enlarged and now fill their containers edge-to-edge.
+- Hit and fixed three more real bugs earlier in the session — Turbopack cache
+  corruption from clearing `.next` on a live dev server, a font picker that highlighted
+  but didn't apply (CSS var double-indirection), and animations that didn't play at all
+  (`prefers-reduced-motion` blocking everything) — all documented under Known fixes.
+
+### Pending (as of 2026-06-20)
+- **App-wide chrome** — no `not-found.tsx` / `error.tsx` / `loading.tsx`; no shared
+  `<Navbar>`/`<Footer>` (re-implemented inline per page, now with the same `.nav-link`
+  hover treatment but still duplicated, not extracted); no admin nav link gated on
+  `is_admin`. See `docs/BASIC_UI.md §3`.
+- Theme/font preference is localStorage-only (per-device) — not synced to the profile
+  row, so it doesn't follow a user across devices. Flagged, not yet decided whether
+  that's in scope.
+
+**Last session (historical): 2026-06-12**
 
 ### What happened
 - Merged `origin/main` (`82547d4`, feature-completion B/C/D/E + security hardening, 60 files / +6598/-273) into `FrontEnd`

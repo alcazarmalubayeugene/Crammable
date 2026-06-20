@@ -76,13 +76,13 @@ export default function PublicDeckPage() {
       <main
         style={{
           minHeight: "100vh",
-          background: "#FAF2E4",
+          background: "var(--bg)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <p style={{ color: "#8A6E52", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
+        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>
           Loading…
         </p>
       </main>
@@ -94,20 +94,20 @@ export default function PublicDeckPage() {
       <main
         style={{
           minHeight: "100vh",
-          background: "#FAF2E4",
+          background: "var(--bg)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           gap: 16,
-          fontFamily: "var(--font-dm-sans, sans-serif)",
+          fontFamily: "var(--font-body, sans-serif)",
         }}
       >
-        <span style={{ fontSize: 48 }}>🦫</span>
-        <p style={{ color: "#8A6E52", fontSize: 15 }}>{error || "Deck not found."}</p>
+        <span style={{ fontSize: "calc(48px * var(--font-scale))" }}>🦫</span>
+        <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>{error || "Deck not found."}</p>
         <a
           href={Routes.home}
-          style={{ color: "#C47A2E", textDecoration: "none", fontWeight: 600, fontSize: 14 }}
+          style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600, fontSize: "calc(14px * var(--font-scale))" }}
         >
           ← Back to {App.name}
         </a>
@@ -119,15 +119,15 @@ export default function PublicDeckPage() {
     <main
       style={{
         minHeight: "100vh",
-        background: "#FAF2E4",
-        fontFamily: "var(--font-dm-sans, sans-serif)",
+        background: "var(--bg)",
+        fontFamily: "var(--font-body, sans-serif)",
       }}
     >
       {/* ── NAVBAR ── */}
       <nav
         style={{
-          background: "#2E1A0C",
-          borderBottom: "1px solid #4A2512",
+          background: "var(--nav-bg)",
+          borderBottom: "1px solid var(--nav-border)",
           position: "sticky",
           top: 0,
           zIndex: 50,
@@ -135,7 +135,7 @@ export default function PublicDeckPage() {
       >
         <div
           style={{
-            maxWidth: 1200,
+            maxWidth: "100%",
             margin: "0 auto",
             padding: "0 24px",
             height: 64,
@@ -146,21 +146,22 @@ export default function PublicDeckPage() {
         >
           <a
             href={Routes.home}
+            className="nav-link"
             style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
           >
-            <span style={{ fontSize: 24 }}>🦫</span>
+            <span style={{ fontSize: "calc(24px * var(--font-scale))" }}>🦫</span>
             <span
               style={{
-                fontFamily: "var(--font-lora, serif)",
+                fontFamily: "var(--font-display, serif)",
                 fontWeight: 700,
-                fontSize: 18,
-                color: "#FAF2E4",
+                fontSize: "calc(18px * var(--font-scale))",
+                color: "var(--nav-text)",
               }}
             >
               {App.name}
             </span>
           </a>
-          <span style={{ fontSize: 13, color: "#C49A6C" }}>Shared deck</span>
+          <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--primary)", fontWeight: 700 }}>Shared deck</span>
         </div>
       </nav>
 
@@ -170,17 +171,17 @@ export default function PublicDeckPage() {
         <div style={{ marginBottom: 24 }}>
           <h1
             style={{
-              fontFamily: "var(--font-lora, serif)",
-              fontSize: 28,
+              fontFamily: "var(--font-display, serif)",
+              fontSize: "calc(28px * var(--font-scale))",
               fontWeight: 700,
-              color: "#2E1A0C",
+              color: "var(--text)",
               marginBottom: 6,
               lineHeight: 1.25,
             }}
           >
             {deck.title}
           </h1>
-          <span style={{ fontSize: 13, color: "#8A6E52" }}>
+          <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)" }}>
             {total} {total === 1 ? "card" : "cards"} · shared by a {App.name} user
           </span>
         </div>
@@ -188,14 +189,14 @@ export default function PublicDeckPage() {
         {/* AI disclaimer — required on every generated deck page */}
         <div
           style={{
-            background: "#FFFCF7",
-            border: "1px solid #E0C9A8",
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
             borderRadius: 10,
             padding: "12px 16px",
             marginBottom: 28,
           }}
         >
-          <p style={{ fontSize: 12, color: "#8A6E52", lineHeight: 1.6, margin: 0 }}>
+          <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", lineHeight: 1.6, margin: 0 }}>
             ⚠️ {UIMessages.aiDisclaimer}
           </p>
         </div>
@@ -204,15 +205,15 @@ export default function PublicDeckPage() {
         {total === 0 ? (
           <div
             style={{
-              background: "#FFFCF7",
-              border: "1.5px dashed #E0C9A8",
+              background: "var(--bg-card)",
+              border: "1.5px dashed var(--border)",
               borderRadius: 20,
               padding: "60px 24px",
               textAlign: "center",
             }}
           >
-            <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
-            <p style={{ color: "#8A6E52", fontSize: 15 }}>This deck has no cards yet.</p>
+            <div style={{ fontSize: "calc(48px * var(--font-scale))", marginBottom: 12 }}>📭</div>
+            <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>This deck has no cards yet.</p>
           </div>
         ) : (
           <>
@@ -225,17 +226,17 @@ export default function PublicDeckPage() {
                 marginBottom: 10,
               }}
             >
-              <span style={{ fontSize: 13, color: "#8A6E52" }}>
+              <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)" }}>
                 Card {currentIdx + 1} of {total}
               </span>
-              <span style={{ fontSize: 12, color: "#C49A6C" }}>Click card to flip</span>
+              <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)" }}>Click card to flip</span>
             </div>
 
             {/* Progress bar */}
             <div
               style={{
                 height: 4,
-                background: "#E0C9A8",
+                background: "var(--border)",
                 borderRadius: 4,
                 marginBottom: 20,
                 overflow: "hidden",
@@ -244,7 +245,7 @@ export default function PublicDeckPage() {
               <div
                 style={{
                   height: "100%",
-                  background: "#C47A2E",
+                  background: "var(--primary)",
                   borderRadius: 4,
                   width: `${((currentIdx + 1) / total) * 100}%`,
                   transition: "width 0.3s",
@@ -277,8 +278,8 @@ export default function PublicDeckPage() {
                     width: "100%",
                     height: "100%",
                     backfaceVisibility: "hidden",
-                    background: "#FFFCF7",
-                    border: "1.5px solid #E0C9A8",
+                    background: "var(--bg-card)",
+                    border: "1.5px solid var(--border)",
                     borderRadius: 20,
                     padding: "32px",
                     boxSizing: "border-box",
@@ -291,10 +292,10 @@ export default function PublicDeckPage() {
                 >
                   <span
                     style={{
-                      fontSize: 11,
+                      fontSize: "calc(11px * var(--font-scale))",
                       fontWeight: 600,
                       letterSpacing: "0.08em",
-                      color: "#C49A6C",
+                      color: "var(--text-faint)",
                       textTransform: "uppercase",
                       marginBottom: 16,
                     }}
@@ -303,10 +304,10 @@ export default function PublicDeckPage() {
                   </span>
                   <p
                     style={{
-                      fontFamily: "var(--font-lora, serif)",
-                      fontSize: 20,
+                      fontFamily: "var(--font-display, serif)",
+                      fontSize: "calc(20px * var(--font-scale))",
                       fontWeight: 600,
-                      color: "#2E1A0C",
+                      color: "var(--text)",
                       textAlign: "center",
                       lineHeight: 1.5,
                       margin: 0,
@@ -326,8 +327,8 @@ export default function PublicDeckPage() {
                     height: "100%",
                     backfaceVisibility: "hidden",
                     transform: "rotateY(180deg)",
-                    background: "#4A2512",
-                    border: "1.5px solid #C47A2E",
+                    background: "var(--nav-bg)",
+                    border: "1.5px solid var(--primary)",
                     borderRadius: 20,
                     padding: "32px",
                     boxSizing: "border-box",
@@ -340,10 +341,10 @@ export default function PublicDeckPage() {
                 >
                   <span
                     style={{
-                      fontSize: 11,
+                      fontSize: "calc(11px * var(--font-scale))",
                       fontWeight: 600,
                       letterSpacing: "0.08em",
-                      color: "#C49A6C",
+                      color: "var(--text-faint)",
                       textTransform: "uppercase",
                       marginBottom: 16,
                     }}
@@ -352,10 +353,10 @@ export default function PublicDeckPage() {
                   </span>
                   <p
                     style={{
-                      fontFamily: "var(--font-lora, serif)",
-                      fontSize: 18,
+                      fontFamily: "var(--font-display, serif)",
+                      fontSize: "calc(18px * var(--font-scale))",
                       fontWeight: 500,
-                      color: "#FAF2E4",
+                      color: "var(--nav-text)",
                       textAlign: "center",
                       lineHeight: 1.6,
                       margin: 0,
@@ -377,8 +378,8 @@ export default function PublicDeckPage() {
                         <span
                           key={tag}
                           style={{
-                            fontSize: 11,
-                            color: "#C49A6C",
+                            fontSize: "calc(11px * var(--font-scale))",
+                            color: "var(--text-faint)",
                             background: "rgba(196,122,46,0.2)",
                             borderRadius: 12,
                             padding: "3px 10px",
@@ -409,16 +410,16 @@ export default function PublicDeckPage() {
                   width: 44,
                   height: 44,
                   borderRadius: 10,
-                  border: "1.5px solid #E0C9A8",
-                  background: "#FFFCF7",
-                  color: "#2E1A0C",
-                  fontSize: 18,
+                  border: "1.5px solid var(--border)",
+                  background: "var(--bg-card)",
+                  color: "var(--text)",
+                  fontSize: "calc(18px * var(--font-scale))",
                   cursor: currentIdx === 0 ? "not-allowed" : "pointer",
                   opacity: currentIdx === 0 ? 0.35 : 1,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontFamily: "var(--font-dm-sans, sans-serif)",
+                  fontFamily: "var(--font-body, sans-serif)",
                 }}
                 aria-label="Previous card"
               >
@@ -435,7 +436,7 @@ export default function PublicDeckPage() {
                       width: i === currentIdx ? 20 : 8,
                       height: 8,
                       borderRadius: 4,
-                      background: i === currentIdx ? "#C47A2E" : "#E0C9A8",
+                      background: i === currentIdx ? "var(--primary)" : "var(--border)",
                       border: "none",
                       padding: 0,
                       cursor: "pointer",
@@ -445,7 +446,7 @@ export default function PublicDeckPage() {
                   />
                 ))}
                 {total > 12 && (
-                  <span style={{ fontSize: 12, color: "#8A6E52", marginLeft: 2 }}>
+                  <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginLeft: 2 }}>
                     +{total - 12}
                   </span>
                 )}
@@ -458,16 +459,16 @@ export default function PublicDeckPage() {
                   width: 44,
                   height: 44,
                   borderRadius: 10,
-                  border: "1.5px solid #E0C9A8",
-                  background: "#FFFCF7",
-                  color: "#2E1A0C",
-                  fontSize: 18,
+                  border: "1.5px solid var(--border)",
+                  background: "var(--bg-card)",
+                  color: "var(--text)",
+                  fontSize: "calc(18px * var(--font-scale))",
                   cursor: currentIdx === total - 1 ? "not-allowed" : "pointer",
                   opacity: currentIdx === total - 1 ? 0.35 : 1,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontFamily: "var(--font-dm-sans, sans-serif)",
+                  fontFamily: "var(--font-body, sans-serif)",
                 }}
                 aria-label="Next card"
               >
@@ -476,8 +477,8 @@ export default function PublicDeckPage() {
             </div>
 
             {/* Sign-up CTA — bottom */}
-            <div style={{ textAlign: "center", marginTop: 36, paddingTop: 28, borderTop: "1px solid #E0C9A8" }}>
-              <p style={{ fontSize: 14, color: "#8A6E52", marginBottom: 14 }}>
+            <div style={{ textAlign: "center", marginTop: 36, paddingTop: 28, borderTop: "1px solid var(--border)" }}>
+              <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-muted)", marginBottom: 14 }}>
                 Want to make your own flashcards from your notes?
               </p>
               <a
@@ -486,12 +487,12 @@ export default function PublicDeckPage() {
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 8,
-                  background: "#C47A2E",
-                  color: "#FAF2E4",
+                  background: "var(--primary)",
+                  color: "var(--nav-text)",
                   padding: "13px 32px",
                   borderRadius: 10,
                   fontWeight: 600,
-                  fontSize: 15,
+                  fontSize: "calc(15px * var(--font-scale))",
                   textDecoration: "none",
                 }}
               >

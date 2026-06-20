@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
 import {
@@ -42,14 +43,14 @@ const FREE_FEATURES = [
   `${TierLimits.free.maxDecks} decks`,
   `${TierLimits.free.maxCardsPerDeck} cards per deck`,
   `Unlimited pages per upload (max ${MAX_UPLOAD_SIZE_MB} MB)`,
-  `${TierLimits.free.startingCredits} starting credits`,
+  `${TierLimits.free.startingCredits} starting Capycoins`,
 ];
 
 const PRO_FEATURES = [
   "Unlimited decks",
   `${TierLimits.pro.maxCardsPerDeck} cards per deck`,
   `Unlimited pages per upload (max ${MAX_UPLOAD_SIZE_MB} MB)`,
-  `${TierLimits.pro.monthlyCredits} credits every month`,
+  `${TierLimits.pro.monthlyCredits} Capycoins every month`,
   "Deep Dive generation mode",
   "Living Decks (auto-refresh weak cards)",
   "PDF export",
@@ -169,13 +170,13 @@ export default function UpgradePage() {
       <main
         style={{
           minHeight: "100vh",
-          background: "#FAF2E4",
+          background: "var(--bg)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <p style={{ color: "#8A6E52", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
+        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>
           Loading…
         </p>
       </main>
@@ -187,8 +188,8 @@ export default function UpgradePage() {
   const Navbar = (
     <nav
       style={{
-        background: "#2E1A0C",
-        borderBottom: "1px solid #4A2512",
+        background: "var(--nav-bg)",
+        borderBottom: "1px solid var(--nav-border)",
         position: "sticky",
         top: 0,
         zIndex: 50,
@@ -196,7 +197,7 @@ export default function UpgradePage() {
     >
       <div
         style={{
-          maxWidth: 1200,
+          maxWidth: "100%",
           margin: "0 auto",
           padding: "0 24px",
           height: 64,
@@ -208,18 +209,19 @@ export default function UpgradePage() {
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <a
             href={Routes.dashboard}
+            className="nav-link"
             style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
           >
-            <span style={{ fontSize: 14, color: "#C49A6C" }}>← Back</span>
+            <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
           </a>
-          <span style={{ color: "#4A2512", margin: "0 8px" }}>|</span>
-          <span style={{ fontSize: 24 }}>🦫</span>
+          <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
+          <span style={{ fontSize: "calc(24px * var(--font-scale))" }}>🦫</span>
           <span
             style={{
-              fontFamily: "var(--font-lora, serif)",
+              fontFamily: "var(--font-display, serif)",
               fontWeight: 700,
-              fontSize: 18,
-              color: "#FAF2E4",
+              fontSize: "calc(18px * var(--font-scale))",
+              color: "var(--nav-text)",
             }}
           >
             {App.name}
@@ -232,15 +234,15 @@ export default function UpgradePage() {
               display: "flex",
               alignItems: "center",
               gap: 6,
-              background: "#4A2512",
+              background: "var(--nav-bg)",
               border: "1px solid rgba(196,122,46,0.3)",
               borderRadius: 20,
               padding: "5px 14px",
             }}
           >
-            <span style={{ fontSize: 14 }}>🪙</span>
-            <span style={{ fontSize: 13, fontWeight: 600, color: "#D4954A" }}>
-              {profile.token_balance} credits
+            <Image src="/capy/capycoin.png" alt="" width={32} height={32} style={{ borderRadius: "50%" }} />
+            <span style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--primary-soft)" }}>
+              {profile.token_balance} Capycoins
             </span>
           </div>
         )}
@@ -252,7 +254,7 @@ export default function UpgradePage() {
 
   if (phase === "already_pro") {
     return (
-      <main style={{ minHeight: "100vh", background: "#FAF2E4", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
+      <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
         {Navbar}
         <div
           style={{
@@ -262,31 +264,31 @@ export default function UpgradePage() {
             textAlign: "center",
           }}
         >
-          <div style={{ fontSize: 56, marginBottom: 16 }}>🏆</div>
+          <div style={{ fontSize: "calc(56px * var(--font-scale))", marginBottom: 16 }}>🏆</div>
           <h1
             style={{
-              fontFamily: "var(--font-lora, serif)",
-              fontSize: 26,
+              fontFamily: "var(--font-display, serif)",
+              fontSize: "calc(26px * var(--font-scale))",
               fontWeight: 700,
-              color: "#2E1A0C",
+              color: "var(--text)",
               marginBottom: 8,
             }}
           >
             You&apos;re already on Pro!
           </h1>
-          <p style={{ color: "#8A6E52", fontSize: 15, marginBottom: 28 }}>
+          <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))", marginBottom: 28 }}>
             You have full access to all Pro features.
           </p>
           <a
             href={Routes.dashboard}
             style={{
               display: "inline-block",
-              background: "#C47A2E",
-              color: "#FAF2E4",
+              background: "var(--primary)",
+              color: "var(--nav-text)",
               padding: "12px 28px",
               borderRadius: 10,
               fontWeight: 600,
-              fontSize: 14,
+              fontSize: "calc(14px * var(--font-scale))",
               textDecoration: "none",
             }}
           >
@@ -301,38 +303,38 @@ export default function UpgradePage() {
 
   if (phase === "pending") {
     return (
-      <main style={{ minHeight: "100vh", background: "#FAF2E4", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
+      <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
         {Navbar}
         <div style={{ maxWidth: 520, margin: "80px auto", padding: "0 24px", textAlign: "center" }}>
-          <div style={{ fontSize: 56, marginBottom: 16 }}>⏳</div>
+          <div style={{ fontSize: "calc(56px * var(--font-scale))", marginBottom: 16 }}>⏳</div>
           <h1
             style={{
-              fontFamily: "var(--font-lora, serif)",
-              fontSize: 26,
+              fontFamily: "var(--font-display, serif)",
+              fontSize: "calc(26px * var(--font-scale))",
               fontWeight: 700,
-              color: "#2E1A0C",
+              color: "var(--text)",
               marginBottom: 8,
             }}
           >
             Payment under review
           </h1>
-          <p style={{ color: "#8A6E52", fontSize: 15, lineHeight: 1.6, marginBottom: 8 }}>
+          <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))", lineHeight: 1.6, marginBottom: 8 }}>
             {UIMessages.paymentSubmitted}
           </p>
-          <p style={{ color: "#C49A6C", fontSize: 13, marginBottom: 28 }}>
+          <p style={{ color: "var(--text-faint)", fontSize: "calc(13px * var(--font-scale))", marginBottom: 28 }}>
             {UIMessages.verificationEta}
           </p>
           <a
             href={Routes.dashboard}
             style={{
               display: "inline-block",
-              background: "#FFFCF7",
-              color: "#2E1A0C",
-              border: "1.5px solid #E0C9A8",
+              background: "var(--bg-card)",
+              color: "var(--text)",
+              border: "1.5px solid var(--border)",
               padding: "12px 28px",
               borderRadius: 10,
               fontWeight: 600,
-              fontSize: 14,
+              fontSize: "calc(14px * var(--font-scale))",
               textDecoration: "none",
             }}
           >
@@ -347,37 +349,37 @@ export default function UpgradePage() {
 
   if (phase === "submitted") {
     return (
-      <main style={{ minHeight: "100vh", background: "#FAF2E4", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
+      <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
         {Navbar}
         <div style={{ maxWidth: 520, margin: "80px auto", padding: "0 24px", textAlign: "center" }}>
-          <div style={{ fontSize: 56, marginBottom: 16 }}>✅</div>
+          <div style={{ fontSize: "calc(56px * var(--font-scale))", marginBottom: 16 }}>✅</div>
           <h1
             style={{
-              fontFamily: "var(--font-lora, serif)",
-              fontSize: 26,
+              fontFamily: "var(--font-display, serif)",
+              fontSize: "calc(26px * var(--font-scale))",
               fontWeight: 700,
-              color: "#2E1A0C",
+              color: "var(--text)",
               marginBottom: 8,
             }}
           >
             Payment submitted!
           </h1>
-          <p style={{ color: "#8A6E52", fontSize: 15, lineHeight: 1.6, marginBottom: 8 }}>
+          <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))", lineHeight: 1.6, marginBottom: 8 }}>
             {UIMessages.paymentSubmitted}
           </p>
-          <p style={{ color: "#C49A6C", fontSize: 13, marginBottom: 28 }}>
+          <p style={{ color: "var(--text-faint)", fontSize: "calc(13px * var(--font-scale))", marginBottom: 28 }}>
             {UIMessages.verificationEta}
           </p>
           <a
             href={Routes.dashboard}
             style={{
               display: "inline-block",
-              background: "#C47A2E",
-              color: "#FAF2E4",
+              background: "var(--primary)",
+              color: "var(--nav-text)",
               padding: "12px 28px",
               borderRadius: 10,
               fontWeight: 600,
-              fontSize: 14,
+              fontSize: "calc(14px * var(--font-scale))",
               textDecoration: "none",
             }}
           >
@@ -396,8 +398,8 @@ export default function UpgradePage() {
     <main
       style={{
         minHeight: "100vh",
-        background: "#FAF2E4",
-        fontFamily: "var(--font-dm-sans, sans-serif)",
+        background: "var(--bg)",
+        fontFamily: "var(--font-body, sans-serif)",
       }}
     >
       {Navbar}
@@ -408,18 +410,18 @@ export default function UpgradePage() {
         <div style={{ textAlign: "center", marginBottom: 36 }}>
           <h1
             style={{
-              fontFamily: "var(--font-lora, serif)",
-              fontSize: 30,
+              fontFamily: "var(--font-display, serif)",
+              fontSize: "calc(30px * var(--font-scale))",
               fontWeight: 700,
-              color: "#2E1A0C",
+              color: "var(--text)",
               marginBottom: 8,
             }}
           >
             Upgrade to Pro
           </h1>
-          <p style={{ color: "#8A6E52", fontSize: 15 }}>
+          <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>
             One-time payment of{" "}
-            <span style={{ fontWeight: 700, color: "#C47A2E" }}>
+            <span style={{ fontWeight: 700, color: "var(--primary)" }}>
               ₱{Pricing.pro.amountPhp}
             </span>{" "}
             via GCash. Verified by our team within{" "}
@@ -431,14 +433,14 @@ export default function UpgradePage() {
         {wasRejected && (
           <div
             style={{
-              background: "#FEF2F2",
-              border: "1.5px solid #EF4444",
+              background: "var(--error-bg)",
+              border: "1.5px solid var(--error)",
               borderRadius: 12,
               padding: "14px 18px",
               marginBottom: 24,
             }}
           >
-            <p style={{ fontSize: 14, color: "#991B1B", margin: 0 }}>
+            <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--error-dark)", margin: 0 }}>
               ❌{" "}
               {UIMessages.paymentRejected(
                 latestPayment?.rejection_reason ?? "Please check your reference number and try again.",
@@ -459,18 +461,18 @@ export default function UpgradePage() {
           {/* Free */}
           <div
             style={{
-              background: "#FFFCF7",
-              border: "1.5px solid #E0C9A8",
+              background: "var(--bg-card)",
+              border: "1.5px solid var(--border)",
               borderRadius: 16,
               padding: "22px 20px",
             }}
           >
             <p
               style={{
-                fontSize: 12,
+                fontSize: "calc(12px * var(--font-scale))",
                 fontWeight: 700,
                 letterSpacing: "0.08em",
-                color: "#8A6E52",
+                color: "var(--text-muted)",
                 textTransform: "uppercase",
                 marginBottom: 14,
               }}
@@ -479,7 +481,7 @@ export default function UpgradePage() {
             </p>
             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
               {FREE_FEATURES.map((f) => (
-                <li key={f} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "#8A6E52" }}>
+                <li key={f} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)" }}>
                   <span>○</span> {f}
                 </li>
               ))}
@@ -489,8 +491,8 @@ export default function UpgradePage() {
           {/* Pro */}
           <div
             style={{
-              background: "#4A2512",
-              border: "1.5px solid #C47A2E",
+              background: "var(--nav-bg)",
+              border: "1.5px solid var(--primary)",
               borderRadius: 16,
               padding: "22px 20px",
             }}
@@ -498,10 +500,10 @@ export default function UpgradePage() {
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
               <p
                 style={{
-                  fontSize: 12,
+                  fontSize: "calc(12px * var(--font-scale))",
                   fontWeight: 700,
                   letterSpacing: "0.08em",
-                  color: "#C47A2E",
+                  color: "var(--primary)",
                   textTransform: "uppercase",
                   margin: 0,
                 }}
@@ -510,9 +512,9 @@ export default function UpgradePage() {
               </p>
               <span
                 style={{
-                  fontSize: 11,
-                  background: "#C47A2E",
-                  color: "#FAF2E4",
+                  fontSize: "calc(11px * var(--font-scale))",
+                  background: "var(--primary)",
+                  color: "var(--nav-text)",
                   borderRadius: 20,
                   padding: "2px 8px",
                   fontWeight: 600,
@@ -523,8 +525,8 @@ export default function UpgradePage() {
             </div>
             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>
               {PRO_FEATURES.map((f) => (
-                <li key={f} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 13, color: "#FAF2E4" }}>
-                  <span style={{ color: "#C47A2E" }}>✓</span> {f}
+                <li key={f} style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: "calc(13px * var(--font-scale))", color: "var(--nav-text)" }}>
+                  <span style={{ color: "var(--primary)" }}>✓</span> {f}
                 </li>
               ))}
             </ul>
@@ -534,18 +536,18 @@ export default function UpgradePage() {
         {/* Payment card */}
         <div
           style={{
-            background: "#FFFCF7",
-            border: "1.5px solid #E0C9A8",
+            background: "var(--bg-card)",
+            border: "1.5px solid var(--border)",
             borderRadius: 20,
             padding: "28px 28px 32px",
           }}
         >
           <h2
             style={{
-              fontFamily: "var(--font-lora, serif)",
-              fontSize: 18,
+              fontFamily: "var(--font-display, serif)",
+              fontSize: "calc(18px * var(--font-scale))",
               fontWeight: 700,
-              color: "#2E1A0C",
+              color: "var(--text)",
               marginBottom: 20,
             }}
           >
@@ -568,28 +570,28 @@ export default function UpgradePage() {
                   style={{
                     minWidth: 24,
                     height: 24,
-                    background: "#C47A2E",
+                    background: "var(--primary)",
                     borderRadius: "50%",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    fontSize: 12,
+                    fontSize: "calc(12px * var(--font-scale))",
                     fontWeight: 700,
-                    color: "#FAF2E4",
+                    color: "var(--nav-text)",
                     flexShrink: 0,
                     marginTop: 1,
                   }}
                 >
                   {i + 1}
                 </span>
-                <span style={{ fontSize: 14, color: "#2E1A0C", lineHeight: 1.5 }}>{step}</span>
+                <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text)", lineHeight: 1.5 }}>{step}</span>
               </li>
             ))}
           </ol>
 
           {/* Form */}
           <form onSubmit={handleSubmit}>
-            <label style={{ display: "block", marginBottom: 6, fontSize: 13, fontWeight: 600, color: "#2E1A0C" }}>
+            <label style={{ display: "block", marginBottom: 6, fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
               GCash Reference Number
             </label>
             <input
@@ -606,13 +608,13 @@ export default function UpgradePage() {
               style={{
                 width: "100%",
                 boxSizing: "border-box",
-                background: "#FAF2E4",
-                border: `1.5px solid ${inputError ? "#EF4444" : "#E0C9A8"}`,
+                background: "var(--bg)",
+                border: `1.5px solid ${inputError ? "var(--error)" : "var(--border)"}`,
                 borderRadius: 10,
                 padding: "12px 14px",
-                fontSize: 16,
-                color: "#2E1A0C",
-                fontFamily: "var(--font-dm-sans, sans-serif)",
+                fontSize: "calc(16px * var(--font-scale))",
+                color: "var(--text)",
+                fontFamily: "var(--font-body, sans-serif)",
                 letterSpacing: "0.05em",
                 outline: "none",
                 marginBottom: 6,
@@ -620,9 +622,9 @@ export default function UpgradePage() {
             />
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               {inputError ? (
-                <p style={{ fontSize: 12, color: "#EF4444", margin: 0 }}>{inputError}</p>
+                <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error)", margin: 0 }}>{inputError}</p>
               ) : (
-                <p style={{ fontSize: 12, color: "#8A6E52", margin: 0 }}>
+                <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
                   {refNum.length} / {Validation.referenceNumber.length} digits
                 </p>
               )}
@@ -631,14 +633,14 @@ export default function UpgradePage() {
             {submitError && (
               <div
                 style={{
-                  background: "#FEF2F2",
-                  border: "1.5px solid #EF4444",
+                  background: "var(--error-bg)",
+                  border: "1.5px solid var(--error)",
                   borderRadius: 10,
                   padding: "12px 14px",
                   marginBottom: 16,
                 }}
               >
-                <p style={{ fontSize: 13, color: "#991B1B", margin: 0 }}>{submitError}</p>
+                <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--error-dark)", margin: 0 }}>{submitError}</p>
               </div>
             )}
 
@@ -647,22 +649,22 @@ export default function UpgradePage() {
               disabled={submitting}
               style={{
                 width: "100%",
-                background: submitting ? "#C49A6C" : "#C47A2E",
-                color: "#FAF2E4",
+                background: submitting ? "var(--text-faint)" : "var(--primary)",
+                color: "var(--nav-text)",
                 border: "none",
                 borderRadius: 10,
                 padding: "14px",
-                fontSize: 15,
+                fontSize: "calc(15px * var(--font-scale))",
                 fontWeight: 600,
                 cursor: submitting ? "not-allowed" : "pointer",
-                fontFamily: "var(--font-dm-sans, sans-serif)",
+                fontFamily: "var(--font-body, sans-serif)",
               }}
             >
               {submitting ? "Submitting…" : `Submit Payment — ₱${Pricing.pro.amountPhp}`}
             </button>
           </form>
 
-          <p style={{ fontSize: 12, color: "#8A6E52", marginTop: 14, lineHeight: 1.6, textAlign: "center" }}>
+          <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginTop: 14, lineHeight: 1.6, textAlign: "center" }}>
             {UIMessages.verificationEta} Questions? {App.supportEmail}
           </p>
         </div>

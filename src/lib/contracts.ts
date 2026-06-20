@@ -29,7 +29,7 @@
 
 export const App = {
   name:         "Crammable",
-  version:      "v.06",                  // bump by 0.1 on every meaningful frontend update
+  version:      "v.08",                  // bump by 0.1 on every meaningful frontend update
   tagline:      "Turn any document into a flashcard deck — in seconds.",
   supportEmail: "support@crammable.ph",  // update once domain is live
   gcashName:    "Crammable",             // name displayed in GCash payment screen
@@ -182,7 +182,6 @@ export const ApiPaths = {
   adminUsers:            "/api/admin/users",
   adminGrantCredits:     "/api/admin/users/grant-credits",
   adminAuditLog:         "/api/admin/audit-log",
-  accountExport:         "/api/account/export",
   accountDelete:         "/api/account/delete",
   authSignup:             "/api/auth/signup",
   authLogin:              "/api/auth/login",
@@ -323,7 +322,6 @@ export const RateLimits: Record<string, RateLimitRule> = {
   [ApiPaths.adminUsers]:        { windowMinutes: 60,   maxRequests: 200 },
   [ApiPaths.adminGrantCredits]: { windowMinutes: 60,   maxRequests: 60  },
   [ApiPaths.adminAuditLog]:     { windowMinutes: 60,   maxRequests: 200 },
-  [ApiPaths.accountExport]:     { windowMinutes: 60,   maxRequests: 5   },
   [ApiPaths.accountDelete]:     { windowMinutes: 1440, maxRequests: 3   }, // 24-hour window
 } as const;
 
@@ -434,10 +432,10 @@ export const UIMessages = {
 
   // Credits
   upsellPrompt:      `You have 1 generation left. Upgrade to Pro for ₱${Pricing.pro.amountPhp}/month.`,
-  creditDeducted:    (remaining: number) => `1 credit used. ${remaining} remaining.`,
+  creditDeducted:    (remaining: number) => `1 Capycoin used. ${remaining} remaining.`,
 
   // Payment
-  paymentSubmitted:  "Payment submitted! You'll receive a notification once verified. Your current credits are still available.",
+  paymentSubmitted:  "Payment submitted! You'll receive a notification once verified. Your current Capycoins are still available.",
   paymentApproved:   "Your payment has been verified! Pro features are now unlocked.",
   paymentRejected:   (reason: string) => `Payment rejected: ${reason}. Please resubmit or contact support.`,
   verificationEta:   `Usually verified within ${AdminConfig.slaHours} hours (7am–11pm PHT).`,
@@ -450,15 +448,15 @@ export const UIMessages = {
   proFeatureLocked:    "This feature is available on Pro. Upgrade to unlock it.",
 
   // Referral
-  referralCredited:  (name: string, credits: number) => `+${credits} credits — ${name} signed up with your link!`,
+  referralCredited:  (name: string, credits: number) => `+${credits} Capycoins — ${name} signed up with your link!`,
   // Shown to the person ENTERING a code: the referrer (not the claimer) is credited.
-  referralClaimThanks: (credits: number) => `Thanks! Your referrer earned +${credits} credits for referring you.`,
+  referralClaimThanks: (credits: number) => `Thanks! Your referrer earned +${credits} Capycoins for referring you.`,
 
   // AI disclaimer — REQUIRED on every generated deck page (non-negotiable)
   aiDisclaimer:      "AI-generated content may contain errors. Always verify against your official course materials and textbooks. Do not rely on these cards as your sole study source.",
 
   // Credits / limits
-  outOfCredits:      "You don't have enough credits. Purchase more to generate another deck.",
+  outOfCredits:      "You don't have enough Capycoins. Purchase more to generate another deck.",
   deckLimitReached:  "You've reached your deck limit. Upgrade to Pro for unlimited decks.",
 
   // Generic errors

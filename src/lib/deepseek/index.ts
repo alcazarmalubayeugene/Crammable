@@ -11,4 +11,7 @@ export {
   mapDeepSeekError,
   type ChatCompletionOptions,
 } from "@/lib/deepseek/client";
-export { generateFlashcardsFromText } from "@/lib/deepseek/generate-cards";
+export {
+  generateFlashcardsFromText,
+  generateReinforcementCards,
+} from "@/lib/deepseek/generate-cards";

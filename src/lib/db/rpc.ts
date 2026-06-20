@@ -33,7 +33,7 @@ export async function deductCredit(userId: string): Promise<number> {
   const { data, error } = await admin.rpc("deduct_credit", {
     p_user_id: userId,
   });
-  if (error) throw toDbError(error, "Failed to deduct credit.");
+  if (error) throw toDbError(error, "Failed to deduct Capycoin.");
   return data as number;
 }
 
@@ -48,7 +48,7 @@ export async function grantCredits(userId: string, amount: number): Promise<numb
     p_user_id: userId,
     p_amount: amount,
   });
-  if (error) throw toDbError(error, "Failed to grant credits.");
+  if (error) throw toDbError(error, "Failed to grant Capycoins.");
   return data as number;
 }
 

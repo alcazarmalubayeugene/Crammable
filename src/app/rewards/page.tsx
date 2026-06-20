@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
 import {
@@ -35,7 +36,7 @@ const EARN_METHODS = [
     type: ReferralEventType.SIGNUP,
     icon: "👥",
     label: "Refer a friend",
-    desc: "Share your code. When they sign up, you both earn credits.",
+    desc: "Share your code. When they sign up, you both earn Capycoins.",
     credits: ReferralCaps[ReferralEventType.SIGNUP].creditsAwarded,
     cap: `Up to ${ReferralCaps[ReferralEventType.SIGNUP].monthlyCap}x per month`,
   },
@@ -231,13 +232,13 @@ export default function RewardsPage() {
       <main
         style={{
           minHeight: "100vh",
-          background: "#FAF2E4",
+          background: "var(--bg)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <p style={{ color: "#8A6E52", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
+        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>
           Loading…
         </p>
       </main>
@@ -249,15 +250,15 @@ export default function RewardsPage() {
     <main
       style={{
         minHeight: "100vh",
-        background: "#FAF2E4",
-        fontFamily: "var(--font-dm-sans, sans-serif)",
+        background: "var(--bg)",
+        fontFamily: "var(--font-body, sans-serif)",
       }}
     >
       {/* ── NAVBAR ── */}
       <nav
         style={{
-          background: "#2E1A0C",
-          borderBottom: "1px solid #4A2512",
+          background: "var(--nav-bg)",
+          borderBottom: "1px solid var(--nav-border)",
           position: "sticky",
           top: 0,
           zIndex: 50,
@@ -265,7 +266,7 @@ export default function RewardsPage() {
       >
         <div
           style={{
-            maxWidth: 1200,
+            maxWidth: "100%",
             margin: "0 auto",
             padding: "0 24px",
             height: 64,
@@ -277,18 +278,19 @@ export default function RewardsPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <a
               href={Routes.dashboard}
+              className="nav-link"
               style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
             >
-              <span style={{ fontSize: 14, color: "#C49A6C" }}>← Back</span>
+              <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
             </a>
-            <span style={{ color: "#4A2512", margin: "0 8px" }}>|</span>
-            <span style={{ fontSize: 24 }}>🦫</span>
+            <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
+            <span style={{ fontSize: "calc(24px * var(--font-scale))" }}>🦫</span>
             <span
               style={{
-                fontFamily: "var(--font-lora, serif)",
+                fontFamily: "var(--font-display, serif)",
                 fontWeight: 700,
-                fontSize: 18,
-                color: "#FAF2E4",
+                fontSize: "calc(18px * var(--font-scale))",
+                color: "var(--nav-text)",
               }}
             >
               {App.name}
@@ -301,15 +303,15 @@ export default function RewardsPage() {
                 display: "flex",
                 alignItems: "center",
                 gap: 6,
-                background: "#4A2512",
+                background: "var(--nav-bg)",
                 border: "1px solid rgba(196,122,46,0.3)",
                 borderRadius: 20,
                 padding: "5px 14px",
               }}
             >
-              <span style={{ fontSize: 14 }}>🪙</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "#D4954A" }}>
-                {profile.token_balance} credits
+              <Image src="/capy/capycoin.png" alt="" width={32} height={32} style={{ borderRadius: "50%" }} />
+              <span style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--primary-soft)" }}>
+                {profile.token_balance} Capycoins
               </span>
             </div>
           )}
@@ -323,25 +325,25 @@ export default function RewardsPage() {
         <div style={{ marginBottom: 32 }}>
           <h1
             style={{
-              fontFamily: "var(--font-lora, serif)",
-              fontSize: 28,
+              fontFamily: "var(--font-display, serif)",
+              fontSize: "calc(28px * var(--font-scale))",
               fontWeight: 700,
-              color: "#2E1A0C",
+              color: "var(--text)",
               marginBottom: 6,
             }}
           >
             Rewards
           </h1>
-          <p style={{ color: "#8A6E52", fontSize: 15 }}>
-            Earn credits by sharing {App.name} with your classmates.
+          <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>
+            Earn Capycoins by sharing {App.name} with your classmates.
           </p>
         </div>
 
         {/* ── Referral code card ── */}
         <div
           style={{
-            background: "#4A2512",
-            border: "1.5px solid #C47A2E",
+            background: "var(--nav-bg)",
+            border: "1.5px solid var(--primary)",
             borderRadius: 20,
             padding: "28px",
             marginBottom: 24,
@@ -349,10 +351,10 @@ export default function RewardsPage() {
         >
           <p
             style={{
-              fontSize: 12,
+              fontSize: "calc(12px * var(--font-scale))",
               fontWeight: 700,
               letterSpacing: "0.08em",
-              color: "#C49A6C",
+              color: "var(--text-faint)",
               textTransform: "uppercase",
               marginBottom: 10,
             }}
@@ -370,10 +372,10 @@ export default function RewardsPage() {
           >
             <span
               style={{
-                fontFamily: "var(--font-lora, serif)",
-                fontSize: 32,
+                fontFamily: "var(--font-display, serif)",
+                fontSize: "calc(32px * var(--font-scale))",
                 fontWeight: 700,
-                color: "#FAF2E4",
+                color: "var(--nav-text)",
                 letterSpacing: "0.12em",
               }}
             >
@@ -384,15 +386,15 @@ export default function RewardsPage() {
               type="button"
               onClick={copyCode}
               style={{
-                background: copied ? "#5C7A35" : "#C47A2E",
-                color: "#FAF2E4",
+                background: copied ? "var(--success)" : "var(--primary)",
+                color: "var(--nav-text)",
                 border: "none",
                 borderRadius: 8,
                 padding: "8px 16px",
-                fontSize: 13,
+                fontSize: "calc(13px * var(--font-scale))",
                 fontWeight: 600,
                 cursor: "pointer",
-                fontFamily: "var(--font-dm-sans, sans-serif)",
+                fontFamily: "var(--font-body, sans-serif)",
                 transition: "background 0.2s",
               }}
             >
@@ -400,10 +402,10 @@ export default function RewardsPage() {
             </button>
           </div>
 
-          <p style={{ fontSize: 13, color: "#C49A6C", marginTop: 12, lineHeight: 1.5 }}>
+          <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)", marginTop: 12, lineHeight: 1.5 }}>
             Share this code with classmates. When they sign up using it, you earn{" "}
-            <strong style={{ color: "#FAF2E4" }}>
-              +{ReferralCaps[ReferralEventType.SIGNUP].creditsAwarded} credits
+            <strong style={{ color: "var(--nav-text)" }}>
+              +{ReferralCaps[ReferralEventType.SIGNUP].creditsAwarded} Capycoins
             </strong>
             .
           </p>
@@ -412,10 +414,10 @@ export default function RewardsPage() {
         {/* ── Ways to earn ── */}
         <h2
           style={{
-            fontFamily: "var(--font-lora, serif)",
-            fontSize: 18,
+            fontFamily: "var(--font-display, serif)",
+            fontSize: "calc(18px * var(--font-scale))",
             fontWeight: 700,
-            color: "#2E1A0C",
+            color: "var(--text)",
             marginBottom: 14,
           }}
         >
@@ -442,8 +444,8 @@ export default function RewardsPage() {
               <div
                 key={method.type}
                 style={{
-                  background: "#FFFCF7",
-                  border: "1.5px solid #E0C9A8",
+                  background: "var(--bg-card)",
+                  border: "1.5px solid var(--border)",
                   borderRadius: 14,
                   padding: "18px 20px",
                   display: "flex",
@@ -451,7 +453,7 @@ export default function RewardsPage() {
                   alignItems: "flex-start",
                 }}
               >
-                <span style={{ fontSize: 22, lineHeight: 1.4 }}>{method.icon}</span>
+                <span style={{ fontSize: "calc(22px * var(--font-scale))", lineHeight: 1.4 }}>{method.icon}</span>
                 <div style={{ flex: 1 }}>
                   <div
                     style={{
@@ -462,33 +464,33 @@ export default function RewardsPage() {
                       flexWrap: "wrap",
                     }}
                   >
-                    <span style={{ fontSize: 14, fontWeight: 600, color: "#2E1A0C" }}>
+                    <span style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
                       {method.label}
                     </span>
                     <span
                       style={{
-                        fontSize: 12,
+                        fontSize: "calc(12px * var(--font-scale))",
                         fontWeight: 700,
-                        color: "#5C7A35",
-                        background: "#EDF5E4",
+                        color: "var(--success)",
+                        background: "var(--success-bg)",
                         borderRadius: 20,
                         padding: "2px 8px",
                       }}
                     >
-                      +{method.credits} credits
+                      +{method.credits} Capycoins
                     </span>
                   </div>
-                  <p style={{ fontSize: 13, color: "#8A6E52", margin: "0 0 4px", lineHeight: 1.5 }}>
+                  <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)", margin: "0 0 4px", lineHeight: 1.5 }}>
                     {method.desc}
                   </p>
-                  <p style={{ fontSize: 11, color: "#C49A6C", margin: "0 0 8px" }}>{method.cap}</p>
+                  <p style={{ fontSize: "calc(11px * var(--font-scale))", color: "var(--text-faint)", margin: "0 0 8px" }}>{method.cap}</p>
 
                   {/* PROFILE_COMPLETE: earned status / CTA */}
                   {method.type === ReferralEventType.PROFILE_COMPLETE && (
                     profileCompleteEarned ? (
-                      <span style={{ fontSize: 12, fontWeight: 700, color: "#5C7A35" }}>✓ Earned</span>
+                      <span style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 700, color: "var(--success)" }}>✓ Earned</span>
                     ) : (
-                      <a href={Routes.settings} style={{ fontSize: 12, fontWeight: 700, color: "#C47A2E", textDecoration: "none" }}>
+                      <a href={Routes.settings} style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 700, color: "var(--primary)", textDecoration: "none" }}>
                         Go to Settings →
                       </a>
                     )
@@ -497,11 +499,11 @@ export default function RewardsPage() {
                   {/* DECK_SHARE: earned count / CTA */}
                   {method.type === ReferralEventType.DECK_SHARE && (
                     deckShareCount > 0 ? (
-                      <span style={{ fontSize: 12, fontWeight: 700, color: "#5C7A35" }}>
+                      <span style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 700, color: "var(--success)" }}>
                         ✓ Earned {deckShareCount}x
                       </span>
                     ) : (
-                      <a href={Routes.dashboard} style={{ fontSize: 12, fontWeight: 700, color: "#C47A2E", textDecoration: "none" }}>
+                      <a href={Routes.dashboard} style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 700, color: "var(--primary)", textDecoration: "none" }}>
                         Go to your decks →
                       </a>
                     )
@@ -512,10 +514,10 @@ export default function RewardsPage() {
                     appReview ? (
                       <span
                         style={{
-                          fontSize: 12,
+                          fontSize: "calc(12px * var(--font-scale))",
                           fontWeight: 700,
-                          color: appReview.status === "approved" ? "#5C7A35"
-                            : appReview.status === "rejected" ? "#EF4444" : "#C49A6C",
+                          color: appReview.status === "approved" ? "var(--success)"
+                            : appReview.status === "rejected" ? "var(--error)" : "var(--text-faint)",
                         }}
                       >
                         {appReview.status === "approved" ? "✓ Approved"
@@ -530,7 +532,7 @@ export default function RewardsPage() {
                               key={star}
                               type="button"
                               onClick={() => setReviewRating(star)}
-                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, padding: 0, color: star <= reviewRating ? "#C47A2E" : "#E0C9A8" }}
+                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: "calc(18px * var(--font-scale))", padding: 0, color: star <= reviewRating ? "var(--primary)" : "var(--border)" }}
                               aria-label={`${star} star${star > 1 ? "s" : ""}`}
                             >
                               {star <= reviewRating ? "★" : "☆"}
@@ -544,13 +546,13 @@ export default function RewardsPage() {
                           placeholder="What do you like about Crammable?"
                           rows={2}
                           style={{
-                            background: "#FAF2E4",
-                            border: "1.5px solid #E0C9A8",
+                            background: "var(--bg)",
+                            border: "1.5px solid var(--border)",
                             borderRadius: 8,
                             padding: "8px 10px",
-                            fontSize: 13,
-                            color: "#2E1A0C",
-                            fontFamily: "var(--font-dm-sans, sans-serif)",
+                            fontSize: "calc(13px * var(--font-scale))",
+                            color: "var(--text)",
+                            fontFamily: "var(--font-body, sans-serif)",
                             outline: "none",
                             resize: "vertical",
                           }}
@@ -560,21 +562,21 @@ export default function RewardsPage() {
                           disabled={submittingReview}
                           style={{
                             alignSelf: "flex-start",
-                            background: submittingReview ? "#C49A6C" : "#C47A2E",
-                            color: "#FAF2E4",
+                            background: submittingReview ? "var(--text-faint)" : "var(--primary)",
+                            color: "var(--nav-text)",
                             border: "none",
                             borderRadius: 8,
                             padding: "7px 16px",
-                            fontSize: 12,
+                            fontSize: "calc(12px * var(--font-scale))",
                             fontWeight: 600,
                             cursor: submittingReview ? "not-allowed" : "pointer",
-                            fontFamily: "var(--font-dm-sans, sans-serif)",
+                            fontFamily: "var(--font-body, sans-serif)",
                           }}
                         >
                           {submittingReview ? "Submitting…" : "Submit review"}
                         </button>
                         {reviewError && (
-                          <p style={{ fontSize: 12, color: "#EF4444", margin: 0 }}>{reviewError}</p>
+                          <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error)", margin: 0 }}>{reviewError}</p>
                         )}
                       </form>
                     )
@@ -589,8 +591,8 @@ export default function RewardsPage() {
         {!profile?.referred_by && (
           <div
             style={{
-              background: "#FFFCF7",
-              border: "1.5px solid #E0C9A8",
+              background: "var(--bg-card)",
+              border: "1.5px solid var(--border)",
               borderRadius: 16,
               padding: "22px 24px",
               marginBottom: 28,
@@ -598,29 +600,29 @@ export default function RewardsPage() {
           >
             <h2
               style={{
-                fontFamily: "var(--font-lora, serif)",
-                fontSize: 16,
+                fontFamily: "var(--font-display, serif)",
+                fontSize: "calc(16px * var(--font-scale))",
                 fontWeight: 700,
-                color: "#2E1A0C",
+                color: "var(--text)",
                 marginBottom: 4,
               }}
             >
               Got a referral code?
             </h2>
-            <p style={{ fontSize: 13, color: "#8A6E52", marginBottom: 16, lineHeight: 1.5 }}>
-              Enter a classmate&apos;s code to give them credit for referring you.
+            <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)", marginBottom: 16, lineHeight: 1.5 }}>
+              Enter a classmate&apos;s code to give them Capycoins for referring you.
             </p>
 
             {claimSuccess ? (
               <div
                 style={{
-                  background: "#EDF5E4",
-                  border: "1.5px solid #5C7A35",
+                  background: "var(--success-bg)",
+                  border: "1.5px solid var(--success)",
                   borderRadius: 10,
                   padding: "12px 16px",
                 }}
               >
-                <p style={{ fontSize: 14, color: "#3A5020", fontWeight: 600, margin: 0 }}>
+                <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--success-dark)", fontWeight: 600, margin: 0 }}>
                   ✅ {claimSuccess}
                 </p>
               </div>
@@ -639,13 +641,13 @@ export default function RewardsPage() {
                   style={{
                     flex: 1,
                     minWidth: 160,
-                    background: "#FAF2E4",
-                    border: `1.5px solid ${claimError ? "#EF4444" : "#E0C9A8"}`,
+                    background: "var(--bg)",
+                    border: `1.5px solid ${claimError ? "var(--error)" : "var(--border)"}`,
                     borderRadius: 8,
                     padding: "10px 12px",
-                    fontSize: 14,
-                    color: "#2E1A0C",
-                    fontFamily: "var(--font-dm-sans, sans-serif)",
+                    fontSize: "calc(14px * var(--font-scale))",
+                    color: "var(--text)",
+                    fontFamily: "var(--font-body, sans-serif)",
                     letterSpacing: "0.08em",
                     outline: "none",
                   }}
@@ -654,15 +656,15 @@ export default function RewardsPage() {
                   type="submit"
                   disabled={claiming}
                   style={{
-                    background: claiming ? "#C49A6C" : "#C47A2E",
-                    color: "#FAF2E4",
+                    background: claiming ? "var(--text-faint)" : "var(--primary)",
+                    color: "var(--nav-text)",
                     border: "none",
                     borderRadius: 8,
                     padding: "10px 20px",
-                    fontSize: 14,
+                    fontSize: "calc(14px * var(--font-scale))",
                     fontWeight: 600,
                     cursor: claiming ? "not-allowed" : "pointer",
-                    fontFamily: "var(--font-dm-sans, sans-serif)",
+                    fontFamily: "var(--font-body, sans-serif)",
                   }}
                 >
                   {claiming ? "Claiming…" : "Claim"}
@@ -671,7 +673,7 @@ export default function RewardsPage() {
             )}
 
             {claimError && (
-              <p style={{ fontSize: 13, color: "#EF4444", marginTop: 8 }}>{claimError}</p>
+              <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--error)", marginTop: 8 }}>{claimError}</p>
             )}
           </div>
         )}
@@ -679,10 +681,10 @@ export default function RewardsPage() {
         {/* ── Referral history ── */}
         <h2
           style={{
-            fontFamily: "var(--font-lora, serif)",
-            fontSize: 18,
+            fontFamily: "var(--font-display, serif)",
+            fontSize: "calc(18px * var(--font-scale))",
             fontWeight: 700,
-            color: "#2E1A0C",
+            color: "var(--text)",
             marginBottom: 14,
           }}
         >
@@ -692,22 +694,22 @@ export default function RewardsPage() {
         {history.length === 0 && !profile?.referred_by ? (
           <div
             style={{
-              background: "#FFFCF7",
-              border: "1.5px dashed #E0C9A8",
+              background: "var(--bg-card)",
+              border: "1.5px dashed var(--border)",
               borderRadius: 14,
               padding: "36px 24px",
               textAlign: "center",
             }}
           >
-            <p style={{ color: "#8A6E52", fontSize: 14 }}>
-              No credits earned yet. Share your referral code to get started!
+            <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))" }}>
+              No Capycoins earned yet. Share your referral code to get started!
             </p>
           </div>
         ) : (
           <div
             style={{
-              background: "#FFFCF7",
-              border: "1.5px solid #E0C9A8",
+              background: "var(--bg-card)",
+              border: "1.5px solid var(--border)",
               borderRadius: 14,
               overflow: "hidden",
             }}
@@ -720,34 +722,34 @@ export default function RewardsPage() {
                   alignItems: "center",
                   justifyContent: "space-between",
                   padding: "14px 20px",
-                  borderBottom: (i < history.length - 1 || !!profile?.referred_by) ? "1px solid #E0C9A8" : "none",
+                  borderBottom: (i < history.length - 1 || !!profile?.referred_by) ? "1px solid var(--border)" : "none",
                   gap: 12,
                 }}
               >
                 <div>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: "#2E1A0C", margin: "0 0 2px" }}>
+                  <p style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--text)", margin: "0 0 2px" }}>
                     {eventLabel(event.event_type)}
                   </p>
-                  <p style={{ fontSize: 12, color: "#8A6E52", margin: 0 }}>
+                  <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
                     {new Date(event.created_at).toLocaleDateString("en-PH", {
                       year: "numeric",
                       month: "short",
                       day: "numeric",
                     })}
                     {event.event_type === ReferralEventType.APP_REVIEW && !event.verified && (
-                      <span style={{ color: "#C49A6C", marginLeft: 8 }}>· Pending verification</span>
+                      <span style={{ color: "var(--text-faint)", marginLeft: 8 }}>· Pending verification</span>
                     )}
                   </p>
                 </div>
                 <span
                   style={{
-                    fontSize: 15,
+                    fontSize: "calc(15px * var(--font-scale))",
                     fontWeight: 700,
-                    color: "#5C7A35",
+                    color: "var(--success)",
                     whiteSpace: "nowrap",
                   }}
                 >
-                  +{event.credits_awarded} credits
+                  +{event.credits_awarded} Capycoins
                 </span>
               </div>
             ))}
@@ -763,15 +765,15 @@ export default function RewardsPage() {
                 }}
               >
                 <div>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: "#2E1A0C", margin: "0 0 2px" }}>
+                  <p style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--text)", margin: "0 0 2px" }}>
                     Referred by {referrerName ?? "…"}
                   </p>
-                  <p style={{ fontSize: 12, color: "#8A6E52", margin: 0 }}>
+                  <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
                     Used a referral code at signup
                   </p>
                 </div>
-                <span style={{ fontSize: 15, fontWeight: 700, color: "#5C7A35", whiteSpace: "nowrap" }}>
-                  +{ReferralCaps[ReferralEventType.SIGNUP].creditsAwarded} credits
+                <span style={{ fontSize: "calc(15px * var(--font-scale))", fontWeight: 700, color: "var(--success)", whiteSpace: "nowrap" }}>
+                  +{ReferralCaps[ReferralEventType.SIGNUP].creditsAwarded} Capycoins
                 </span>
               </div>
             )}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
@@ -41,13 +42,13 @@ const inputStyle: CSSProperties = {
   display: "block",
   width: "100%",
   marginTop: 4,
-  background: "#FAF2E4",
-  border: "1px solid #E0C9A8",
+  background: "var(--bg)",
+  border: "1px solid var(--border)",
   borderRadius: 6,
   padding: "8px 10px",
-  fontSize: 13,
-  color: "#2E1A0C",
-  fontFamily: "var(--font-dm-sans, sans-serif)",
+  fontSize: "calc(13px * var(--font-scale))",
+  color: "var(--text)",
+  fontFamily: "var(--font-body, sans-serif)",
   boxSizing: "border-box",
 };
 
@@ -214,7 +215,7 @@ export default function DeckDetailPage() {
       }
       setDeck((d) => d ? { ...d, is_public: data.isPublic } : d);
       if (data.creditsAwarded > 0) {
-        setShareMessage(`Deck shared! +${data.creditsAwarded} credits earned.`);
+        setShareMessage(`Deck shared! +${data.creditsAwarded} Capycoins earned.`);
       }
     } catch {
       setShareMessage(UIMessages.genericError);
@@ -409,13 +410,13 @@ export default function DeckDetailPage() {
       <main
         style={{
           minHeight: "100vh",
-          background: "#FAF2E4",
+          background: "var(--bg)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <p style={{ color: "#8A6E52", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
+        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>
           Loading…
         </p>
       </main>
@@ -427,19 +428,19 @@ export default function DeckDetailPage() {
       <main
         style={{
           minHeight: "100vh",
-          background: "#FAF2E4",
+          background: "var(--bg)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           gap: 16,
-          fontFamily: "var(--font-dm-sans, sans-serif)",
+          fontFamily: "var(--font-body, sans-serif)",
         }}
       >
-        <p style={{ color: "#8A6E52", fontSize: 15 }}>{error || "Deck not found."}</p>
+        <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>{error || "Deck not found."}</p>
         <a
           href={Routes.dashboard}
-          style={{ color: "#C47A2E", textDecoration: "none", fontWeight: 600, fontSize: 14 }}
+          style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600, fontSize: "calc(14px * var(--font-scale))" }}
         >
           ← Back to Dashboard
         </a>
@@ -451,15 +452,15 @@ export default function DeckDetailPage() {
     <main
       style={{
         minHeight: "100vh",
-        background: "#FAF2E4",
-        fontFamily: "var(--font-dm-sans, sans-serif)",
+        background: "var(--bg)",
+        fontFamily: "var(--font-body, sans-serif)",
       }}
     >
       {/* ── NAVBAR ── */}
       <nav
         style={{
-          background: "#2E1A0C",
-          borderBottom: "1px solid #4A2512",
+          background: "var(--nav-bg)",
+          borderBottom: "1px solid var(--nav-border)",
           position: "sticky",
           top: 0,
           zIndex: 50,
@@ -467,7 +468,7 @@ export default function DeckDetailPage() {
       >
         <div
           style={{
-            maxWidth: 1200,
+            maxWidth: "100%",
             margin: "0 auto",
             padding: "0 24px",
             height: 64,
@@ -479,18 +480,19 @@ export default function DeckDetailPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <a
               href={Routes.dashboard}
+              className="nav-link"
               style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
             >
-              <span style={{ fontSize: 14, color: "#C49A6C" }}>← Back</span>
+              <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
             </a>
-            <span style={{ color: "#4A2512", margin: "0 8px" }}>|</span>
-            <span style={{ fontSize: 24 }}>🦫</span>
+            <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
+            <span style={{ fontSize: "calc(24px * var(--font-scale))" }}>🦫</span>
             <span
               style={{
-                fontFamily: "var(--font-lora, serif)",
+                fontFamily: "var(--font-display, serif)",
                 fontWeight: 700,
-                fontSize: 18,
-                color: "#FAF2E4",
+                fontSize: "calc(18px * var(--font-scale))",
+                color: "var(--nav-text)",
               }}
             >
               {App.name}
@@ -504,19 +506,19 @@ export default function DeckDetailPage() {
                   display: "flex",
                   alignItems: "center",
                   gap: 6,
-                  background: "#4A2512",
+                  background: "var(--nav-bg)",
                   border: "1px solid rgba(196,122,46,0.3)",
                   borderRadius: 20,
                   padding: "5px 14px",
                 }}
               >
-                <span style={{ fontSize: 14 }}>🪙</span>
-                <span style={{ fontSize: 13, fontWeight: 600, color: "#D4954A" }}>
-                  {profile.token_balance} credits
+                <Image src="/capy/capycoin.png" alt="" width={32} height={32} style={{ borderRadius: "50%" }} />
+                <span style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--primary-soft)" }}>
+                  {profile.token_balance} Capycoins
                 </span>
               </div>
               {profile.full_name && (
-                <span style={{ fontSize: 13, color: "#C49A6C" }}>
+                <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>
                   {profile.full_name.split(" ")[0]}
                 </span>
               )}
@@ -550,12 +552,12 @@ export default function DeckDetailPage() {
                       maxLength={Validation.deck.titleMaxLength}
                       autoFocus
                       style={{
-                        fontFamily: "var(--font-lora, serif)",
-                        fontSize: 22,
+                        fontFamily: "var(--font-display, serif)",
+                        fontSize: "calc(22px * var(--font-scale))",
                         fontWeight: 700,
-                        color: "#2E1A0C",
-                        background: "#FFFCF7",
-                        border: "1.5px solid #E0C9A8",
+                        color: "var(--text)",
+                        background: "var(--bg-card)",
+                        border: "1.5px solid var(--border)",
                         borderRadius: 8,
                         padding: "6px 10px",
                         minWidth: 240,
@@ -566,15 +568,15 @@ export default function DeckDetailPage() {
                       onClick={saveTitle}
                       disabled={savingTitle}
                       style={{
-                        background: "#C47A2E",
-                        color: "#FAF2E4",
+                        background: "var(--primary)",
+                        color: "var(--nav-text)",
                         border: "none",
                         borderRadius: 8,
                         padding: "8px 14px",
-                        fontSize: 13,
+                        fontSize: "calc(13px * var(--font-scale))",
                         fontWeight: 600,
                         cursor: savingTitle ? "not-allowed" : "pointer",
-                        fontFamily: "var(--font-dm-sans, sans-serif)",
+                        fontFamily: "var(--font-body, sans-serif)",
                       }}
                     >
                       {savingTitle ? "…" : "Save"}
@@ -584,31 +586,31 @@ export default function DeckDetailPage() {
                       onClick={() => { setEditingTitle(false); setTitleError(""); }}
                       disabled={savingTitle}
                       style={{
-                        background: "#FFFCF7",
-                        color: "#8A6E52",
-                        border: "1.5px solid #E0C9A8",
+                        background: "var(--bg-card)",
+                        color: "var(--text-muted)",
+                        border: "1.5px solid var(--border)",
                         borderRadius: 8,
                         padding: "8px 14px",
-                        fontSize: 13,
+                        fontSize: "calc(13px * var(--font-scale))",
                         fontWeight: 600,
                         cursor: savingTitle ? "not-allowed" : "pointer",
-                        fontFamily: "var(--font-dm-sans, sans-serif)",
+                        fontFamily: "var(--font-body, sans-serif)",
                       }}
                     >
                       Cancel
                     </button>
                   </div>
                   {titleError && (
-                    <p style={{ fontSize: 12, color: "#B23B3B", marginTop: 6 }}>{titleError}</p>
+                    <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error-dark)", marginTop: 6 }}>{titleError}</p>
                   )}
                 </div>
               ) : (
                 <h1
                   style={{
-                    fontFamily: "var(--font-lora, serif)",
-                    fontSize: 28,
+                    fontFamily: "var(--font-display, serif)",
+                    fontSize: "calc(28px * var(--font-scale))",
                     fontWeight: 700,
-                    color: "#2E1A0C",
+                    color: "var(--text)",
                     marginBottom: 6,
                     lineHeight: 1.25,
                   }}
@@ -618,11 +620,11 @@ export default function DeckDetailPage() {
                     <span
                       style={{
                         marginLeft: 10,
-                        fontSize: 11,
+                        fontSize: "calc(11px * var(--font-scale))",
                         fontWeight: 700,
                         letterSpacing: "0.06em",
                         textTransform: "uppercase",
-                        color: "#C47A2E",
+                        color: "var(--primary)",
                         background: "rgba(196,122,46,0.15)",
                         borderRadius: 6,
                         padding: "3px 8px",
@@ -642,8 +644,8 @@ export default function DeckDetailPage() {
                       background: "none",
                       border: "none",
                       cursor: "pointer",
-                      fontSize: 16,
-                      color: "#C49A6C",
+                      fontSize: "calc(16px * var(--font-scale))",
+                      color: "var(--text-faint)",
                       verticalAlign: "middle",
                     }}
                   >
@@ -652,16 +654,16 @@ export default function DeckDetailPage() {
                 </h1>
               )}
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span style={{ fontSize: 13, color: "#8A6E52" }}>
+                <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)" }}>
                   {total} {total === 1 ? "card" : "cards"}
                 </span>
                 {deck.source_filename && (
                   <>
-                    <span style={{ color: "#E0C9A8" }}>·</span>
+                    <span style={{ color: "var(--border)" }}>·</span>
                     <span
                       style={{
-                        fontSize: 13,
-                        color: "#8A6E52",
+                        fontSize: "calc(13px * var(--font-scale))",
+                        color: "var(--text-muted)",
                         maxWidth: 240,
                         overflow: "hidden",
                         textOverflow: "ellipsis",
@@ -686,13 +688,13 @@ export default function DeckDetailPage() {
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 8,
-                        background: "#FFFCF7",
-                        border: "1.5px solid #E0C9A8",
-                        color: "#2E1A0C",
+                        background: "var(--bg-card)",
+                        border: "1.5px solid var(--border)",
+                        color: "var(--text)",
                         padding: "10px 20px",
                         borderRadius: 10,
                         fontWeight: 600,
-                        fontSize: 14,
+                        fontSize: "calc(14px * var(--font-scale))",
                         textDecoration: "none",
                         whiteSpace: "nowrap",
                       }}
@@ -707,13 +709,13 @@ export default function DeckDetailPage() {
                         display: "inline-flex",
                         alignItems: "center",
                         gap: 8,
-                        background: "#FFFCF7",
-                        border: "1.5px solid #E0C9A8",
-                        color: "#B7A28A",
+                        background: "var(--bg-card)",
+                        border: "1.5px solid var(--border)",
+                        color: "var(--text-faint)",
                         padding: "10px 20px",
                         borderRadius: 10,
                         fontWeight: 600,
-                        fontSize: 14,
+                        fontSize: "calc(14px * var(--font-scale))",
                         textDecoration: "none",
                         whiteSpace: "nowrap",
                       }}
@@ -727,12 +729,12 @@ export default function DeckDetailPage() {
                       display: "inline-flex",
                       alignItems: "center",
                       gap: 8,
-                      background: "#C47A2E",
-                      color: "#FAF2E4",
+                      background: "var(--primary)",
+                      color: "var(--nav-text)",
                       padding: "11px 24px",
                       borderRadius: 10,
                       fontWeight: 600,
-                      fontSize: 14,
+                      fontSize: "calc(14px * var(--font-scale))",
                       textDecoration: "none",
                       whiteSpace: "nowrap",
                     }}
@@ -749,15 +751,15 @@ export default function DeckDetailPage() {
                   alignItems: "center",
                   gap: 8,
                   background: "transparent",
-                  color: "#B3492E",
-                  border: "1.5px solid #E0C9A8",
+                  color: "var(--error)",
+                  border: "1.5px solid var(--border)",
                   padding: "11px 20px",
                   borderRadius: 10,
                   fontWeight: 600,
-                  fontSize: 14,
+                  fontSize: "calc(14px * var(--font-scale))",
                   cursor: deleting ? "not-allowed" : "pointer",
                   opacity: deleting ? 0.6 : 1,
-                  fontFamily: "var(--font-dm-sans, sans-serif)",
+                  fontFamily: "var(--font-body, sans-serif)",
                   whiteSpace: "nowrap",
                 }}
               >
@@ -771,8 +773,8 @@ export default function DeckDetailPage() {
         {deck && (
           <div
             style={{
-              background: "#FFFCF7",
-              border: "1.5px solid #E0C9A8",
+              background: "var(--bg-card)",
+              border: "1.5px solid var(--border)",
               borderRadius: 10,
               padding: "14px 16px",
               marginBottom: 16,
@@ -783,13 +785,13 @@ export default function DeckDetailPage() {
           >
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
               <div>
-                <p style={{ fontSize: 13, fontWeight: 600, color: "#2E1A0C", margin: "0 0 2px" }}>
+                <p style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text)", margin: "0 0 2px" }}>
                   {deck.is_public ? "This deck is public" : "Share this deck"}
                 </p>
-                <p style={{ fontSize: 12, color: "#8A6E52", margin: 0 }}>
+                <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
                   {deck.is_public
                     ? "Anyone with the link can view (read-only)."
-                    : `Share publicly to let others view it. Decks with ≥${(ReferralCaps[ReferralEventType.DECK_SHARE] as { minCards: number }).minCards} cards earn +${ReferralCaps[ReferralEventType.DECK_SHARE].creditsAwarded} credits (once per deck).`}
+                    : `Share publicly to let others view it. Decks with ≥${(ReferralCaps[ReferralEventType.DECK_SHARE] as { minCards: number }).minCards} cards earn +${ReferralCaps[ReferralEventType.DECK_SHARE].creditsAwarded} Capycoins (once per deck).`}
                 </p>
               </div>
               <button
@@ -797,15 +799,15 @@ export default function DeckDetailPage() {
                 onClick={toggleShare}
                 disabled={sharing}
                 style={{
-                  background: deck.is_public ? "#FFFCF7" : "#C47A2E",
-                  border: deck.is_public ? "1.5px solid #E0C9A8" : "none",
-                  color: deck.is_public ? "#8A6E52" : "#FAF2E4",
+                  background: deck.is_public ? "var(--bg-card)" : "var(--primary)",
+                  border: deck.is_public ? "1.5px solid var(--border)" : "none",
+                  color: deck.is_public ? "var(--text-muted)" : "var(--nav-text)",
                   padding: "8px 16px",
                   borderRadius: 8,
-                  fontSize: 13,
+                  fontSize: "calc(13px * var(--font-scale))",
                   fontWeight: 600,
                   cursor: sharing ? "not-allowed" : "pointer",
-                  fontFamily: "var(--font-dm-sans, sans-serif)",
+                  fontFamily: "var(--font-body, sans-serif)",
                   whiteSpace: "nowrap",
                 }}
               >
@@ -817,10 +819,10 @@ export default function DeckDetailPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                 <code
                   style={{
-                    fontSize: 12,
-                    color: "#2E1A0C",
-                    background: "#FAF2E4",
-                    border: "1px solid #E0C9A8",
+                    fontSize: "calc(12px * var(--font-scale))",
+                    color: "var(--text)",
+                    background: "var(--bg)",
+                    border: "1px solid var(--border)",
                     borderRadius: 6,
                     padding: "6px 10px",
                     flex: 1,
@@ -836,15 +838,15 @@ export default function DeckDetailPage() {
                   type="button"
                   onClick={copyShareLink}
                   style={{
-                    background: copied ? "#5C7A35" : "#FFFCF7",
-                    border: "1.5px solid #E0C9A8",
-                    color: copied ? "#FAF2E4" : "#2E1A0C",
+                    background: copied ? "var(--success)" : "var(--bg-card)",
+                    border: "1.5px solid var(--border)",
+                    color: copied ? "var(--nav-text)" : "var(--text)",
                     padding: "6px 14px",
                     borderRadius: 8,
-                    fontSize: 12,
+                    fontSize: "calc(12px * var(--font-scale))",
                     fontWeight: 600,
                     cursor: "pointer",
-                    fontFamily: "var(--font-dm-sans, sans-serif)",
+                    fontFamily: "var(--font-body, sans-serif)",
                   }}
                 >
                   {copied ? "✓ Copied!" : "Copy link"}
@@ -853,7 +855,7 @@ export default function DeckDetailPage() {
             )}
 
             {shareMessage && (
-              <p style={{ fontSize: 12, color: "#5C7A35", fontWeight: 600, margin: 0 }}>{shareMessage}</p>
+              <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--success)", fontWeight: 600, margin: 0 }}>{shareMessage}</p>
             )}
           </div>
         )}
@@ -861,14 +863,14 @@ export default function DeckDetailPage() {
         {/* AI disclaimer — required on every generated deck page */}
         <div
           style={{
-            background: "#FFFCF7",
-            border: "1px solid #E0C9A8",
+            background: "var(--bg-card)",
+            border: "1px solid var(--border)",
             borderRadius: 10,
             padding: "12px 16px",
             marginBottom: 28,
           }}
         >
-          <p style={{ fontSize: 12, color: "#8A6E52", lineHeight: 1.6, margin: 0 }}>
+          <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", lineHeight: 1.6, margin: 0 }}>
             ⚠️ {UIMessages.aiDisclaimer}
           </p>
         </div>
@@ -889,15 +891,15 @@ export default function DeckDetailPage() {
               type="button"
               onClick={toggleStudyWeakMode}
               style={{
-                background: studyWeakMode ? "#C47A2E" : "#FFFCF7",
-                border: "1.5px solid #E0C9A8",
-                color: studyWeakMode ? "#FAF2E4" : "#2E1A0C",
+                background: studyWeakMode ? "var(--primary)" : "var(--bg-card)",
+                border: "1.5px solid var(--border)",
+                color: studyWeakMode ? "var(--nav-text)" : "var(--text)",
                 padding: "8px 16px",
                 borderRadius: 8,
-                fontSize: 13,
+                fontSize: "calc(13px * var(--font-scale))",
                 fontWeight: 600,
                 cursor: "pointer",
-                fontFamily: "var(--font-dm-sans, sans-serif)",
+                fontFamily: "var(--font-body, sans-serif)",
               }}
             >
               {studyWeakMode ? "✓ Studying weak cards" : "Study weak cards"}
@@ -912,15 +914,15 @@ export default function DeckDetailPage() {
               setAddCardError("");
             }}
             style={{
-              background: "#FFFCF7",
-              border: "1.5px solid #E0C9A8",
-              color: "#2E1A0C",
+              background: "var(--bg-card)",
+              border: "1.5px solid var(--border)",
+              color: "var(--text)",
               padding: "8px 16px",
               borderRadius: 8,
-              fontSize: 13,
+              fontSize: "calc(13px * var(--font-scale))",
               fontWeight: 600,
               cursor: "pointer",
-              fontFamily: "var(--font-dm-sans, sans-serif)",
+              fontFamily: "var(--font-body, sans-serif)",
             }}
           >
             {addingCard ? "Cancel" : "+ Add card"}
@@ -931,8 +933,8 @@ export default function DeckDetailPage() {
         {addingCard && (
           <div
             style={{
-              background: "#FFFCF7",
-              border: "1.5px solid #E0C9A8",
+              background: "var(--bg-card)",
+              border: "1.5px solid var(--border)",
               borderRadius: 14,
               padding: 18,
               marginBottom: 20,
@@ -941,7 +943,7 @@ export default function DeckDetailPage() {
               gap: 10,
             }}
           >
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52" }}>
+            <label style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--text-muted)" }}>
               Front
               <textarea
                 value={newFront}
@@ -951,7 +953,7 @@ export default function DeckDetailPage() {
                 style={inputStyle}
               />
             </label>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52" }}>
+            <label style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--text-muted)" }}>
               Back
               <textarea
                 value={newBack}
@@ -962,7 +964,7 @@ export default function DeckDetailPage() {
               />
             </label>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52", flex: 1, minWidth: 160 }}>
+              <label style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--text-muted)", flex: 1, minWidth: 160 }}>
                 Category
                 <input
                   type="text"
@@ -972,7 +974,7 @@ export default function DeckDetailPage() {
                   style={inputStyle}
                 />
               </label>
-              <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52", flex: 2, minWidth: 200 }}>
+              <label style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--text-muted)", flex: 2, minWidth: 200 }}>
                 Tags (comma-separated)
                 <input
                   type="text"
@@ -983,7 +985,7 @@ export default function DeckDetailPage() {
               </label>
             </div>
             {addCardError && (
-              <p style={{ fontSize: 12, color: "#B23B3B", margin: 0 }}>{addCardError}</p>
+              <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error-dark)", margin: 0 }}>{addCardError}</p>
             )}
             <div>
               <button
@@ -991,15 +993,15 @@ export default function DeckDetailPage() {
                 onClick={addCard}
                 disabled={savingNewCard}
                 style={{
-                  background: "#C47A2E",
-                  color: "#FAF2E4",
+                  background: "var(--primary)",
+                  color: "var(--nav-text)",
                   border: "none",
                   borderRadius: 8,
                   padding: "10px 20px",
-                  fontSize: 13,
+                  fontSize: "calc(13px * var(--font-scale))",
                   fontWeight: 600,
                   cursor: savingNewCard ? "not-allowed" : "pointer",
-                  fontFamily: "var(--font-dm-sans, sans-serif)",
+                  fontFamily: "var(--font-body, sans-serif)",
                 }}
               >
                 {savingNewCard ? "Adding…" : "Add card"}
@@ -1012,15 +1014,15 @@ export default function DeckDetailPage() {
         {total === 0 ? (
           <div
             style={{
-              background: "#FFFCF7",
-              border: "1.5px dashed #E0C9A8",
+              background: "var(--bg-card)",
+              border: "1.5px dashed var(--border)",
               borderRadius: 20,
               padding: "60px 24px",
               textAlign: "center",
             }}
           >
-            <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
-            <p style={{ color: "#8A6E52", fontSize: 15 }}>This deck has no cards yet.</p>
+            <div style={{ fontSize: "calc(48px * var(--font-scale))", marginBottom: 12 }}>📭</div>
+            <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>This deck has no cards yet.</p>
           </div>
         ) : (
           <>
@@ -1035,10 +1037,10 @@ export default function DeckDetailPage() {
                 gap: 8,
               }}
             >
-              <span style={{ fontSize: 13, color: "#8A6E52" }}>
+              <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)" }}>
                 Card {currentIdx + 1} of {total}
                 {studyWeakMode && card && (
-                  <span style={{ color: "#C49A6C" }}> · difficulty {Math.round(card.difficulty_score * 100)}%</span>
+                  <span style={{ color: "var(--text-faint)" }}> · difficulty {Math.round(card.difficulty_score * 100)}%</span>
                 )}
               </span>
               <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -1047,7 +1049,7 @@ export default function DeckDetailPage() {
                     <button
                       type="button"
                       onClick={startEditCard}
-                      style={{ background: "none", border: "none", color: "#C47A2E", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                      style={{ background: "none", border: "none", color: "var(--primary)", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body, sans-serif)" }}
                     >
                       Edit
                     </button>
@@ -1055,27 +1057,27 @@ export default function DeckDetailPage() {
                       type="button"
                       onClick={deleteCurrentCard}
                       disabled={deletingCard}
-                      style={{ background: "none", border: "none", color: "#B23B3B", fontSize: 12, fontWeight: 600, cursor: deletingCard ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                      style={{ background: "none", border: "none", color: "var(--error-dark)", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, cursor: deletingCard ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
                     >
                       {deletingCard ? "Deleting…" : "Delete"}
                     </button>
                   </>
                 )}
-                <span style={{ fontSize: 12, color: "#C49A6C" }}>
+                <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)" }}>
                   {editingCard ? "Editing card" : "Click card to flip"}
                 </span>
               </div>
             </div>
 
             {cardError && (
-              <p style={{ fontSize: 12, color: "#B23B3B", marginBottom: 10 }}>{cardError}</p>
+              <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error-dark)", marginBottom: 10 }}>{cardError}</p>
             )}
 
             {/* Progress bar */}
             <div
               style={{
                 height: 4,
-                background: "#E0C9A8",
+                background: "var(--border)",
                 borderRadius: 4,
                 marginBottom: 20,
                 overflow: "hidden",
@@ -1084,7 +1086,7 @@ export default function DeckDetailPage() {
               <div
                 style={{
                   height: "100%",
-                  background: "#C47A2E",
+                  background: "var(--primary)",
                   borderRadius: 4,
                   width: `${((currentIdx + 1) / total) * 100}%`,
                   transition: "width 0.3s",
@@ -1096,8 +1098,8 @@ export default function DeckDetailPage() {
             {editingCard && (
               <div
                 style={{
-                  background: "#FFFCF7",
-                  border: "1.5px solid #E0C9A8",
+                  background: "var(--bg-card)",
+                  border: "1.5px solid var(--border)",
                   borderRadius: 14,
                   padding: 18,
                   marginBottom: 20,
@@ -1106,7 +1108,7 @@ export default function DeckDetailPage() {
                   gap: 10,
                 }}
               >
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52" }}>
+                <label style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--text-muted)" }}>
                   Front
                   <textarea
                     value={editFront}
@@ -1116,7 +1118,7 @@ export default function DeckDetailPage() {
                     style={inputStyle}
                   />
                 </label>
-                <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52" }}>
+                <label style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--text-muted)" }}>
                   Back
                   <textarea
                     value={editBack}
@@ -1127,7 +1129,7 @@ export default function DeckDetailPage() {
                   />
                 </label>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52", flex: 1, minWidth: 160 }}>
+                  <label style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--text-muted)", flex: 1, minWidth: 160 }}>
                     Category
                     <input
                       type="text"
@@ -1137,7 +1139,7 @@ export default function DeckDetailPage() {
                       style={inputStyle}
                     />
                   </label>
-                  <label style={{ fontSize: 12, fontWeight: 600, color: "#8A6E52", flex: 2, minWidth: 200 }}>
+                  <label style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--text-muted)", flex: 2, minWidth: 200 }}>
                     Tags (comma-separated)
                     <input
                       type="text"
@@ -1153,15 +1155,15 @@ export default function DeckDetailPage() {
                     onClick={saveCardEdit}
                     disabled={savingCard}
                     style={{
-                      background: "#C47A2E",
-                      color: "#FAF2E4",
+                      background: "var(--primary)",
+                      color: "var(--nav-text)",
                       border: "none",
                       borderRadius: 8,
                       padding: "10px 20px",
-                      fontSize: 13,
+                      fontSize: "calc(13px * var(--font-scale))",
                       fontWeight: 600,
                       cursor: savingCard ? "not-allowed" : "pointer",
-                      fontFamily: "var(--font-dm-sans, sans-serif)",
+                      fontFamily: "var(--font-body, sans-serif)",
                     }}
                   >
                     {savingCard ? "Saving…" : "Save"}
@@ -1171,15 +1173,15 @@ export default function DeckDetailPage() {
                     onClick={() => { setEditingCard(false); setCardError(""); }}
                     disabled={savingCard}
                     style={{
-                      background: "#FFFCF7",
-                      color: "#8A6E52",
-                      border: "1.5px solid #E0C9A8",
+                      background: "var(--bg-card)",
+                      color: "var(--text-muted)",
+                      border: "1.5px solid var(--border)",
                       borderRadius: 8,
                       padding: "10px 20px",
-                      fontSize: 13,
+                      fontSize: "calc(13px * var(--font-scale))",
                       fontWeight: 600,
                       cursor: savingCard ? "not-allowed" : "pointer",
-                      fontFamily: "var(--font-dm-sans, sans-serif)",
+                      fontFamily: "var(--font-body, sans-serif)",
                     }}
                   >
                     Cancel
@@ -1214,8 +1216,8 @@ export default function DeckDetailPage() {
                     width: "100%",
                     height: "100%",
                     backfaceVisibility: "hidden",
-                    background: "#FFFCF7",
-                    border: "1.5px solid #E0C9A8",
+                    background: "var(--bg-card)",
+                    border: "1.5px solid var(--border)",
                     borderRadius: 20,
                     padding: "32px",
                     boxSizing: "border-box",
@@ -1228,10 +1230,10 @@ export default function DeckDetailPage() {
                 >
                   <span
                     style={{
-                      fontSize: 11,
+                      fontSize: "calc(11px * var(--font-scale))",
                       fontWeight: 600,
                       letterSpacing: "0.08em",
-                      color: "#C49A6C",
+                      color: "var(--text-faint)",
                       textTransform: "uppercase",
                       marginBottom: 16,
                     }}
@@ -1240,10 +1242,10 @@ export default function DeckDetailPage() {
                   </span>
                   <p
                     style={{
-                      fontFamily: "var(--font-lora, serif)",
-                      fontSize: 20,
+                      fontFamily: "var(--font-display, serif)",
+                      fontSize: "calc(20px * var(--font-scale))",
                       fontWeight: 600,
-                      color: "#2E1A0C",
+                      color: "var(--text)",
                       textAlign: "center",
                       lineHeight: 1.5,
                       margin: 0,
@@ -1263,8 +1265,8 @@ export default function DeckDetailPage() {
                     height: "100%",
                     backfaceVisibility: "hidden",
                     transform: "rotateY(180deg)",
-                    background: "#4A2512",
-                    border: "1.5px solid #C47A2E",
+                    background: "var(--nav-bg)",
+                    border: "1.5px solid var(--primary)",
                     borderRadius: 20,
                     padding: "32px",
                     boxSizing: "border-box",
@@ -1277,10 +1279,10 @@ export default function DeckDetailPage() {
                 >
                   <span
                     style={{
-                      fontSize: 11,
+                      fontSize: "calc(11px * var(--font-scale))",
                       fontWeight: 600,
                       letterSpacing: "0.08em",
-                      color: "#C49A6C",
+                      color: "var(--text-faint)",
                       textTransform: "uppercase",
                       marginBottom: 16,
                     }}
@@ -1289,10 +1291,10 @@ export default function DeckDetailPage() {
                   </span>
                   <p
                     style={{
-                      fontFamily: "var(--font-lora, serif)",
-                      fontSize: 18,
+                      fontFamily: "var(--font-display, serif)",
+                      fontSize: "calc(18px * var(--font-scale))",
                       fontWeight: 500,
-                      color: "#FAF2E4",
+                      color: "var(--nav-text)",
                       textAlign: "center",
                       lineHeight: 1.6,
                       margin: 0,
@@ -1314,8 +1316,8 @@ export default function DeckDetailPage() {
                         <span
                           key={tag}
                           style={{
-                            fontSize: 11,
-                            color: "#C49A6C",
+                            fontSize: "calc(11px * var(--font-scale))",
+                            color: "var(--text-faint)",
                             background: "rgba(196,122,46,0.2)",
                             borderRadius: 12,
                             padding: "3px 10px",
@@ -1347,16 +1349,16 @@ export default function DeckDetailPage() {
                   width: 44,
                   height: 44,
                   borderRadius: 10,
-                  border: "1.5px solid #E0C9A8",
-                  background: "#FFFCF7",
-                  color: "#2E1A0C",
-                  fontSize: 18,
+                  border: "1.5px solid var(--border)",
+                  background: "var(--bg-card)",
+                  color: "var(--text)",
+                  fontSize: "calc(18px * var(--font-scale))",
                   cursor: currentIdx === 0 ? "not-allowed" : "pointer",
                   opacity: currentIdx === 0 ? 0.35 : 1,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontFamily: "var(--font-dm-sans, sans-serif)",
+                  fontFamily: "var(--font-body, sans-serif)",
                 }}
                 aria-label="Previous card"
               >
@@ -1373,7 +1375,7 @@ export default function DeckDetailPage() {
                       width: i === currentIdx ? 20 : 8,
                       height: 8,
                       borderRadius: 4,
-                      background: i === currentIdx ? "#C47A2E" : "#E0C9A8",
+                      background: i === currentIdx ? "var(--primary)" : "var(--border)",
                       border: "none",
                       padding: 0,
                       cursor: "pointer",
@@ -1383,7 +1385,7 @@ export default function DeckDetailPage() {
                   />
                 ))}
                 {total > 12 && (
-                  <span style={{ fontSize: 12, color: "#8A6E52", marginLeft: 2 }}>
+                  <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginLeft: 2 }}>
                     +{total - 12}
                   </span>
                 )}
@@ -1396,16 +1398,16 @@ export default function DeckDetailPage() {
                   width: 44,
                   height: 44,
                   borderRadius: 10,
-                  border: "1.5px solid #E0C9A8",
-                  background: "#FFFCF7",
-                  color: "#2E1A0C",
-                  fontSize: 18,
+                  border: "1.5px solid var(--border)",
+                  background: "var(--bg-card)",
+                  color: "var(--text)",
+                  fontSize: "calc(18px * var(--font-scale))",
                   cursor: currentIdx === total - 1 ? "not-allowed" : "pointer",
                   opacity: currentIdx === total - 1 ? 0.35 : 1,
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
-                  fontFamily: "var(--font-dm-sans, sans-serif)",
+                  fontFamily: "var(--font-body, sans-serif)",
                 }}
                 aria-label="Next card"
               >
@@ -1414,8 +1416,8 @@ export default function DeckDetailPage() {
             </div>
 
             {/* Quiz CTA — bottom */}
-            <div style={{ textAlign: "center", marginTop: 36, paddingTop: 28, borderTop: "1px solid #E0C9A8" }}>
-              <p style={{ fontSize: 14, color: "#8A6E52", marginBottom: 14 }}>
+            <div style={{ textAlign: "center", marginTop: 36, paddingTop: 28, borderTop: "1px solid var(--border)" }}>
+              <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-muted)", marginBottom: 14 }}>
                 Feeling ready? Test yourself on all {total} cards.
               </p>
               <a
@@ -1424,12 +1426,12 @@ export default function DeckDetailPage() {
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 8,
-                  background: "#C47A2E",
-                  color: "#FAF2E4",
+                  background: "var(--primary)",
+                  color: "var(--nav-text)",
                   padding: "13px 32px",
                   borderRadius: 10,
                   fontWeight: 600,
-                  fontSize: 15,
+                  fontSize: "calc(15px * var(--font-scale))",
                   textDecoration: "none",
                 }}
               >
@@ -1441,13 +1443,13 @@ export default function DeckDetailPage() {
 
         {/* D3 — quiz history / progress */}
         {!loadingHistory && history.length > 0 && (
-          <div style={{ marginTop: 36, paddingTop: 28, borderTop: "1px solid #E0C9A8" }}>
+          <div style={{ marginTop: 36, paddingTop: 28, borderTop: "1px solid var(--border)" }}>
             <h2
               style={{
-                fontFamily: "var(--font-lora, serif)",
-                fontSize: 18,
+                fontFamily: "var(--font-display, serif)",
+                fontSize: "calc(18px * var(--font-scale))",
                 fontWeight: 700,
-                color: "#2E1A0C",
+                color: "var(--text)",
                 marginBottom: 12,
               }}
             >
@@ -1458,8 +1460,8 @@ export default function DeckDetailPage() {
                 <div
                   key={session.id}
                   style={{
-                    background: "#FFFCF7",
-                    border: "1px solid #E0C9A8",
+                    background: "var(--bg-card)",
+                    border: "1px solid var(--border)",
                     borderRadius: 10,
                     padding: "10px 16px",
                     display: "flex",
@@ -1470,10 +1472,10 @@ export default function DeckDetailPage() {
                   }}
                 >
                   <div>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: "#2E1A0C", margin: 0 }}>
+                    <p style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text)", margin: 0 }}>
                       {session.score_percent ?? 0}% · {session.correct_count}/{session.total_questions} correct
                     </p>
-                    <p style={{ fontSize: 12, color: "#8A6E52", margin: "2px 0 0" }}>
+                    <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", margin: "2px 0 0" }}>
                       {session.completed_at
                         ? new Date(session.completed_at).toLocaleString()
                         : ""}
@@ -1481,11 +1483,11 @@ export default function DeckDetailPage() {
                   </div>
                   <span
                     style={{
-                      fontSize: 11,
+                      fontSize: "calc(11px * var(--font-scale))",
                       fontWeight: 600,
                       letterSpacing: "0.04em",
                       textTransform: "uppercase",
-                      color: "#C49A6C",
+                      color: "var(--text-faint)",
                       background: "rgba(196,122,46,0.12)",
                       borderRadius: 6,
                       padding: "3px 8px",

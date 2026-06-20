@@ -2,13 +2,83 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Theme tokens ──────────────────────────────────────────────────────────
+   Light values are the app's original cream/brown palette, kept byte-for-byte
+   so light mode looks unchanged. Dark values are the "Night Lamp" palette the
+   co-founder preferred from the UI concept. Toggled via [data-theme] on <html>,
+   set by ThemeProvider (src/lib/theme/ThemeProvider.tsx). */
 :root {
   --background: #ffffff;
   --foreground: #171717;
-  /* This app uses a fixed cream/brown theme (no dark-mode design) — opt out of
-     the OS dark-mode preference so Tailwind `dark:` variants and the browser's
-     own dark-mode color inversion don't override our inline colors. */
   color-scheme: light;
+
+  --bg: #FAF2E4;
+  --bg-card: #FFFCF7;
+  --bg-subtle: #FBF0E0;
+  --border: #E0C9A8;
+
+  --text: #2E1A0C;
+  --text-muted: #8A6E52;
+  --text-faint: #C49A6C;
+
+  --nav-bg: #2E1A0C;
+  --nav-border: #4A2512;
+  --nav-text: #FAF2E4;
+  --nav-text-muted: #C49A6C;
+
+  --primary: #C47A2E;
+  --primary-hover: #A86826;
+  --primary-soft: #D4954A;
+  --on-primary: #FAF2E4;
+
+  --success: #5C7A35;
+  --success-hover: #8AAD5A;
+  --success-dark: #3A5020;
+  --success-bg: #EDF5E4;
+
+  --error: #EF4444;
+  --error-dark: #991B1B;
+  --error-bg: #FEF2F2;
+
+  --font-scale: 1;
+  --font-display: var(--font-lora, serif);
+  --font-body: var(--font-dm-sans, sans-serif);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #1E1C16;
+  --bg-card: #252318;
+  --bg-subtle: #2C2A1E;
+  --border: #3D3824;
+
+  --text: #EDE5D0;
+  --text-muted: #B0A487;
+  --text-faint: #8A7D65;
+
+  --nav-bg: #121009;
+  --nav-border: #3D3824;
+  --nav-text: #EDE5D0;
+  --nav-text-muted: #B0A487;
+
+  --primary: #E8A93D;
+  --primary-hover: #FFC066;
+  --primary-soft: #C9A876;
+  --on-primary: #1E1C16;
+
+  --success: #6B8B45;
+  --success-hover: #82A856;
+  --success-dark: #A8C98A;
+  --success-bg: #1F2A18;
+
+  --error: #E0645C;
+  --error-dark: #FF8A80;
+  --error-bg: #2A1614;
+}
+
+html {
+  background: var(--bg);
 }
 
 body {
@@ -21,4 +91,121 @@ body {
   .text-balance {
     text-wrap: balance;
   }
+}
+
+/* ── Animation system — ported from the UI concept's heroFadeUp/card-hover/
+   button-press transitions (capy-lofi-concept.html). Plays for everyone,
+   including prefers-reduced-motion users, by explicit choice. ──────────── */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.hover-lift:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.12);
+}
+.hover-lift:active {
+  transform: translateY(-1px) scale(0.99);
+}
+
+button:not(:disabled) {
+  transition: transform 0.12s ease, box-shadow 0.2s ease;
+}
+button:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+/* Animates margin-top, not transform — a finished CSS animation with
+   fill-mode "both"/"forwards" keeps overriding any property it touched,
+   even on :hover, which would permanently block hover-lift's translateY
+   on any element carrying both classes. */
+@keyframes fadeUp {
+  from { opacity: 0; margin-top: 16px; }
+  to { opacity: 1; margin-top: 0; }
+}
+
+/* Waving hand — sits still until hovered; one slow, gentle tilt each side while hovered. */
+@keyframes wave {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(10deg); }
+  50% { transform: rotate(-6deg); }
+  75% { transform: rotate(0deg); }
+}
+.wave {
+  display: inline-block;
+  transform-origin: 70% 70%;
+}
+.wave:hover {
+  animation: wave 1.4s ease-in-out 1;
+}
+
+.anim-fade-up { animation: fadeUp 0.6s ease both; }
+.anim-fade-up-1 { animation: fadeUp 0.6s ease 0.06s both; }
+.anim-fade-up-2 { animation: fadeUp 0.6s ease 0.12s both; }
+.anim-fade-up-3 { animation: fadeUp 0.6s ease 0.18s both; }
+.anim-fade-up-4 { animation: fadeUp 0.6s ease 0.24s both; }
+.anim-fade-up-5 { animation: fadeUp 0.6s ease 0.3s both; }
+
+/* ── Nav link hover/active state — applies to every nav-bar link/button
+   across pages (Rewards, Settings, Log out, Back, etc.) so the header
+   gives feedback on hover instead of sitting static. ──────────────────── */
+.nav-link, .nav-link * {
+  transition: color 0.15s ease, font-weight 0.15s ease;
+}
+.nav-link:hover, .nav-link:hover * {
+  color: var(--primary) !important;
+  font-weight: 600;
+}
+
+/* ── Outlined secondary buttons (border + transparent background, e.g.
+   Settings' "Log out of all devices") — gives them a hover state without
+   needing onMouseEnter/Leave handlers, since the colors are set inline. ── */
+.btn-outline {
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.btn-outline:hover:not(:disabled) {
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+  background: var(--bg-subtle) !important;
+}
+
+/* ── Chip/pill toggle buttons (Settings' Appearance, Font size, Font picker) —
+   brightens the border on hover when not the active selection. Selected chips
+   already stand out via their own background, so they're excluded. ──────── */
+.chip {
+  transition: all 0.15s ease;
+}
+.chip:hover:not(:disabled):not(.chip-active) {
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
+/* ── Solid-background buttons (Save changes, Save preferences, Delete my
+   account) — a brightness shift on hover, no movement. Filter works on any
+   background color without needing a hover token per color. ──────────── */
+.btn-solid {
+  transition: filter 0.15s ease;
+}
+.btn-solid:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+.btn-solid:active:not(:disabled) {
+  filter: brightness(0.95);
+}
+
+/* ── Upload dropzone (PdfUploadFlow) — border brightens on hover/drag. ──── */
+.upload-dropzone {
+  transition: border-color 0.15s ease;
+}
+.upload-dropzone:hover {
+  border-color: var(--primary) !important;
+}
+
+/* ── Radio-card buttons (PdfUploadFlow's Generation mode picker) — same
+   smooth hover/selection feel as Settings' chips, scaled up for a card
+   layout with icon + label + description. ──────────────────────────── */
+.chip-card {
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+.chip-card:hover:not(:disabled):not(.chip-card-active) {
+  border-color: var(--primary) !important;
 }

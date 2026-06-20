@@ -61,31 +61,31 @@ export default function LoginPage() {
   const inputStyle = {
     width: "100%",
     padding: "11px 14px",
-    background: "#FAF2E4",
-    border: "1.5px solid #E0C9A8",
+    background: "var(--bg)",
+    border: "1.5px solid var(--border)",
     borderRadius: 10,
-    fontSize: 14,
-    color: "#2E1A0C",
+    fontSize: "calc(14px * var(--font-scale))",
+    color: "var(--text)",
     outline: "none",
     boxSizing: "border-box" as const,
-    fontFamily: "var(--font-dm-sans, sans-serif)",
+    fontFamily: "var(--font-body, sans-serif)",
   };
 
   return (
-    <main style={{ minHeight: "100vh", background: "#FAF2E4", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
+    <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
 
       {/* ── NAVBAR ── */}
-      <nav style={{ background: "#2E1A0C", borderBottom: "1px solid #4A2512" }}>
+      <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)" }}>
         <div style={{ maxWidth: 1024, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Link href="/" style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-            <span style={{ fontSize: 24 }}>🦫</span>
-            <span style={{ fontFamily: "var(--font-lora, serif)", fontWeight: 700, fontSize: 18, color: "#FAF2E4" }}>
+            <span style={{ fontSize: "calc(24px * var(--font-scale))" }}>🦫</span>
+            <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
               {App.name}
             </span>
           </Link>
-          <Link href={Routes.signup} style={{ fontSize: 13, color: "#C49A6C", textDecoration: "none" }}>
+          <Link href={Routes.signup} style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)", textDecoration: "none" }}>
             No account yet?{" "}
-            <span style={{ color: "#C47A2E", fontWeight: 600 }}>Sign up free</span>
+            <span style={{ color: "var(--primary)", fontWeight: 600 }}>Sign up free</span>
           </Link>
         </div>
       </nav>
@@ -95,39 +95,39 @@ export default function LoginPage() {
         <div style={{ width: "100%", maxWidth: 420 }}>
 
           <div style={{ textAlign: "center", marginBottom: 32 }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>🦫</div>
-            <h1 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 26, fontWeight: 700, color: "#2E1A0C", marginBottom: 6 }}>
+            <div style={{ fontSize: "calc(48px * var(--font-scale))", marginBottom: 12 }}>🦫</div>
+            <h1 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(26px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
               Welcome back
             </h1>
-            <p style={{ color: "#8A6E52", fontSize: 14 }}>
+            <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))" }}>
               Log in to your Crammable account
             </p>
           </div>
 
-          <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 20, padding: 32 }}>
+          <div style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 20, padding: 32 }}>
 
             {error && (
-              <div style={{ background: "#FEF0E0", border: "1px solid #E0C9A8", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: 13, color: "#8B5E38" }}>
+              <div style={{ background: "var(--error-bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 14px", marginBottom: 12, fontSize: "calc(13px * var(--font-scale))", color: "var(--error-dark)" }}>
                 {error}
               </div>
             )}
 
             {/* Prominent resend prompt — surfaces after any failed login attempt */}
             {error && resendStatus !== "sent" && (
-              <div style={{ background: "#F5F0E8", border: "1px solid #D4B896", borderRadius: 10, padding: "10px 14px", marginBottom: 20, fontSize: 13, color: "#6B4F2E" }}>
+              <div style={{ background: "var(--bg-subtle)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 14px", marginBottom: 20, fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)" }}>
                 Haven&apos;t confirmed your email yet?{" "}
                 <button
                   type="button"
                   onClick={handleResend}
                   disabled={resendStatus !== "idle"}
-                  style={{ background: "none", border: "none", color: "#C47A2E", fontWeight: 600, cursor: resendStatus === "idle" ? "pointer" : "default", padding: 0, fontSize: 13, fontFamily: "inherit", textDecoration: "underline" }}
+                  style={{ background: "none", border: "none", color: "var(--primary)", fontWeight: 600, cursor: resendStatus === "idle" ? "pointer" : "default", padding: 0, fontSize: "calc(13px * var(--font-scale))", fontFamily: "inherit", textDecoration: "underline" }}
                 >
                   {resendStatus === "sending" ? "Sending…" : "Resend confirmation email"}
                 </button>
               </div>
             )}
             {error && resendStatus === "sent" && (
-              <div style={{ background: "#F0F7F0", border: "1px solid #B8D8B8", borderRadius: 10, padding: "10px 14px", marginBottom: 20, fontSize: 13, color: "#3A6B3A" }}>
+              <div style={{ background: "var(--success-bg)", border: "1px solid var(--success)", borderRadius: 10, padding: "10px 14px", marginBottom: 20, fontSize: "calc(13px * var(--font-scale))", color: "var(--success-dark)" }}>
                 Sent! Check your inbox (and spam folder).
               </div>
             )}
@@ -135,7 +135,7 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit}>
 
               <div style={{ marginBottom: 18 }}>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#2E1A0C", marginBottom: 6 }}>
+                <label style={{ display: "block", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
                   Email address
                 </label>
                 <input
@@ -148,7 +148,7 @@ export default function LoginPage() {
               </div>
 
               <div style={{ marginBottom: 10 }}>
-                <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#2E1A0C", marginBottom: 6 }}>
+                <label style={{ display: "block", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
                   Password
                 </label>
                 <input
@@ -161,7 +161,7 @@ export default function LoginPage() {
               </div>
 
               <div style={{ textAlign: "right", marginBottom: 24 }}>
-                <Link href={Routes.forgotPassword} style={{ fontSize: 12, color: "#C47A2E", textDecoration: "none" }}>
+                <Link href={Routes.forgotPassword} style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--primary)", textDecoration: "none" }}>
                   Forgot password?
                 </Link>
               </div>
@@ -169,7 +169,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading}
-                style={{ width: "100%", padding: "12px 0", background: loading ? "#A86826" : "#C47A2E", color: "#FAF2E4", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                style={{ width: "100%", padding: "12px 0", background: loading ? "var(--primary-hover)" : "var(--primary)", color: "var(--nav-text)", border: "none", borderRadius: 10, fontSize: "calc(15px * var(--font-scale))", fontWeight: 600, cursor: loading ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
               >
                 {loading ? "Logging in…" : "Log in"}
               </button>
@@ -177,20 +177,20 @@ export default function LoginPage() {
             </form>
 
             <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "24px 0" }}>
-              <div style={{ flex: 1, height: 1, background: "#E0C9A8" }} />
-              <span style={{ fontSize: 12, color: "#8A6E52" }}>or</span>
-              <div style={{ flex: 1, height: 1, background: "#E0C9A8" }} />
+              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+              <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)" }}>or</span>
+              <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
             </div>
 
-            <p style={{ textAlign: "center", fontSize: 13, color: "#8A6E52", margin: 0 }}>
+            <p style={{ textAlign: "center", fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
               Don&apos;t have an account?{" "}
-              <Link href={Routes.signup} style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none" }}>
+              <Link href={Routes.signup} style={{ color: "var(--primary)", fontWeight: 600, textDecoration: "none" }}>
                 Sign up free
               </Link>
             </p>
 
             {/* Passive resend affordance — always visible so it doesn't signal account existence */}
-            <p style={{ textAlign: "center", fontSize: 12, color: "#A08060", marginTop: 12, marginBottom: 0 }}>
+            <p style={{ textAlign: "center", fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginTop: 12, marginBottom: 0 }}>
               {resendStatus === "sent" && !error ? (
                 "Sent! Check your inbox (and spam folder)."
               ) : (
@@ -200,7 +200,7 @@ export default function LoginPage() {
                     type="button"
                     onClick={handleResend}
                     disabled={resendStatus !== "idle"}
-                    style={{ background: "none", border: "none", color: "#C47A2E", cursor: resendStatus === "idle" ? "pointer" : "default", padding: 0, fontSize: 12, fontFamily: "inherit", textDecoration: "underline" }}
+                    style={{ background: "none", border: "none", color: "var(--primary)", cursor: resendStatus === "idle" ? "pointer" : "default", padding: 0, fontSize: "calc(12px * var(--font-scale))", fontFamily: "inherit", textDecoration: "underline" }}
                   >
                     {resendStatus === "sending" ? "Sending…" : "Resend it"}
                   </button>
@@ -210,8 +210,8 @@ export default function LoginPage() {
 
           </div>
 
-          <p style={{ textAlign: "center", fontSize: 12, color: "#8A6E52", marginTop: 20 }}>
-            3 free credits included when you sign up. No card required.
+          <p style={{ textAlign: "center", fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginTop: 20 }}>
+            3 free Capycoins included when you sign up. No card required.
           </p>
 
         </div>

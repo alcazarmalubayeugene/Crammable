@@ -1,0 +1,32 @@
+<svg width="220" height="180" viewBox="0 0 220 180" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Capy the capybara, sitting calmly with a flashcard balanced on its head">
+  <!-- body -->
+  <ellipse cx="105" cy="115" rx="75" ry="48" fill="#C9A876" stroke="#2E1A0C" stroke-width="3"/>
+
+  <!-- legs -->
+  <rect x="60" y="148" width="22" height="16" rx="7" fill="#A9824F" stroke="#2E1A0C" stroke-width="2.5"/>
+  <rect x="118" y="150" width="22" height="16" rx="7" fill="#A9824F" stroke="#2E1A0C" stroke-width="2.5"/>
+
+  <!-- head -->
+  <ellipse cx="158" cy="82" rx="42" ry="34" fill="#C9A876" stroke="#2E1A0C" stroke-width="3"/>
+
+  <!-- snout -->
+  <ellipse cx="190" cy="96" rx="20" ry="15" fill="#E3CDA4" stroke="#2E1A0C" stroke-width="2.5"/>
+
+  <!-- nose -->
+  <ellipse cx="204" cy="92" rx="5.5" ry="4.5" fill="#2E1A0C"/>
+
+  <!-- ears -->
+  <ellipse cx="136" cy="49" rx="11" ry="9" fill="#A9824F" stroke="#2E1A0C" stroke-width="2.5"/>
+  <ellipse cx="167" cy="45" rx="11" ry="9" fill="#A9824F" stroke="#2E1A0C" stroke-width="2.5"/>
+
+  <!-- sleepy half-closed eyes -->
+  <path d="M 142 73 Q 152 80 162 73" stroke="#2E1A0C" stroke-width="4" fill="none" stroke-linecap="round"/>
+  <path d="M 168 71 Q 177 77 186 71" stroke="#2E1A0C" stroke-width="4" fill="none" stroke-linecap="round"/>
+
+  <!-- flashcard balanced on head -->
+  <g transform="rotate(-8 150 38)">
+    <rect x="128" y="22" width="46" height="30" rx="4" fill="#FFFCF7" stroke="#2E1A0C" stroke-width="2.5"/>
+    <line x1="136" y1="33" x2="166" y2="33" stroke="#E0C9A8" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="136" y1="42" x2="158" y2="42" stroke="#E0C9A8" stroke-width="2.5" stroke-linecap="round"/>
+  </g>
+</svg>

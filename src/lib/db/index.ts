@@ -99,9 +99,7 @@ export {
   listAuditLog,
 } from "@/lib/db/admin";
 
-// Account export / deletion (E5)
+// Account deletion (E5)
 export {
-  exportAccountData,
   deleteAccount,
-  type AccountExportData,
 } from "@/lib/db/account";

@@ -313,8 +313,8 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <main style={{ minHeight: "100vh", background: "#FAF2E4", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ color: "#8A6E52", fontFamily: "var(--font-dm-sans, sans-serif)" }}>Loading…</p>
+      <main style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>Loading…</p>
       </main>
     );
   }
@@ -323,10 +323,10 @@ export default function AdminPage() {
 
   if (!isAdmin) {
     return (
-      <main style={{ minHeight: "100vh", background: "#FAF2E4", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, fontFamily: "var(--font-dm-sans, sans-serif)" }}>
-        <span style={{ fontSize: 48 }}>🔒</span>
-        <p style={{ color: "#8A6E52", fontSize: 15 }}>You don&apos;t have access to this page.</p>
-        <a href={Routes.dashboard} style={{ color: "#C47A2E", fontWeight: 600, fontSize: 14, textDecoration: "none" }}>
+      <main style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, fontFamily: "var(--font-body, sans-serif)" }}>
+        <span style={{ fontSize: "calc(48px * var(--font-scale))" }}>🔒</span>
+        <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>You don&apos;t have access to this page.</p>
+        <a href={Routes.dashboard} style={{ color: "var(--primary)", fontWeight: 600, fontSize: "calc(14px * var(--font-scale))", textDecoration: "none" }}>
           ← Back to Dashboard
         </a>
       </main>
@@ -337,21 +337,21 @@ export default function AdminPage() {
   const resolved = submissions.filter((s) => s.status !== PaymentStatus.PENDING);
 
   return (
-    <main style={{ minHeight: "100vh", background: "#FAF2E4", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
+    <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
 
       {/* ── NAVBAR ── */}
-      <nav style={{ background: "#2E1A0C", borderBottom: "1px solid #4A2512", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 24 }}>🦫</span>
-            <span style={{ fontFamily: "var(--font-lora, serif)", fontWeight: 700, fontSize: 18, color: "#FAF2E4" }}>
+            <span style={{ fontSize: "calc(24px * var(--font-scale))" }}>🦫</span>
+            <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
               {App.name}
             </span>
-            <span style={{ fontSize: 12, background: "#C47A2E", color: "#FAF2E4", borderRadius: 20, padding: "2px 10px", fontWeight: 700, marginLeft: 4 }}>
+            <span style={{ fontSize: "calc(12px * var(--font-scale))", background: "var(--primary)", color: "var(--nav-text)", borderRadius: 20, padding: "2px 10px", fontWeight: 700, marginLeft: 4 }}>
               Admin
             </span>
           </div>
-          <span style={{ fontSize: 13, color: "#C49A6C" }}>
+          <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>
             {profile?.full_name ?? "Admin"}
           </span>
         </div>
@@ -363,33 +363,33 @@ export default function AdminPage() {
         {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 28, flexWrap: "wrap", gap: 12 }}>
           <div>
-            <h1 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 26, fontWeight: 700, color: "#2E1A0C", marginBottom: 4 }}>
+            <h1 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(26px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
               Payment Approvals
             </h1>
-            <p style={{ color: "#8A6E52", fontSize: 14 }}>
+            <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))" }}>
               GCash ₱{Pricing.pro.amountPhp} · Operating hours: {AdminConfig.operatingStart}am – {AdminConfig.operatingEnd % 12}pm PHT · SLA: {AdminConfig.slaHours}h
             </p>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 10, padding: "10px 16px" }}>
-            <span style={{ fontSize: 18 }}>⏳</span>
-            <span style={{ fontFamily: "var(--font-lora, serif)", fontSize: 22, fontWeight: 700, color: "#2E1A0C" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 10, padding: "10px 16px" }}>
+            <span style={{ fontSize: "calc(18px * var(--font-scale))" }}>⏳</span>
+            <span style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(22px * var(--font-scale))", fontWeight: 700, color: "var(--text)" }}>
               {pending.length}
             </span>
-            <span style={{ fontSize: 13, color: "#8A6E52" }}>pending</span>
+            <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)" }}>pending</span>
           </div>
         </div>
 
         {fetchError && (
-          <div style={{ background: "#FEF2F2", border: "1.5px solid #EF4444", borderRadius: 10, padding: "12px 16px", marginBottom: 20 }}>
-            <p style={{ fontSize: 14, color: "#991B1B", margin: 0 }}>{fetchError}</p>
+          <div style={{ background: "var(--error-bg)", border: "1.5px solid var(--error)", borderRadius: 10, padding: "12px 16px", marginBottom: 20 }}>
+            <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--error-dark)", margin: 0 }}>{fetchError}</p>
           </div>
         )}
 
         {/* ── Pending submissions ── */}
         {pending.length === 0 ? (
-          <div style={{ background: "#FFFCF7", border: "1.5px dashed #E0C9A8", borderRadius: 16, padding: "48px 24px", textAlign: "center", marginBottom: 28 }}>
-            <div style={{ fontSize: 40, marginBottom: 10 }}>✅</div>
-            <p style={{ color: "#8A6E52", fontSize: 15 }}>No pending payments. All caught up!</p>
+          <div style={{ background: "var(--bg-card)", border: "1.5px dashed var(--border)", borderRadius: 16, padding: "48px 24px", textAlign: "center", marginBottom: 28 }}>
+            <div style={{ fontSize: "calc(40px * var(--font-scale))", marginBottom: 10 }}>✅</div>
+            <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>No pending payments. All caught up!</p>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 14, marginBottom: 36 }}>
@@ -399,15 +399,15 @@ export default function AdminPage() {
               return (
                 <div
                   key={payment.id}
-                  style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 16, padding: "20px 22px" }}
+                  style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 16, padding: "20px 22px" }}
                 >
                   {/* Top row */}
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 14 }}>
                     <div>
-                      <p style={{ fontSize: 15, fontWeight: 600, color: "#2E1A0C", marginBottom: 2 }}>
+                      <p style={{ fontSize: "calc(15px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>
                         {payment.userEmail}
                       </p>
-                      <p style={{ fontSize: 13, color: "#8A6E52", margin: 0 }}>
+                      <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
                         Ref:{" "}
                         <span style={{ fontFamily: "monospace", letterSpacing: "0.06em" }}>
                           {payment.reference_number}
@@ -418,10 +418,10 @@ export default function AdminPage() {
                     </div>
                     <span
                       style={{
-                        fontSize: 11,
+                        fontSize: "calc(11px * var(--font-scale))",
                         fontWeight: 700,
-                        background: payment.minutesSinceSubmission > AdminConfig.slaHours * 60 ? "#FEF2F2" : "#FBF0E0",
-                        color: payment.minutesSinceSubmission > AdminConfig.slaHours * 60 ? "#991B1B" : "#C47A2E",
+                        background: payment.minutesSinceSubmission > AdminConfig.slaHours * 60 ? "var(--error-bg)" : "var(--bg-subtle)",
+                        color: payment.minutesSinceSubmission > AdminConfig.slaHours * 60 ? "var(--error-dark)" : "var(--primary)",
                         borderRadius: 20,
                         padding: "3px 10px",
                       }}
@@ -437,7 +437,7 @@ export default function AdminPage() {
                         type="button"
                         disabled={busy}
                         onClick={() => approve(payment)}
-                        style={{ background: busy && rs.actionState === "approving" ? "#8AAD5A" : "#5C7A35", color: "#FAF2E4", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 600, cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                        style={{ background: busy && rs.actionState === "approving" ? "var(--success-hover)" : "var(--success)", color: "var(--nav-text)", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
                       >
                         {rs.actionState === "approving" ? "Approving…" : "✓ Approve"}
                       </button>
@@ -445,7 +445,7 @@ export default function AdminPage() {
                         type="button"
                         disabled={busy}
                         onClick={() => setRow(payment.id, { showRejectForm: true })}
-                        style={{ background: "none", border: "1.5px solid #E0C9A8", borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 600, color: "#8A6E52", cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                        style={{ background: "none", border: "1.5px solid var(--border)", borderRadius: 8, padding: "9px 20px", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text-muted)", cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
                       >
                         ✗ Reject
                       </button>
@@ -458,21 +458,21 @@ export default function AdminPage() {
                         onChange={(e) => setRow(payment.id, { rejectNote: e.target.value })}
                         maxLength={Validation.adminNotes.maxLength}
                         placeholder="Reason shown to the student…"
-                        style={{ background: "#FAF2E4", border: "1.5px solid #E0C9A8", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: "#2E1A0C", fontFamily: "var(--font-dm-sans, sans-serif)", outline: "none" }}
+                        style={{ background: "var(--bg)", border: "1.5px solid var(--border)", borderRadius: 8, padding: "9px 12px", fontSize: "calc(13px * var(--font-scale))", color: "var(--text)", fontFamily: "var(--font-body, sans-serif)", outline: "none" }}
                       />
                       <div style={{ display: "flex", gap: 8 }}>
                         <button
                           type="button"
                           disabled={busy}
                           onClick={() => reject(payment)}
-                          style={{ background: "#EF4444", color: "#FAF2E4", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: 13, fontWeight: 600, cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                          style={{ background: "var(--error)", color: "var(--nav-text)", border: "none", borderRadius: 8, padding: "8px 18px", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
                         >
                           {rs.actionState === "rejecting" ? "Rejecting…" : "Confirm reject"}
                         </button>
                         <button
                           type="button"
                           onClick={() => setRow(payment.id, { showRejectForm: false, rejectNote: "", error: "" })}
-                          style={{ background: "none", border: "none", fontSize: 13, color: "#8A6E52", cursor: "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                          style={{ background: "none", border: "none", fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)", cursor: "pointer", fontFamily: "var(--font-body, sans-serif)" }}
                         >
                           Cancel
                         </button>
@@ -481,7 +481,7 @@ export default function AdminPage() {
                   )}
 
                   {rs.error && (
-                    <p style={{ fontSize: 12, color: "#EF4444", marginTop: 8 }}>{rs.error}</p>
+                    <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error)", marginTop: 8 }}>{rs.error}</p>
                   )}
                 </div>
               );
@@ -492,29 +492,29 @@ export default function AdminPage() {
         {/* ── Resolved submissions ── */}
         {resolved.length > 0 && (
           <>
-            <h2 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 16, fontWeight: 700, color: "#2E1A0C", marginBottom: 12 }}>
+            <h2 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(16px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 12 }}>
               Recently resolved
             </h2>
-            <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, overflow: "hidden" }}>
+            <div style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
               {resolved.map((payment, i) => (
                 <div
                   key={payment.id}
-                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 20px", borderBottom: i < resolved.length - 1 ? "1px solid #E0C9A8" : "none", gap: 12, flexWrap: "wrap" }}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "13px 20px", borderBottom: i < resolved.length - 1 ? "1px solid var(--border)" : "none", gap: 12, flexWrap: "wrap" }}
                 >
                   <div>
-                    <p style={{ fontSize: 13, fontWeight: 600, color: "#2E1A0C", marginBottom: 1 }}>
+                    <p style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 1 }}>
                       {payment.userEmail}
                     </p>
-                    <p style={{ fontSize: 12, color: "#8A6E52", margin: 0, fontFamily: "monospace" }}>
+                    <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", margin: 0, fontFamily: "monospace" }}>
                       {payment.reference_number}
                     </p>
                   </div>
                   <span
                     style={{
-                      fontSize: 12,
+                      fontSize: "calc(12px * var(--font-scale))",
                       fontWeight: 700,
-                      color: payment.status === PaymentStatus.VERIFIED ? "#5C7A35" : "#EF4444",
-                      background: payment.status === PaymentStatus.VERIFIED ? "#EDF5E4" : "#FEF2F2",
+                      color: payment.status === PaymentStatus.VERIFIED ? "var(--success)" : "var(--error)",
+                      background: payment.status === PaymentStatus.VERIFIED ? "var(--success-bg)" : "var(--error-bg)",
                       borderRadius: 20,
                       padding: "3px 10px",
                     }}
@@ -528,12 +528,12 @@ export default function AdminPage() {
         )}
 
         {/* ── Pending app reviews (B4) ── */}
-        <h2 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 16, fontWeight: 700, color: "#2E1A0C", margin: "36px 0 12px" }}>
+        <h2 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(16px * var(--font-scale))", fontWeight: 700, color: "var(--text)", margin: "36px 0 12px" }}>
           Pending Reviews
         </h2>
         {reviews.length === 0 ? (
-          <div style={{ background: "#FFFCF7", border: "1.5px dashed #E0C9A8", borderRadius: 16, padding: "32px 24px", textAlign: "center" }}>
-            <p style={{ color: "#8A6E52", fontSize: 14 }}>No pending reviews.</p>
+          <div style={{ background: "var(--bg-card)", border: "1.5px dashed var(--border)", borderRadius: 16, padding: "32px 24px", textAlign: "center" }}>
+            <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))" }}>No pending reviews.</p>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -543,23 +543,23 @@ export default function AdminPage() {
               return (
                 <div
                   key={review.id}
-                  style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 16, padding: "20px 22px" }}
+                  style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 16, padding: "20px 22px" }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
                     <div>
-                      <p style={{ fontSize: 15, fontWeight: 600, color: "#2E1A0C", marginBottom: 2 }}>
+                      <p style={{ fontSize: "calc(15px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>
                         {review.userEmail}
                       </p>
-                      <p style={{ fontSize: 13, color: "#C47A2E", margin: 0 }}>
+                      <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--primary)", margin: 0 }}>
                         {"★".repeat(review.rating)}{"☆".repeat(5 - review.rating)}
                       </p>
                     </div>
-                    <span style={{ fontSize: 11, fontWeight: 700, background: "#FBF0E0", color: "#C47A2E", borderRadius: 20, padding: "3px 10px" }}>
+                    <span style={{ fontSize: "calc(11px * var(--font-scale))", fontWeight: 700, background: "var(--bg-subtle)", color: "var(--primary)", borderRadius: 20, padding: "3px 10px" }}>
                       Pending
                     </span>
                   </div>
 
-                  <p style={{ fontSize: 14, color: "#2E1A0C", marginBottom: 14, whiteSpace: "pre-wrap" }}>
+                  <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text)", marginBottom: 14, whiteSpace: "pre-wrap" }}>
                     {review.review_text}
                   </p>
 
@@ -568,22 +568,22 @@ export default function AdminPage() {
                       type="button"
                       disabled={busy}
                       onClick={() => verifyReview(review.id, true)}
-                      style={{ background: "#5C7A35", color: "#FAF2E4", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 600, cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                      style={{ background: "var(--success)", color: "var(--nav-text)", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
                     >
-                      {busy ? "…" : `✓ Approve (+${ReferralCaps[ReferralEventType.APP_REVIEW].creditsAwarded} credits)`}
+                      {busy ? "…" : `✓ Approve (+${ReferralCaps[ReferralEventType.APP_REVIEW].creditsAwarded} Capycoins)`}
                     </button>
                     <button
                       type="button"
                       disabled={busy}
                       onClick={() => verifyReview(review.id, false)}
-                      style={{ background: "none", border: "1.5px solid #E0C9A8", borderRadius: 8, padding: "9px 20px", fontSize: 13, fontWeight: 600, color: "#8A6E52", cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                      style={{ background: "none", border: "1.5px solid var(--border)", borderRadius: 8, padding: "9px 20px", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text-muted)", cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
                     >
                       ✗ Reject
                     </button>
                   </div>
 
                   {rs.error && (
-                    <p style={{ fontSize: 12, color: "#EF4444", marginTop: 8 }}>{rs.error}</p>
+                    <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error)", marginTop: 8 }}>{rs.error}</p>
                   )}
                 </div>
               );
@@ -592,7 +592,7 @@ export default function AdminPage() {
         )}
 
         {/* ── Users (E4) ── */}
-        <h2 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 16, fontWeight: 700, color: "#2E1A0C", margin: "36px 0 12px" }}>
+        <h2 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(16px * var(--font-scale))", fontWeight: 700, color: "var(--text)", margin: "36px 0 12px" }}>
           Users
         </h2>
         <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
@@ -602,40 +602,40 @@ export default function AdminPage() {
             onChange={(e) => setUserSearch(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") loadUsers(userSearch.trim() || undefined); }}
             placeholder="Search by email…"
-            style={{ flex: 1, background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 8, padding: "9px 12px", fontSize: 13, color: "#2E1A0C", fontFamily: "var(--font-dm-sans, sans-serif)", outline: "none" }}
+            style={{ flex: 1, background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 8, padding: "9px 12px", fontSize: "calc(13px * var(--font-scale))", color: "var(--text)", fontFamily: "var(--font-body, sans-serif)", outline: "none" }}
           />
           <button
             type="button"
             onClick={() => loadUsers(userSearch.trim() || undefined)}
             disabled={usersLoading}
-            style={{ background: "#5C7A35", color: "#FAF2E4", border: "none", borderRadius: 8, padding: "9px 18px", fontSize: 13, fontWeight: 600, cursor: usersLoading ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+            style={{ background: "var(--success)", color: "var(--nav-text)", border: "none", borderRadius: 8, padding: "9px 18px", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, cursor: usersLoading ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
           >
             {usersLoading ? "Loading…" : "Search"}
           </button>
         </div>
 
         {users.length === 0 ? (
-          <div style={{ background: "#FFFCF7", border: "1.5px dashed #E0C9A8", borderRadius: 16, padding: "32px 24px", textAlign: "center", marginBottom: 36 }}>
-            <p style={{ color: "#8A6E52", fontSize: 14 }}>{usersLoading ? "Loading users…" : "No users found."}</p>
+          <div style={{ background: "var(--bg-card)", border: "1.5px dashed var(--border)", borderRadius: 16, padding: "32px 24px", textAlign: "center", marginBottom: 36 }}>
+            <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))" }}>{usersLoading ? "Loading users…" : "No users found."}</p>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 36 }}>
             {users.map((u) => {
               const gs = grantStates[u.id] ?? emptyGrantState();
               return (
-                <div key={u.id} style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "14px 18px" }}>
+                <div key={u.id} style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "14px 18px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
                     <div>
-                      <p style={{ fontSize: 14, fontWeight: 600, color: "#2E1A0C", marginBottom: 2 }}>
+                      <p style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>
                         {u.email}
                         {u.is_admin && (
-                          <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, background: "#FBF0E0", color: "#C47A2E", borderRadius: 20, padding: "2px 8px" }}>
+                          <span style={{ marginLeft: 8, fontSize: "calc(11px * var(--font-scale))", fontWeight: 700, background: "var(--bg-subtle)", color: "var(--primary)", borderRadius: 20, padding: "2px 8px" }}>
                             Admin
                           </span>
                         )}
                       </p>
-                      <p style={{ fontSize: 12, color: "#8A6E52", margin: 0 }}>
-                        {u.full_name ?? "—"} · {u.subscription_tier} · {u.token_balance} credits
+                      <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
+                        {u.full_name ?? "—"} · {u.subscription_tier} · {u.token_balance} Capycoins
                       </p>
                     </div>
                   </div>
@@ -647,7 +647,7 @@ export default function AdminPage() {
                       placeholder="Amount"
                       min={Validation.adminCreditGrant.minAmount}
                       max={Validation.adminCreditGrant.maxAmount}
-                      style={{ width: 90, background: "#FAF2E4", border: "1.5px solid #E0C9A8", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: "#2E1A0C", fontFamily: "var(--font-dm-sans, sans-serif)", outline: "none" }}
+                      style={{ width: 90, background: "var(--bg)", border: "1.5px solid var(--border)", borderRadius: 8, padding: "8px 10px", fontSize: "calc(13px * var(--font-scale))", color: "var(--text)", fontFamily: "var(--font-body, sans-serif)", outline: "none" }}
                     />
                     <input
                       type="text"
@@ -655,19 +655,19 @@ export default function AdminPage() {
                       onChange={(e) => setGrant(u.id, { notes: e.target.value, success: "" })}
                       maxLength={Validation.adminNotes.maxLength}
                       placeholder="Notes (optional)"
-                      style={{ flex: 1, minWidth: 160, background: "#FAF2E4", border: "1.5px solid #E0C9A8", borderRadius: 8, padding: "8px 10px", fontSize: 13, color: "#2E1A0C", fontFamily: "var(--font-dm-sans, sans-serif)", outline: "none" }}
+                      style={{ flex: 1, minWidth: 160, background: "var(--bg)", border: "1.5px solid var(--border)", borderRadius: 8, padding: "8px 10px", fontSize: "calc(13px * var(--font-scale))", color: "var(--text)", fontFamily: "var(--font-body, sans-serif)", outline: "none" }}
                     />
                     <button
                       type="button"
                       disabled={gs.busy}
                       onClick={() => grantCredits(u)}
-                      style={{ background: "#5C7A35", color: "#FAF2E4", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: gs.busy ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                      style={{ background: "var(--success)", color: "var(--nav-text)", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, cursor: gs.busy ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
                     >
-                      {gs.busy ? "Granting…" : "Grant credits"}
+                      {gs.busy ? "Granting…" : "Grant Capycoins"}
                     </button>
                   </div>
-                  {gs.error && <p style={{ fontSize: 12, color: "#EF4444", marginTop: 6 }}>{gs.error}</p>}
-                  {gs.success && <p style={{ fontSize: 12, color: "#5C7A35", marginTop: 6 }}>{gs.success}</p>}
+                  {gs.error && <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error)", marginTop: 6 }}>{gs.error}</p>}
+                  {gs.success && <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--success)", marginTop: 6 }}>{gs.success}</p>}
                 </div>
               );
             })}
@@ -675,33 +675,33 @@ export default function AdminPage() {
         )}
 
         {/* ── Audit Log (E4) ── */}
-        <h2 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 16, fontWeight: 700, color: "#2E1A0C", margin: "36px 0 12px" }}>
+        <h2 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(16px * var(--font-scale))", fontWeight: 700, color: "var(--text)", margin: "36px 0 12px" }}>
           Audit Log
         </h2>
         {auditLog.length === 0 ? (
-          <div style={{ background: "#FFFCF7", border: "1.5px dashed #E0C9A8", borderRadius: 16, padding: "32px 24px", textAlign: "center" }}>
-            <p style={{ color: "#8A6E52", fontSize: 14 }}>{auditLoading ? "Loading…" : "No admin actions yet."}</p>
+          <div style={{ background: "var(--bg-card)", border: "1.5px dashed var(--border)", borderRadius: 16, padding: "32px 24px", textAlign: "center" }}>
+            <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))" }}>{auditLoading ? "Loading…" : "No admin actions yet."}</p>
           </div>
         ) : (
-          <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, overflow: "hidden" }}>
+          <div style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 14, overflow: "hidden" }}>
             {auditLog.map((entry, i) => (
               <div
                 key={entry.id}
-                style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "12px 18px", borderBottom: i < auditLog.length - 1 ? "1px solid #E0C9A8" : "none", gap: 12, flexWrap: "wrap" }}
+                style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", padding: "12px 18px", borderBottom: i < auditLog.length - 1 ? "1px solid var(--border)" : "none", gap: 12, flexWrap: "wrap" }}
               >
                 <div>
-                  <p style={{ fontSize: 13, fontWeight: 600, color: "#2E1A0C", marginBottom: 2 }}>
+                  <p style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>
                     {entry.action}
                     {entry.targetUserEmail ? ` — ${entry.targetUserEmail}` : ""}
-                    {entry.credits_amount != null ? ` (${entry.credits_amount} credits)` : ""}
+                    {entry.credits_amount != null ? ` (${entry.credits_amount} Capycoins)` : ""}
                   </p>
-                  <p style={{ fontSize: 12, color: "#8A6E52", margin: 0 }}>
+                  <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
                     {entry.adminEmail ? `by ${entry.adminEmail}` : "system"}
                     {entry.paymentReference ? ` · ref ${entry.paymentReference}` : ""}
                     {entry.notes ? ` · ${entry.notes}` : ""}
                   </p>
                 </div>
-                <span style={{ fontSize: 12, color: "#8A6E52", whiteSpace: "nowrap" }}>
+                <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", whiteSpace: "nowrap" }}>
                   {new Date(entry.created_at).toLocaleString()}
                 </span>
               </div>
