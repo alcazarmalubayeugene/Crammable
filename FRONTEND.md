@@ -475,24 +475,74 @@ changes everywhere automatically.
 | v.06 | **Merged `main`'s feature-completion push (B/C/D/E) + security hardening.** Deck-detail rebuilt — rename, add/edit/delete card, share + copy public link, PDF export (Pro), study-weak-cards mode, per-deck quiz history (kept FrontEnd's existing delete-deck button, ported onto main's rebuilt page). Deep Dive (Pro) toggle in upload flow; Living Deck reinforcement notice / upsell on quiz result; public read-only deck viewer (`/public/decks/[id]`). Rewards page gained all 4 earn methods (share-a-deck, write-a-review, complete-profile — kept FrontEnd's "Referred by [name]" history entry alongside them); settings gained data export + account deletion; admin gained review verification, user list + grant credits, and audit log. Backend: `app_reviews` table + new atomic RPCs (Living Deck, self-referral earns, review verify, account deletion), Pro-expiry cron, payment Realtime. Security audit: closed a public-deck IDOR (owner-scoped deck lookups), CSRF/JSON/rate-limit gaps on new routes, trimmed public projection, pinned function `search_path`. Full schema applied live; typecheck + lint + 75 tests green. |
 | v.07 | **Theming + polish pass.** New "Preferred style" section in Settings — dark mode (Night Lamp palette), font-size adjuster, and a 5-pairing font picker, all wired through a new `ThemeProvider` (`src/lib/theme/ThemeProvider.tsx`) with live-preview-then-explicit-Save UX (anti-flash inline script in `layout.tsx`, localStorage-only persistence, whole app re-themed via CSS custom properties, not per-page). Header/nav fixed to span the full width and sit at the screen corners (`maxWidth: 1200` → `"100%"` across all app pages); the active page's own nav label now bolds/colors itself; every header nav link/button got a hover state (`.nav-link` class in `globals.css`). New hover-lift / button-press / fade-up animation system ported from the design concept (fade-up explicitly overrides `prefers-reduced-motion` per product decision — see Known fixes). **Export-my-data removed entirely** per product decision — deleted `/api/account/export`, `exportAccountData()`, its tests, and the Settings UI for it. Renamed all user-facing "credits" copy to "Capycoins" (display text only — `deduct_credit()`, `ApiErrorCode.INSUFFICIENT_CREDITS`, `token_balance`, and other internal identifiers were deliberately left unchanged). Added 3 new Capy character images (`public/capy/teaching-capy.png`, `congrats-capy.png`, `capycoin.png`) — teaching-capy on a wrong quiz answer, congrats-capy on a perfect quiz score, capycoin replacing the 🪙 emoji on every balance display. Typecheck/build/72-test suite all green (3 export tests removed). |
 | v.09 | **Swapped the beaver emoji for real Capy artwork, everywhere.** `🦫` (the literal beaver emoji — there is no capybara emoji in Unicode, flagged as a known gap in `docs/DESIGN_PROPOSAL_CAPY_CALM.md`) was still in use as the mascot on every single page: the nav logo (24px) on all 13 pages, plus the larger loading/empty/error-state mascot (48–56px) on `/`, `/login`, `/signup`, `/settings` (reset-password view), `/dashboard`, and the quiz-result/public-deck "not found" states. Replaced all 22 instances with the existing `public/capy/capy-idle.svg` artwork (a real capybara, already in the repo but never wired up). Typecheck + full 72-test suite green. |
+| v.10 | **Applied the "Capy Calm" concept UI to Dashboard + Upload** (`ui-concept/v1/capy-lofi-concept.html`, sections 2+3 only this pass — co-devs' explicit ask). Added `CardCountOptions` (10/20/30) + `GenerateRequest.maxCards` to `contracts.ts`, clamped server-side in `/api/generate` against the user's tier max (silent fallback, same pattern as Deep Dive's downgrade). New localStorage-only nav avatar mood picker (`AvatarPicker.tsx` + `avatarMood.ts` — 5 CSS-filter "moods" over one real image, `public/capy/avatar-default.png`, the actual concept-supplied art, not a placeholder). Both navbars (`/dashboard`, `/decks/new`) gained a Pro badge + the avatar picker; nav logo restored to `public/capy/capy-hero.png` after a brief, corrected detour to text-only. Dashboard deck grid restyled to the concept's look — dashed "+ New deck" tile first, each deck card got an inline "Quiz me" button — while keeping the existing stats row (Capycoins/Active decks/Plan) the concept doesn't show, per explicit instruction not to remove existing features. Upload flow (`PdfUploadFlow.tsx`) reordered to dropzone → Deck Settings (deck name + card-count chips, `30` Pro-locked for free tier) → explicit Cancel/Generate flashcards buttons — picking a file no longer auto-starts extraction; generation now only fires on "Generate flashcards" click, matching the concept exactly. Typecheck + full 72-test suite green throughout. |
 | v.08 | **Dark-mode bug fix + UI polish.** Fixed `/decks/new`'s upload card being nearly unreadable in dark mode — `PdfUploadFlow.tsx` never migrated off Tailwind `dark:` classes (see Known fixes); rewrote it fully onto the CSS-variable theme tokens and redesigned its Generation-mode picker as clickable radio-cards (was a native `<fieldset>`/`<legend>`) with a smooth `Upgrade to Pro` link/badge for non-Pro users instead of a disabled control. Fixed a real CSS bug where `hover-lift` silently stopped working on any card that also had a `fadeUp` entrance animation (see Known fixes — both were fighting over `transform`). Settings: nav now shows email instead of display name; "Sign out" relabeled "Log out of all devices" with explicit `scope: "global"`; added entrance animation + non-moving hover states (chip/btn-outline/btn-solid CSS classes) across Settings and the dashboard; dashboard's 👋 now does a single gentle wave on hover (not constant); Capycoin icons enlarged and now fill their containers edge-to-edge instead of floating with padding. Typecheck/build/72-test suite all green. *(A wrong-answer "teaching lesson" feature — a per-card `explanation` baked in at generation time, plus a `flashcards.explanation` schema column/RPC change and a new `/api/quiz/explain` route — was built and then fully reverted later the same day: those files are backend-owned per the project's doc-ownership boundary, and the change had not been applied to the live Supabase project. See the 2026-06-20 revert note below.)* |
 
 ---
 
 ## For Claude (Session Lifeline)
 
-> **Current status (2026-06-20):** All app pages and backend routes the UI calls are
-> built and wired. This was a 2-day session (FrontEnd, Personal PC) covering theming
-> (dark mode / font size / font picker), nav alignment + hover states, the export-data
-> feature's full removal, a new animation system, a credits→Capycoins terminology
-> rename, new Capy character art, and a real dark-mode contrast bug fix. A wrong-answer
-> AI "teaching lesson" feature was also built (baked into deck generation) but was
-> **fully reverted later the same session** — it had touched `contracts.ts`/`schema.sql`,
-> files this project's doc-ownership boundary marks backend-owned, and the schema change
-> had never been applied to the live Supabase project. The remaining gaps are still
-> app-wide chrome only — see Pending below. The dated log below is historical.
+> **Current status (2026-06-21):** All app pages and backend routes the UI calls are
+> built and wired. Tonight's session (Personal PC) applied the co-devs' "Capy Calm"
+> concept UI (`ui-concept/v1/capy-lofi-concept.html`) to the Dashboard and Upload pages
+> only — a card-count picker, a nav avatar picker, Pro badges in both navbars, a
+> restyled deck grid, and an upload flow that now waits for an explicit "Generate
+> flashcards" click instead of auto-starting on file pick. The remaining concept
+> sections (generating screen, flashcard study mode, quiz, results ring, avatar
+> showcase, the floating style-picker) are explicitly out of scope for this pass. The
+> app-wide chrome gap (404/error/loading pages, shared Navbar/Footer, admin nav link)
+> from prior sessions is still open — see Pending below. The dated log below is
+> historical.
 
-**Last session: 2026-06-18 → 2026-06-20 ~10:10PM [Personal PC] — ~2-day session**
+**Last session: 2026-06-21 [Personal PC] — Capy Calm concept UI: Dashboard + Upload**
+
+### What happened
+- Added `CardCountOptions` (10/20/30) to `contracts.ts` + `GenerateRequest.maxCards`,
+  clamped server-side in `/api/generate/route.ts` against the user's tier max (invalid/
+  oversized values silently fall back, same pattern as the existing Deep Dive downgrade).
+- New nav avatar picker (`src/components/nav/AvatarPicker.tsx` + `src/lib/theme/
+  avatarMood.ts`) — localStorage-only, 5 "moods" via CSS `filter` over one real image
+  (`public/capy/avatar-default.png`, the concept's actual supplied art). Added to both
+  `/dashboard` and `/decks/new` navbars alongside a Pro badge (only `/dashboard` had
+  one before).
+- Nav logo: briefly went text-only, then restored to the concept's actual logo art
+  (`public/capy/capy-hero.png`) once Yujin clarified that was the intended asset, not a
+  removal — see Known fixes.
+- Dashboard deck grid restyled toward the concept's look — a dashed "+ New deck" tile
+  is now the first grid item, and each deck card has an inline "Quiz me" button — while
+  deliberately **keeping** the existing stats row (Capycoins remaining / Active decks /
+  Plan) that the concept doesn't show, per Yujin's explicit "don't remove any feature
+  we already have."
+- Upload flow (`src/components/upload/PdfUploadFlow.tsx`) restructured to match the
+  concept's exact layout/behavior: dropzone (now shows the picked filename instead of
+  auto-starting), then a "Deck Settings" card (deck name + 10/20/30 card-count chips,
+  `30` Pro-locked for free tier, label-left row layout), then explicit Cancel/Generate
+  flashcards buttons at the bottom. Generation now only fires on the Generate click —
+  this is a deliberate behavior change from every prior session's one-shot
+  pick-file→auto-extract→auto-generate flow, confirmed with Yujin first since it
+  reverses an earlier explicit design call in this same session's plan.
+- `App.version` bumped `v.09` → `v.10`. Typecheck clean, full 72-test suite green.
+  Committed (`89b89fd`) and pushed to `origin/FrontEnd`.
+
+### Known fixes (added this session — see table below for the permanent entries)
+- Nav logo confusion: first removed the capybara icon next to "Crammable" entirely
+  (mis-read "why this old logo, use the standard default one" as "go text-only," based
+  on the concept HTML's `<div class="logo">Crammable</div>` markup having no icon).
+  Yujin then supplied the actual intended files directly (`Chosen selection.png` for
+  the avatar, `capy-hero.png` for the nav logo) — both copied into `public/capy/` and
+  wired in. Lesson: when a concept HTML and a user's stated intent disagree, the user's
+  literal asset takes priority over what the static mockup happens to show.
+
+### Pending (as of 2026-06-21)
+- Remaining concept sections (1, 4–10) are explicitly out of scope for this pass —
+  generating screen, flashcard flip-study mode, quiz sidebar, results ring, avatar
+  showcase section, and the floating live style-picker (concept-demo tooling, not a
+  real Settings replacement).
+- App-wide chrome — unchanged, still open (see below, carried from prior sessions).
+
+---
+
+**Previous session: 2026-06-18 → 2026-06-20 ~10:10PM [Personal PC] — ~2-day session**
 
 ### What happened
 - Added a "Preferred style" section to `/settings` — dark mode, font-size adjuster,
