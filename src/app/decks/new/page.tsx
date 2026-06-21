@@ -1,11 +1,44 @@
-import { PdfUploadFlow } from "@/components/upload/PdfUploadFlow";
-import { App, MAX_UPLOAD_SIZE_MB, Routes } from "@/lib/contracts";
+"use client";
 
-export const metadata = {
-  title: `New Deck — ${App.name}`,
-};
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import { PdfUploadFlow } from "@/components/upload/PdfUploadFlow";
+import { AvatarPicker } from "@/components/nav/AvatarPicker";
+import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { App, MAX_UPLOAD_SIZE_MB, Routes, SubscriptionTier, TableNames } from "@/lib/contracts";
+
+interface NavProfile {
+  token_balance: number;
+  subscription_tier: string;
+}
 
 export default function NewDeckPage() {
+  const [profile, setProfile] = useState<NavProfile | null>(null);
+
+  // Nav-only profile read (Capycoin pill + Pro badge) — mirrors the dashboard's
+  // direct, RLS-scoped Supabase read. Independent of PdfUploadFlow's own
+  // internal consent/tier fetch, which serves a different purpose.
+  useEffect(() => {
+    document.title = `New Deck — ${App.name}`;
+  }, []);
+
+  useEffect(() => {
+    async function loadNavProfile() {
+      const supabase = getSupabaseBrowserClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from(TableNames.profiles)
+        .select("token_balance, subscription_tier")
+        .eq("id", user.id)
+        .single();
+      setProfile(data);
+    }
+    loadNavProfile();
+  }, []);
+
+  const isPro = profile?.subscription_tier === SubscriptionTier.PRO;
+
   return (
     <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
 
@@ -17,12 +50,29 @@ export default function NewDeckPage() {
               <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
             </a>
             <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
-            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
+            <Image src="/capy/capy-hero.png" alt="" width={29} height={29} style={{ height: "calc(28px * var(--font-scale))", width: "auto", borderRadius: 6 }} />
             <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
               {App.name}
             </span>
           </div>
-          <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--primary)", fontWeight: 700 }}>New Deck</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--primary)", fontWeight: 700 }}>New Deck</span>
+            <div
+              title="Capycoins remaining"
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--nav-bg)", border: "1px solid rgba(196,122,46,0.3)", borderRadius: 20, padding: "5px 14px" }}
+            >
+              <Image src="/capy/capycoin.png" alt="" width={20} height={20} style={{ borderRadius: "50%" }} />
+              <span style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--primary-soft)" }}>
+                {profile?.token_balance ?? 0} Capycoins
+              </span>
+            </div>
+            {isPro && (
+              <span style={{ background: "var(--primary)", color: "var(--on-primary)", borderRadius: 999, padding: "4px 10px", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600 }}>
+                Pro ✦
+              </span>
+            )}
+            <AvatarPicker />
+          </div>
         </div>
       </nav>
 

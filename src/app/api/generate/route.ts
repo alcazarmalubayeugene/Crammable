@@ -1,6 +1,7 @@
 import {
   ApiErrorCode,
   ApiPaths,
+  CardCountOptions,
   GenerationMode,
   PdfType,
   SubscriptionTier,
@@ -96,7 +97,17 @@ export async function POST(request: Request): Promise<Response> {
       }
     }
 
-    const maxCards = maxCardsForTier(profile.subscription_tier);
+    // Never trust the client's count outright — only honor it if it's one of
+    // the fixed options AND within the user's tier cap. Anything else (omitted,
+    // garbage, a free user asking for 30) silently falls back to the tier max,
+    // same "downgrade, don't error" pattern as the generationMode check below.
+    const tierMaxCards = maxCardsForTier(profile.subscription_tier);
+    const maxCards =
+      typeof body.maxCards === "number" &&
+      (CardCountOptions as readonly number[]).includes(body.maxCards) &&
+      body.maxCards <= tierMaxCards
+        ? body.maxCards
+        : tierMaxCards;
 
     // Deep Dive (B2) is Pro-only — never trust the client's tier. A free user
     // requesting deep_dive is silently downgraded to standard rather than

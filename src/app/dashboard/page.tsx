@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ApiPaths, App, Routes, SubscriptionTier, TableNames } from "@/lib/contracts";
+import { AvatarPicker } from "@/components/nav/AvatarPicker";
 
 interface Profile {
   full_name: string | null;
@@ -77,6 +78,8 @@ export default function DashboardPage() {
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
   const isPro = profile?.subscription_tier === SubscriptionTier.PRO;
+  const hour = new Date().getHours();
+  const timeGreeting = hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
 
   return (
     <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
@@ -85,7 +88,7 @@ export default function DashboardPage() {
       <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)", position: "sticky", top: 0, zIndex: 50 }}>
         <div style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
+            <Image src="/capy/capy-hero.png" alt="" width={29} height={29} style={{ height: "calc(28px * var(--font-scale))", width: "auto", borderRadius: 6 }} />
             <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
               {App.name}
             </span>
@@ -102,12 +105,18 @@ export default function DashboardPage() {
                 {profile?.token_balance ?? 0} Capycoins
               </span>
             </div>
+            {isPro && (
+              <span style={{ background: "var(--primary)", color: "var(--on-primary)", borderRadius: 999, padding: "4px 10px", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600 }}>
+                Pro ✦
+              </span>
+            )}
             <Link href={Routes.rewards} className="nav-link" style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)", textDecoration: "none" }}>
               Rewards
             </Link>
             <Link href={Routes.settings} className="nav-link" style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)", textDecoration: "none" }}>
               Settings
             </Link>
+            <AvatarPicker />
             <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>
               {profile?.email}
             </span>
@@ -128,10 +137,10 @@ export default function DashboardPage() {
         {/* Welcome */}
         <div className="anim-fade-up" style={{ marginBottom: 36 }}>
           <h1 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(28px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
-            Welcome back, {firstName}! <span className="wave">👋</span>
+            {timeGreeting}, {firstName}
           </h1>
           <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>
-            Ready to cram for your next exam?
+            — Capy kept your decks warm ☕
           </p>
         </div>
 
@@ -216,29 +225,57 @@ export default function DashboardPage() {
               </Link>
             </div>
 
-            {/* Deck grid */}
+            {/* Deck grid — concept's "+ New deck" tile + per-card "Quiz me" button,
+                layered on top of the card_count/date info the concept doesn't show. */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+              <Link
+                href={Routes.newDeck}
+                className="anim-fade-up hover-lift"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: 132,
+                  border: "1.5px dashed var(--border)",
+                  borderRadius: 16,
+                  background: "var(--bg-subtle)",
+                  color: "var(--text-muted)",
+                  fontWeight: 600,
+                  fontSize: "calc(14px * var(--font-scale))",
+                  textDecoration: "none",
+                }}
+              >
+                ＋ New deck
+              </Link>
               {decks.map((deck, i) => (
                 <Link
                   key={deck.id}
                   href={Routes.deck(deck.id)}
                   className="anim-fade-up hover-lift"
-                  style={{ display: "flex", flexDirection: "column", gap: 12, background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 16, padding: "20px 22px", textDecoration: "none", animationDelay: `${0.24 + i * 0.05}s` }}
+                  style={{ display: "flex", flexDirection: "column", gap: 10, background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 16, padding: "20px 22px", textDecoration: "none", animationDelay: `${0.24 + i * 0.05}s` }}
                 >
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                    <span style={{ fontSize: "calc(26px * var(--font-scale))" }}>📚</span>
-                    <span style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--text-faint)", background: "rgba(196,122,46,0.12)", borderRadius: 12, padding: "3px 10px" }}>
-                      {deck.card_count} {deck.card_count === 1 ? "card" : "cards"}
-                    </span>
-                  </div>
-                  <div>
-                    <h3 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(17px * var(--font-scale))", fontWeight: 700, color: "var(--text)", lineHeight: 1.35, margin: 0 }}>
-                      {deck.title}
-                    </h3>
-                    <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginTop: 6 }}>
-                      {new Date(deck.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
-                    </p>
-                  </div>
+                  <h3 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(17px * var(--font-scale))", fontWeight: 700, color: "var(--text)", lineHeight: 1.35, margin: 0 }}>
+                    {deck.title}
+                  </h3>
+                  <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
+                    {deck.card_count} {deck.card_count === 1 ? "card" : "cards"} · edited{" "}
+                    {new Date(deck.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                  </p>
+                  <span
+                    className="btn-solid"
+                    style={{
+                      alignSelf: "flex-start",
+                      marginTop: 4,
+                      background: "var(--primary)",
+                      color: "var(--on-primary)",
+                      borderRadius: 8,
+                      padding: "7px 18px",
+                      fontSize: "calc(13px * var(--font-scale))",
+                      fontWeight: 600,
+                    }}
+                  >
+                    Quiz me
+                  </span>
                 </Link>
               ))}
             </div>

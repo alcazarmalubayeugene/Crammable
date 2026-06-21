@@ -6,6 +6,7 @@ import {
   ApiErrorCode,
   ApiPaths,
   App,
+  CardCountOptions,
   GenerationMode,
   MAX_UPLOAD_SIZE_MB,
   OcrThresholds,
@@ -13,7 +14,9 @@ import {
   Routes,
   SubscriptionTier,
   TableNames,
+  TierLimits,
   UIMessages,
+  Validation,
   type ApiResponse,
   type GeneratedCard,
   type GenerateRequest,
@@ -74,6 +77,15 @@ export function PdfUploadFlow() {
   const [generationMode, setGenerationMode] = useState<GenerationMode>(GenerationMode.STANDARD);
   const isPro = subscriptionTier === SubscriptionTier.PRO;
 
+  // ── Deck settings (name + card count) ───────────────────────────────────────
+  const [deckName, setDeckName] = useState("");
+  const [cardCount, setCardCount] = useState<(typeof CardCountOptions)[number]>(10);
+  const tierMaxCards = TierLimits[subscriptionTier].maxCardsPerDeck;
+
+  // File is attached on selection but generation only starts when the user
+  // explicitly clicks "Generate flashcards" — lets deck settings be filled in first.
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
   useEffect(() => {
     async function checkConsent() {
       const supabase = getSupabaseBrowserClient();
@@ -111,6 +123,7 @@ export function PdfUploadFlow() {
 
   const resetToIdle = useCallback(() => {
     setPhase("idle");
+    setSelectedFile(null);
     setPdfFile(null);
     setOcrMessage("");
     setPageProgress({ current: 0, total: 0 });
@@ -146,6 +159,8 @@ export function PdfUploadFlow() {
       const payload: GenerateRequest = {
         extractedText,
         pdfType,
+        title: deckName.trim() || undefined,
+        maxCards: cardCount,
         ...(generationMode === GenerationMode.DEEP_DIVE ? { generationMode } : {}),
       };
       const headers = await authHeaders({ "Content-Type": "application/json" });
@@ -191,7 +206,7 @@ export function PdfUploadFlow() {
       setStatusLine(UIMessages.creditDeducted(data.creditsRemaining));
       router.push(Routes.deck(data.deckId));
     },
-    [router, generationMode],
+    [router, generationMode, deckName, cardCount],
   );
 
   const uploadPdf = useCallback(
@@ -248,13 +263,22 @@ export function PdfUploadFlow() {
   );
 
   const onFileSelected = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
+    (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
-      await uploadPdf(file);
+      setSelectedFile(file);
     },
-    [uploadPdf],
+    [],
   );
+
+  const handleGenerateClick = useCallback(async () => {
+    if (!selectedFile) return;
+    await uploadPdf(selectedFile);
+  }, [selectedFile, uploadPdf]);
+
+  const handleCancel = useCallback(() => {
+    router.push(Routes.dashboard);
+  }, [router]);
 
   const runClientOcr = useCallback(async () => {
     if (!pdfFile) return;
@@ -572,11 +596,34 @@ export function PdfUploadFlow() {
           </div>
 
           <label
-            className="upload-dropzone flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-12"
+            className="upload-dropzone mb-4 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-12"
             style={{ borderColor: "var(--border)", background: "var(--bg-subtle)" }}
           >
-            <span className="text-sm font-medium" style={{ color: "var(--text)" }}>
-              Choose a PDF file
+            <span style={{ fontSize: "calc(32px * var(--font-scale))", lineHeight: 1 }}>📄</span>
+            {selectedFile ? (
+              <>
+                <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                  {selectedFile.name}
+                </span>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB selected — click to change
+                </span>
+              </>
+            ) : (
+              <>
+                <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
+                  Drop your PDF here
+                </span>
+                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
+                  or click to browse — max {MAX_UPLOAD_SIZE_MB} MB
+                </span>
+              </>
+            )}
+            <span
+              className="btn-outline mt-1 rounded-lg px-4 py-1.5 text-xs font-medium"
+              style={{ border: "1.5px solid var(--border)", color: "var(--text)" }}
+            >
+              Choose file
             </span>
             <input
               ref={fileInputRef}
@@ -586,6 +633,88 @@ export function PdfUploadFlow() {
               onChange={onFileSelected}
             />
           </label>
+
+          <div
+            className="mb-4 flex flex-col gap-3 rounded-xl p-4"
+            style={{ border: "1.5px solid var(--border)", background: "var(--bg-card)" }}
+          >
+            <p
+              className="px-1 text-xs font-semibold uppercase"
+              style={{ color: "var(--text-faint)", letterSpacing: "0.06em" }}
+            >
+              Deck settings
+            </p>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-xs font-medium" style={{ color: "var(--text-muted)", minWidth: 90 }}>
+                Deck name
+              </span>
+              <input
+                type="text"
+                value={deckName}
+                onChange={(e) => setDeckName(e.target.value)}
+                maxLength={Validation.deck.titleMaxLength}
+                placeholder="e.g. Ecology Midterms"
+                className="flex-1 rounded-lg px-3 py-2 text-sm outline-none"
+                style={{ border: "1px solid var(--border)", background: "var(--bg-subtle)", color: "var(--text)", minWidth: 180 }}
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-xs font-medium" style={{ color: "var(--text-muted)", minWidth: 90 }}>
+                Cards to generate
+              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                {CardCountOptions.map((count) => {
+                  const locked = count > tierMaxCards;
+                  return (
+                    <button
+                      key={count}
+                      type="button"
+                      disabled={locked}
+                      onClick={() => setCardCount(count)}
+                      title={locked ? "Upgrade to Pro for more cards per deck" : undefined}
+                      className={`chip${cardCount === count ? " chip-active" : ""}`}
+                      style={{
+                        border: cardCount === count ? "1.5px solid var(--primary)" : "1.5px solid var(--border)",
+                        background: cardCount === count ? "var(--primary)" : "var(--bg-subtle)",
+                        color: cardCount === count ? "var(--on-primary)" : "var(--text)",
+                        borderRadius: 999,
+                        padding: "6px 14px",
+                        fontSize: "calc(13px * var(--font-scale))",
+                        fontWeight: 600,
+                        cursor: locked ? "not-allowed" : "pointer",
+                        opacity: locked ? 0.5 : 1,
+                        fontFamily: "var(--font-body, sans-serif)",
+                      }}
+                    >
+                      {count}{locked ? " 🔒" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="btn-outline rounded-lg px-5 py-2 text-sm font-medium"
+              style={{ border: "1.5px solid var(--border)", color: "var(--text)", background: "none" }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!selectedFile}
+              onClick={handleGenerateClick}
+              className="btn-solid rounded-lg px-5 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ background: "var(--primary)", color: "var(--on-primary)" }}
+            >
+              Generate flashcards
+            </button>
+          </div>
         </>
       )}
 

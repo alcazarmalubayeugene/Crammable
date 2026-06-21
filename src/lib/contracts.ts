@@ -252,6 +252,10 @@ export const TierLimits = {
   upsellTriggerAt: 1,
 } as const;
 
+/** Selectable "cards to generate" options on the upload screen. Server clamps
+ *  any client-supplied value to one of these AND to the user's tier max. */
+export const CardCountOptions = [10, 20, 30] as const;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 6 — REFERRAL / CREDIT EARNING CAPS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -659,6 +663,7 @@ export interface GenerateRequest {
   title?:           string;           // optional — AI will infer a title if omitted
   generationMode?:  GenerationMode;
   pdfType:          PdfType;          // for analytics logging in the deck record
+  maxCards?:        number;           // optional — must be a CardCountOptions value; capped server-side at the user's tier max
 }
 
 export interface GeneratedCard {

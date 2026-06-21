@@ -209,3 +209,60 @@ button:not(:disabled):active {
 .chip-card:hover:not(:disabled):not(.chip-card-active) {
   border-color: var(--primary) !important;
 }
+
+/* ── Nav avatar picker (Dashboard, Upload) — hover the circle to reveal a
+   grid of mood thumbnails, pure CSS for the show/hide; clicking a thumbnail
+   is handled in JS (useAvatarMood). ──────────────────────────────────── */
+.avatar-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.avatar-pic {
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--primary-soft, var(--primary));
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.avatar-pic:hover {
+  transform: scale(1.08);
+}
+.avatar-tooltip {
+  position: absolute;
+  top: 40px;
+  right: 0;
+  background: var(--nav-bg);
+  border: 1.5px solid rgba(255, 252, 247, 0.12);
+  border-radius: 14px;
+  padding: 12px;
+  display: none;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 200px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  z-index: 99;
+}
+.avatar-wrap:hover .avatar-tooltip {
+  display: flex;
+}
+.avatar-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+}
+.avatar-grid img {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid transparent;
+  cursor: pointer;
+  transition: transform 0.18s ease, border-color 0.18s ease;
+}
+.avatar-grid img:hover {
+  transform: scale(1.15);
+}
+.avatar-grid img.selected {
+  border-color: var(--primary-soft, var(--primary));
+}
