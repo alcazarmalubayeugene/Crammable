@@ -182,7 +182,7 @@ The credit counter belongs in the AppShell permanently — credits are the core 
 
 *Deck view* — flashcard list as flippable previews; primary CTA "Quiz me" in fur; Pro-locked actions (export, deep-dive) shown but with a small fur ✦ lock that links to upgrade — visible, not hidden.
 
-*Quiz* — full-focus mode: hide nav chrome, cream background, single Flashcard center stage, walking-Capy progress bar on top, question counter. Identification mode gets a large Lora input. No red flashes on wrong answers — sand-bordered "not quite" state with the correct answer revealed below.
+*Quiz* — full-focus mode: hide nav chrome, cream background, single Flashcard center stage, walking-Capy progress bar on top, question counter. Identification mode gets a large Lora input. No red flashes on wrong answers — sand-bordered "not quite" state with the correct answer revealed below, plus Capy's one-line "why" explanation (shipped) teaching the reasoning behind it.
 
 *Quiz results* — score hero ring in moss/yuzu/clay by bracket, Capy pose by bracket (cheering / thumbs-up / sweating), then the answer review list. Living-Deck refresh notice as a river-blue info Card. This screen is the screenshot students will share — make it the prettiest one.
 

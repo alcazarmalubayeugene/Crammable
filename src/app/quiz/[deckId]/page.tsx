@@ -10,6 +10,7 @@ import {
   Routes,
   UIMessages,
   type Deck,
+  type ExplainAnswerResult,
   type QuizQuestion,
   type SubmitQuizAnswer,
 } from "@/lib/contracts";
@@ -79,6 +80,10 @@ export default function QuizPage() {
   const [hasAnswered, setHasAnswered] = useState(false);
   const [isCorrect, setIsCorrect] = useState(false);
   const [answers, setAnswers] = useState<LocalAnswer[]>([]);
+  // Capy's "why" lesson, shown only on a wrong answer. Baked-in cards set it
+  // instantly; older cards fall back to a live /api/quiz/explain call.
+  const [explanation, setExplanation] = useState<string | null>(null);
+  const [explanationLoading, setExplanationLoading] = useState(false);
 
   // ── load deck via API ──────────────────────────────────────────────────────
 
@@ -142,10 +147,31 @@ export default function QuizPage() {
       setTypedAnswer("");
       setHasAnswered(false);
       setIsCorrect(false);
+      setExplanation(null);
+      setExplanationLoading(false);
       setPhase("quizzing");
     } catch {
       setLoadError("Failed to start quiz. Check your connection and try again.");
       setPhase("error");
+    }
+  }
+
+  // Live fallback for cards that predate the baked-in explanation. Best-effort:
+  // a free bonus, so errors are swallowed and never block the student.
+  async function fetchExplanation(questionText: string, correctAnswer: string) {
+    setExplanationLoading(true);
+    try {
+      const res = await fetch(ApiPaths.explainAnswer, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ questionText, correctAnswer }),
+      });
+      const data = (await res.json()) as { success: boolean } & Partial<ExplainAnswerResult>;
+      if (data.success && data.explanation) setExplanation(data.explanation);
+    } catch {
+      // silent — never something the student waits on or sees an error for
+    } finally {
+      setExplanationLoading(false);
     }
   }
 
@@ -178,6 +204,14 @@ export default function QuizPage() {
     ]);
     setIsCorrect(correct);
     setHasAnswered(true);
+
+    if (!correct) {
+      if (q.correctExplanation) {
+        setExplanation(q.correctExplanation);                 // instant, baked-in
+      } else {
+        void fetchExplanation(q.questionText, q.correctAnswer); // old card, live fallback
+      }
+    }
   }
 
   async function nextQuestion(currentAnswers: LocalAnswer[]) {
@@ -189,6 +223,8 @@ export default function QuizPage() {
       setTypedAnswer("");
       setHasAnswered(false);
       setIsCorrect(false);
+      setExplanation(null);
+      setExplanationLoading(false);
       return;
     }
 
@@ -762,6 +798,19 @@ export default function QuizPage() {
                   >
                     {isCorrect ? "Correct!" : "Not quite — Capy's got you. Here's the right answer:"}
                   </p>
+                  {!isCorrect && (explanation || explanationLoading) && (
+                    <p
+                      style={{
+                        fontSize:  "calc(13px * var(--font-scale))",
+                        color:     "var(--text-muted)",
+                        lineHeight: 1.5,
+                        margin:    "6px 0 0",
+                        fontStyle: explanationLoading && !explanation ? "italic" : "normal",
+                      }}
+                    >
+                      {explanation ?? "Capy is thinking…"}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

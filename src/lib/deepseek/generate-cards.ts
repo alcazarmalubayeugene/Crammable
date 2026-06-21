@@ -29,6 +29,10 @@ Group them into logical topic categories (aim for 3–7 categories).
 
 ${depthInstructions}
 
+For each card, also write a SEPARATE "explanation" (1-3 sentences): why the "back" answer is
+correct, not just a restatement of it. This is shown to the student ONLY if they answer the quiz
+question wrong — it should teach the underlying reasoning, not repeat the definition.
+
 Return JSON in EXACTLY this shape — no other keys, no extra nesting:
 {
   "title": "short descriptive deck title (English)",
@@ -36,7 +40,7 @@ Return JSON in EXACTLY this shape — no other keys, no extra nesting:
     {
       "name": "Category Name",
       "cards": [
-        { "front": "question or term", "back": "answer or definition", "tags": ["topic"] }
+        { "front": "question or term", "back": "answer or definition", "explanation": "why the answer is correct", "tags": ["topic"] }
       ]
     }
   ]
@@ -44,7 +48,7 @@ Return JSON in EXACTLY this shape — no other keys, no extra nesting:
 
 Rules:
 - ALL text must be in English — translate if the source is in another language.
-- Each card must have a non-empty front and back.
+- Each card must have a non-empty front, back, and explanation.
 - tags: 0–3 short topic labels per card.
 - Distribute cards across categories; do not put all cards in one category.
 - Do not invent facts not supported by the source text.
@@ -57,6 +61,7 @@ ${documentText}
 interface RawCard {
   front?: string;
   back?: string;
+  explanation?: string;
   tags?: string[];
 }
 
@@ -88,10 +93,11 @@ function parseCategorisedPayload(raw: string, maxCards: number): {
         if (cards.length >= maxCards) break;
         if (!card.front?.trim() || !card.back?.trim()) continue;
         cards.push({
-          front:    card.front.trim(),
-          back:     card.back.trim(),
-          tags:     (card.tags ?? []).map((t) => t.trim()).filter(Boolean).slice(0, 5),
-          category: categoryName,
+          front:       card.front.trim(),
+          back:        card.back.trim(),
+          explanation: card.explanation?.trim() ?? "",
+          tags:        (card.tags ?? []).map((t) => t.trim()).filter(Boolean).slice(0, 5),
+          category:    categoryName,
         });
       }
     }
@@ -104,10 +110,11 @@ function parseCategorisedPayload(raw: string, maxCards: number): {
     if (cards.length >= maxCards) break;
     if (!card.front?.trim() || !card.back?.trim()) continue;
     cards.push({
-      front:    card.front.trim(),
-      back:     card.back.trim(),
-      tags:     (card.tags ?? []).map((t) => t.trim()).filter(Boolean).slice(0, 5),
-      category: "General",
+      front:       card.front.trim(),
+      back:        card.back.trim(),
+      explanation: card.explanation?.trim() ?? "",
+      tags:        (card.tags ?? []).map((t) => t.trim()).filter(Boolean).slice(0, 5),
+      category:    "General",
     });
   }
   return { cards, title };
@@ -153,6 +160,10 @@ the idea) — do not just repeat the original wording.
 
 Generate up to ${maxCards} new flashcards total, one per topic below where possible.
 
+For each card, also write a SEPARATE "explanation" (1-3 sentences): why the "back" answer is
+correct, not just a restatement of it. This is shown to the student ONLY if they answer the quiz
+question wrong — it should teach the underlying reasoning, not repeat the definition.
+
 Struggling cards:
 ${cardList}
 
@@ -162,7 +173,7 @@ Return JSON in EXACTLY this shape — no other keys, no extra nesting:
     {
       "name": "Category Name",
       "cards": [
-        { "front": "question or term", "back": "answer or definition", "tags": ["topic"] }
+        { "front": "question or term", "back": "answer or definition", "explanation": "why the answer is correct", "tags": ["topic"] }
       ]
     }
   ]
@@ -170,7 +181,7 @@ Return JSON in EXACTLY this shape — no other keys, no extra nesting:
 
 Rules:
 - ALL text must be in English.
-- Each card must have a non-empty front and back.
+- Each card must have a non-empty front, back, and explanation.
 - tags: 0–3 short topic labels per card.
 - Do not invent facts not supported by the original cards.
 - Reuse the same category names as the struggling cards where it makes sense.`;
@@ -194,4 +205,33 @@ export async function generateReinforcementCards(
 
   const { cards } = parseCategorisedPayload(content, maxCards);
   return { cards, model };
+}
+
+const EXPLAIN_SYSTEM_PROMPT =
+  "You are Capy, a friendly study-buddy capybara who teaches Philippine university " +
+  "students. A student just answered a quiz question wrong. Explain in 1-3 short " +
+  "sentences WHY the given answer is correct — not just a restatement of it. Plain " +
+  "English, no markdown, no preamble like \"Sure!\" — just the explanation itself.";
+
+function buildExplainUserPrompt(questionText: string, correctAnswer: string): string {
+  return `Question: ${questionText}\nCorrect answer: ${correctAnswer}\n\nExplain why this is the correct answer.`;
+}
+
+/**
+ * Live fallback "why" explanation for a single wrong quiz answer. Used only for
+ * cards generated before the baked-in `explanation` field existed (QuizQuestion
+ * .correctExplanation is null). Best-effort: one retry, then give up rather than
+ * make the student wait on a free bonus.
+ */
+export async function explainAnswer(
+  questionText: string,
+  correctAnswer: string,
+): Promise<{ explanation: string; model: string }> {
+  const { content, model } = await completeChatWithRetry({
+    system: EXPLAIN_SYSTEM_PROMPT,
+    user: buildExplainUserPrompt(questionText, correctAnswer),
+    temperature: 0.4,
+    maxRetries: 1, // best-effort UI enhancement — fail fast rather than make the student wait
+  });
+  return { explanation: content.trim(), model };
 }

@@ -14,4 +14,5 @@ export {
 export {
   generateFlashcardsFromText,
   generateReinforcementCards,
+  explainAnswer,
 } from "@/lib/deepseek/generate-cards";

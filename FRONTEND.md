@@ -431,12 +431,12 @@ Whenever a bug is fixed, it **must** be documented here with three things:
 
 ## Notes for Teammates
 
-- **Proposal for backend dev: AI "teaching lesson" on wrong quiz answers** — built and
-  working during the 2026-06-18→20 session, then reverted 2026-06-21 because it required
-  editing `contracts.ts`/`schema.sql` from a frontend-scoped session. Full writeup —
-  the feature, the DeepSeek token-cost reasoning, and the actual working code to copy —
-  is in `docs/PROPOSAL_QUIZ_EXPLANATION.md`. Not currently in the live codebase; pick it
-  up if you want it, the design work is already done.
+- **✅ SHIPPED — AI "teaching lesson" on wrong quiz answers.** Built during the 2026-06-18→20
+  session, reverted 2026-06-21 (it touched backend-owned `contracts.ts`/`schema.sql` from a
+  frontend-scoped session), then re-implemented the same day with backend sign-off. Now live:
+  new cards carry a baked-in `explanation`, older cards use the `POST /api/quiz/explain` live
+  fallback, and the quiz wrong-answer banner renders Capy's "why" paragraph. Design record +
+  implementation notes in `docs/PROPOSAL_QUIZ_EXPLANATION.md`.
 - **Quiz questions** are currently generated client-side from the deck's flashcards.
   When `/api/quiz/[id]` is ready, replace the `buildQuestions()` call in
   `src/app/quiz/[deckId]/page.tsx` with a `fetch(ApiPaths.startQuiz(deckId))`.
@@ -475,7 +475,7 @@ changes everywhere automatically.
 | v.06 | **Merged `main`'s feature-completion push (B/C/D/E) + security hardening.** Deck-detail rebuilt — rename, add/edit/delete card, share + copy public link, PDF export (Pro), study-weak-cards mode, per-deck quiz history (kept FrontEnd's existing delete-deck button, ported onto main's rebuilt page). Deep Dive (Pro) toggle in upload flow; Living Deck reinforcement notice / upsell on quiz result; public read-only deck viewer (`/public/decks/[id]`). Rewards page gained all 4 earn methods (share-a-deck, write-a-review, complete-profile — kept FrontEnd's "Referred by [name]" history entry alongside them); settings gained data export + account deletion; admin gained review verification, user list + grant credits, and audit log. Backend: `app_reviews` table + new atomic RPCs (Living Deck, self-referral earns, review verify, account deletion), Pro-expiry cron, payment Realtime. Security audit: closed a public-deck IDOR (owner-scoped deck lookups), CSRF/JSON/rate-limit gaps on new routes, trimmed public projection, pinned function `search_path`. Full schema applied live; typecheck + lint + 75 tests green. |
 | v.07 | **Theming + polish pass.** New "Preferred style" section in Settings — dark mode (Night Lamp palette), font-size adjuster, and a 5-pairing font picker, all wired through a new `ThemeProvider` (`src/lib/theme/ThemeProvider.tsx`) with live-preview-then-explicit-Save UX (anti-flash inline script in `layout.tsx`, localStorage-only persistence, whole app re-themed via CSS custom properties, not per-page). Header/nav fixed to span the full width and sit at the screen corners (`maxWidth: 1200` → `"100%"` across all app pages); the active page's own nav label now bolds/colors itself; every header nav link/button got a hover state (`.nav-link` class in `globals.css`). New hover-lift / button-press / fade-up animation system ported from the design concept (fade-up explicitly overrides `prefers-reduced-motion` per product decision — see Known fixes). **Export-my-data removed entirely** per product decision — deleted `/api/account/export`, `exportAccountData()`, its tests, and the Settings UI for it. Renamed all user-facing "credits" copy to "Capycoins" (display text only — `deduct_credit()`, `ApiErrorCode.INSUFFICIENT_CREDITS`, `token_balance`, and other internal identifiers were deliberately left unchanged). Added 3 new Capy character images (`public/capy/teaching-capy.png`, `congrats-capy.png`, `capycoin.png`) — teaching-capy on a wrong quiz answer, congrats-capy on a perfect quiz score, capycoin replacing the 🪙 emoji on every balance display. Typecheck/build/72-test suite all green (3 export tests removed). |
 | v.09 | **Swapped the beaver emoji for real Capy artwork, everywhere.** `🦫` (the literal beaver emoji — there is no capybara emoji in Unicode, flagged as a known gap in `docs/DESIGN_PROPOSAL_CAPY_CALM.md`) was still in use as the mascot on every single page: the nav logo (24px) on all 13 pages, plus the larger loading/empty/error-state mascot (48–56px) on `/`, `/login`, `/signup`, `/settings` (reset-password view), `/dashboard`, and the quiz-result/public-deck "not found" states. Replaced all 22 instances with the existing `public/capy/capy-idle.svg` artwork (a real capybara, already in the repo but never wired up). Typecheck + full 72-test suite green. |
-| v.08 | **Dark-mode bug fix + UI polish.** Fixed `/decks/new`'s upload card being nearly unreadable in dark mode — `PdfUploadFlow.tsx` never migrated off Tailwind `dark:` classes (see Known fixes); rewrote it fully onto the CSS-variable theme tokens and redesigned its Generation-mode picker as clickable radio-cards (was a native `<fieldset>`/`<legend>`) with a smooth `Upgrade to Pro` link/badge for non-Pro users instead of a disabled control. Fixed a real CSS bug where `hover-lift` silently stopped working on any card that also had a `fadeUp` entrance animation (see Known fixes — both were fighting over `transform`). Settings: nav now shows email instead of display name; "Sign out" relabeled "Log out of all devices" with explicit `scope: "global"`; added entrance animation + non-moving hover states (chip/btn-outline/btn-solid CSS classes) across Settings and the dashboard; dashboard's 👋 now does a single gentle wave on hover (not constant); Capycoin icons enlarged and now fill their containers edge-to-edge instead of floating with padding. Typecheck/build/72-test suite all green. *(A wrong-answer "teaching lesson" feature — a per-card `explanation` baked in at generation time, plus a `flashcards.explanation` schema column/RPC change and a new `/api/quiz/explain` route — was built and then fully reverted later the same day: those files are backend-owned per the project's doc-ownership boundary, and the change had not been applied to the live Supabase project. See the 2026-06-20 revert note below.)* |
+| v.08 | **Dark-mode bug fix + UI polish.** Fixed `/decks/new`'s upload card being nearly unreadable in dark mode — `PdfUploadFlow.tsx` never migrated off Tailwind `dark:` classes (see Known fixes); rewrote it fully onto the CSS-variable theme tokens and redesigned its Generation-mode picker as clickable radio-cards (was a native `<fieldset>`/`<legend>`) with a smooth `Upgrade to Pro` link/badge for non-Pro users instead of a disabled control. Fixed a real CSS bug where `hover-lift` silently stopped working on any card that also had a `fadeUp` entrance animation (see Known fixes — both were fighting over `transform`). Settings: nav now shows email instead of display name; "Sign out" relabeled "Log out of all devices" with explicit `scope: "global"`; added entrance animation + non-moving hover states (chip/btn-outline/btn-solid CSS classes) across Settings and the dashboard; dashboard's 👋 now does a single gentle wave on hover (not constant); Capycoin icons enlarged and now fill their containers edge-to-edge instead of floating with padding. Typecheck/build/72-test suite all green. *(A wrong-answer "teaching lesson" feature — a per-card `explanation` baked in at generation time, plus a `flashcards.explanation` schema column/RPC change and a new `/api/quiz/explain` route — was built, reverted (backend-owned files touched from a frontend session), then **re-implemented and shipped on 2026-06-21 with backend sign-off**; it is now live. See `docs/PROPOSAL_QUIZ_EXPLANATION.md`.)* |
 
 ---
 
@@ -486,11 +486,12 @@ changes everywhere automatically.
 > (dark mode / font size / font picker), nav alignment + hover states, the export-data
 > feature's full removal, a new animation system, a credits→Capycoins terminology
 > rename, new Capy character art, and a real dark-mode contrast bug fix. A wrong-answer
-> AI "teaching lesson" feature was also built (baked into deck generation) but was
-> **fully reverted later the same session** — it had touched `contracts.ts`/`schema.sql`,
-> files this project's doc-ownership boundary marks backend-owned, and the schema change
-> had never been applied to the live Supabase project. The remaining gaps are still
-> app-wide chrome only — see Pending below. The dated log below is historical.
+> AI "teaching lesson" feature was built, reverted (it had touched backend-owned
+> `contracts.ts`/`schema.sql`), then **re-implemented and shipped on 2026-06-21 with backend
+> sign-off** — the `flashcards.explanation` column is now live on Supabase, new cards bake in
+> the explanation, and `POST /api/quiz/explain` is the live fallback for older cards. The
+> remaining gaps are still app-wide chrome only — see Pending below. The dated log below is
+> historical.
 
 **Last session: 2026-06-18 → 2026-06-20 ~10:10PM [Personal PC] — ~2-day session**
 
@@ -527,6 +528,11 @@ changes everywhere automatically.
   `tsc --noEmit` and the full 72-test suite. The quiz wrong-answer banner UI fix from
   earlier in the session (neutral styling, single box, Capy art) was **not** reverted —
   that part never touched backend files.
+  **Update (2026-06-21): re-implemented and shipped** with backend sign-off — the
+  `flashcards.explanation` migration is now applied to the live Supabase project, both insert
+  RPCs carry the field, new cards bake in the explanation, `POST /api/quiz/explain` is the
+  live fallback, and the quiz page renders Capy's "why" paragraph. See
+  `docs/PROPOSAL_QUIZ_EXPLANATION.md` §5 for the as-shipped notes.
 - Fixed a real CSS bug: `hover-lift` silently stopped working on any element that also
   had a `fadeUp` entrance animation — both were fighting over `transform` (see Known
   fixes).

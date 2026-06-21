@@ -35,6 +35,7 @@ export async function insertFlashcards(
   for (const card of cards) {
     ensureMaxLength(card.front, Validation.flashcard.frontMaxLength, "Card front");
     ensureMaxLength(card.back, Validation.flashcard.backMaxLength, "Card back");
+    ensureMaxLength(card.explanation, Validation.flashcard.explanationMaxLength, "Card explanation");
     ensureMaxItems(card.tags, Validation.flashcard.maxTags, "Card tags");
     for (const tag of card.tags) {
       ensureMaxLength(tag, Validation.flashcard.tagMaxLength, "Tag");
@@ -47,6 +48,7 @@ export async function insertFlashcards(
     user_id:          userId,
     front:            card.front,
     back:             card.back,
+    explanation:      card.explanation || null,  // empty string → NULL (matches RPC NULLIF)
     tags:             card.tags,
     category:         card.category,
     is_reinforcement: isReinforcement,
@@ -83,6 +85,7 @@ export async function insertReinforcementCardsAndCharge(
   for (const card of cards) {
     ensureMaxLength(card.front, Validation.flashcard.frontMaxLength, "Card front");
     ensureMaxLength(card.back, Validation.flashcard.backMaxLength, "Card back");
+    ensureMaxLength(card.explanation, Validation.flashcard.explanationMaxLength, "Card explanation");
     ensureMaxItems(card.tags, Validation.flashcard.maxTags, "Card tags");
     for (const tag of card.tags) {
       ensureMaxLength(tag, Validation.flashcard.tagMaxLength, "Tag");
@@ -96,6 +99,7 @@ export async function insertReinforcementCardsAndCharge(
     p_cards: cards.map((c) => ({
       front: c.front,
       back: c.back,
+      explanation: c.explanation,
       tags: c.tags,
       category: c.category,
     })),

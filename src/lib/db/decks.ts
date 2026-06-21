@@ -221,6 +221,7 @@ export async function createDeckWithCardsAndCharge(
   for (const card of cards) {
     ensureMaxLength(card.front, Validation.flashcard.frontMaxLength, "Card front");
     ensureMaxLength(card.back, Validation.flashcard.backMaxLength, "Card back");
+    ensureMaxLength(card.explanation, Validation.flashcard.explanationMaxLength, "Card explanation");
     ensureMaxItems(card.tags, Validation.flashcard.maxTags, "Card tags");
     for (const tag of card.tags) {
       ensureMaxLength(tag, Validation.flashcard.tagMaxLength, "Tag");
@@ -237,6 +238,7 @@ export async function createDeckWithCardsAndCharge(
     p_cards: cards.map((c) => ({
       front: c.front,
       back: c.back,
+      explanation: c.explanation,
       tags: c.tags,
       category: c.category,
     })),

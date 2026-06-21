@@ -1,19 +1,33 @@
-# Proposal: AI "teaching lesson" on wrong quiz answers
+# AI "teaching lesson" on wrong quiz answers
 
-*Status:* Proposal (built, then reverted from the frontend session — see Why below) · *Audience:* Backend dev / backend-tasked Claude · *Author:* Frontend session, 2026-06-18→21
+*Status:* ✅ **SHIPPED 2026-06-21** — implemented with backend sign-off using the recommended
+hybrid design (baked-in + live fallback). This doc is kept as the design record; the sections
+below describe what's now live, not a pending proposal. · *Author:* Frontend session,
+2026-06-18→21; shipped 2026-06-21.
+
+> **What's live now:**
+> - `flashcards.explanation TEXT` (nullable) — migration `add_flashcard_explanation`, applied to
+>   the live Supabase project; both insert RPCs carry it through.
+> - New cards get a baked-in `explanation` at generation time (`generate-cards.ts`).
+> - `POST /api/quiz/explain` (`src/app/api/quiz/explain/route.ts`) — live fallback for older
+>   cards, consent-gated + rate-limited (30/hr), no credit charged.
+> - Quiz page renders Capy's "why" paragraph in the wrong-answer banner
+>   (`src/app/quiz/[deckId]/page.tsx`).
+>
+> Verified: `tsc --noEmit` clean, 72/72 unit tests pass, production build succeeds.
 
 ---
 
 ## 1. What this is
 
-Right now, when a student answers a quiz question wrong, Crammable just shows the correct answer. This proposal adds a one-line "why" explanation underneath it — Capy explaining the *reasoning*, not just restating the answer. Example:
+When a student answers a quiz question wrong, Crammable shows a one-line "why" explanation underneath the correct answer — Capy explaining the *reasoning*, not just restating the answer. Example:
 
 > Q: What is the powerhouse of the cell?
 > Wrong answer given: Nucleus
 > **Correct answer:** Mitochondria
 > *Capy's lesson:* Mitochondria generate ATP through cellular respiration — the nucleus stores genetic material but doesn't produce energy itself.
 
-This was fully built and working during the 2026-06-18→20 frontend session, then **reverted on 2026-06-21** — not because it didn't work or wasn't wanted, but because building it required editing `contracts.ts` and `schema.sql`, which this project's doc-ownership boundary marks backend-owned. The frontend session shouldn't have touched those files solo, so everything was rolled back cleanly (confirmed via `tsc --noEmit` + the full test suite, both green after the revert). The idea, the prompt design, and the working code are all real and tested — they're just not in the live codebase anymore. This doc is that handoff.
+This was first built during the 2026-06-18→20 frontend session, then **reverted on 2026-06-21** because building it required editing `contracts.ts` and `schema.sql`, which this project's doc-ownership boundary marks backend-owned — not a frontend-session call to make solo. It was then **re-implemented later on 2026-06-21 with explicit backend sign-off**, following the hybrid design recommended below, and is now live. The original handoff write-up is preserved below as the design record.
 
 ---
 
@@ -39,9 +53,9 @@ Two designs were considered; here's the reasoning so it doesn't need to be re-de
 
 ---
 
-## 4. The code, as built (frontend session) — copy/adapt as needed
+## 4. The code, as built — now live
 
-All of this was reverted out of the live tree. It's reproduced here verbatim from the working version so it doesn't need to be re-derived from scratch — copy it in if you want to pick this up, or use it as a reference for your own version. File paths are the original ones; some line numbers will have shifted since.
+This is the design as it shipped (the snippets below were the original frontend-session draft; the live implementation follows them closely — see §5 for any deltas). File paths are the original ones; some line numbers will have shifted since.
 
 ### `src/lib/contracts.ts` additions
 
@@ -197,8 +211,12 @@ Reset both pieces of state in `startQuiz()` and `nextQuestion()` alongside the o
 
 ---
 
-## 5. What we'd need from you if you want to pick this up
+## 5. How it actually shipped (2026-06-21)
 
-- Sign-off that `contracts.ts`/`schema.sql` get these specific additions (or your own version of them) — that's the actual boundary this proposal exists because of.
-- A real migration for the `flashcards.explanation` column (the version above never reached the live Supabase project, so there's no existing data/migration debt to account for — it's a clean addition).
-- Everything else above is copy-pasteable as a starting point; happy to walk through any of it or adjust the frontend wiring to match however you'd rather shape the backend side.
+All of the above was implemented with backend sign-off. Notes on what landed vs. the draft:
+
+- **Sign-off** on the `contracts.ts`/`schema.sql` additions was given before any edits — the boundary that caused the original revert was respected.
+- **Migration** `add_flashcard_explanation` adds `flashcards.explanation TEXT` (nullable) and updates both insert RPCs (`create_deck_with_cards_and_charge`, `insert_reinforcement_cards_and_charge`) to carry it via `NULLIF(c->>'explanation', '')`. Applied to the live Supabase project via MCP; `schema.sql` updated to stay canonical. Existing rows are NULL → they transparently use the live fallback, so no backfill was needed.
+- **Hybrid kept as designed:** baked-in `explanation` on new cards (free, instant) + `POST /api/quiz/explain` live fallback for older cards (consent-gated, rate-limited 30/hr, no credit charged).
+- **Also threaded through `insertFlashcards()`** in `db/flashcards.ts` (the non-RPC bulk path) for consistency, mapping empty string → NULL to match the RPC behaviour.
+- Verified end-to-end at the code level: `tsc --noEmit` clean, 72/72 unit tests pass, production build registers `/api/quiz/explain`.
