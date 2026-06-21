@@ -2,14 +2,15 @@
 
 import { useState } from "react";
 import { useParams } from "next/navigation";
+import Image from "next/image";
 import { App, Routes } from "@/lib/contracts";
 import { QUIZ_RESULT_KEY, type QuizResultData } from "@/app/quiz/[deckId]/page";
 
 // ── shared styles ─────────────────────────────────────────────────────────────
 
 const cardStyle = {
-  background: "#FFFCF7",
-  border: "1.5px solid #E0C9A8",
+  background: "var(--bg-card)",
+  border: "1.5px solid var(--border)",
   borderRadius: 16,
   padding: "18px 20px",
   marginBottom: 24,
@@ -17,11 +18,12 @@ const cardStyle = {
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function scoreLabel(pct: number): { emoji: string; label: string; color: string } {
-  if (pct >= 90) return { emoji: "🏆", label: "Excellent!", color: "#5C7A35" };
-  if (pct >= 75) return { emoji: "👏", label: "Great job!", color: "#C47A2E" };
-  if (pct >= 60) return { emoji: "📚", label: "Keep studying!", color: "#C47A2E" };
-  return { emoji: "💪", label: "Keep at it!", color: "#8A6E52" };
+function scoreLabel(pct: number): { emoji: string; label: string; color: string; image?: string } {
+  if (pct === 100) return { emoji: "🎉", label: "Perfect score!", color: "var(--success)", image: "/capy/congrats-capy.png" };
+  if (pct >= 90) return { emoji: "🏆", label: "Excellent!", color: "var(--success)" };
+  if (pct >= 75) return { emoji: "👏", label: "Great job!", color: "var(--primary)" };
+  if (pct >= 60) return { emoji: "📚", label: "Keep studying!", color: "var(--primary)" };
+  return { emoji: "💪", label: "Keep at it!", color: "var(--text-muted)" };
 }
 
 // ── page ──────────────────────────────────────────────────────────────────────
@@ -55,20 +57,20 @@ export default function QuizResultPage() {
       <main
         style={{
           minHeight: "100vh",
-          background: "#FAF2E4",
+          background: "var(--bg)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           gap: 16,
-          fontFamily: "var(--font-dm-sans, sans-serif)",
+          fontFamily: "var(--font-body, sans-serif)",
         }}
       >
-        <span style={{ fontSize: 48 }}>🦫</span>
-        <p style={{ color: "#8A6E52", fontSize: 15 }}>No quiz results found.</p>
+        <img src="/capy/capy-idle.svg" alt="" width={59} height={48} style={{ height: "calc(48px * var(--font-scale))", width: "auto" }} />
+        <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>No quiz results found.</p>
         <a
           href={Routes.quiz(deckId)}
-          style={{ color: "#C47A2E", textDecoration: "none", fontWeight: 600, fontSize: 14 }}
+          style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600, fontSize: "calc(14px * var(--font-scale))" }}
         >
           Take the quiz →
         </a>
@@ -76,22 +78,22 @@ export default function QuizResultPage() {
     );
   }
 
-  const { emoji, label, color } = scoreLabel(result.scorePercent);
+  const { emoji, label, color, image } = scoreLabel(result.scorePercent);
   const missed = result.answers.filter((a) => !a.isCorrect);
 
   return (
     <main
       style={{
         minHeight: "100vh",
-        background: "#FAF2E4",
-        fontFamily: "var(--font-dm-sans, sans-serif)",
+        background: "var(--bg)",
+        fontFamily: "var(--font-body, sans-serif)",
       }}
     >
       {/* ── NAVBAR ── */}
       <nav
         style={{
-          background: "#2E1A0C",
-          borderBottom: "1px solid #4A2512",
+          background: "var(--nav-bg)",
+          borderBottom: "1px solid var(--nav-border)",
           position: "sticky",
           top: 0,
           zIndex: 50,
@@ -99,7 +101,7 @@ export default function QuizResultPage() {
       >
         <div
           style={{
-            maxWidth: 1200,
+            maxWidth: "100%",
             margin: "0 auto",
             padding: "0 24px",
             height: 64,
@@ -111,24 +113,25 @@ export default function QuizResultPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <a
               href={Routes.deck(deckId)}
+              className="nav-link"
               style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
             >
-              <span style={{ fontSize: 14, color: "#C49A6C" }}>← Back</span>
+              <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
             </a>
-            <span style={{ color: "#4A2512", margin: "0 8px" }}>|</span>
-            <span style={{ fontSize: 24 }}>🦫</span>
+            <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
+            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
             <span
               style={{
-                fontFamily: "var(--font-lora, serif)",
+                fontFamily: "var(--font-display, serif)",
                 fontWeight: 700,
-                fontSize: 18,
-                color: "#FAF2E4",
+                fontSize: "calc(18px * var(--font-scale))",
+                color: "var(--nav-text)",
               }}
             >
               {App.name}
             </span>
           </div>
-          <span style={{ fontSize: 13, color: "#C49A6C" }}>Quiz Results</span>
+          <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--primary)", fontWeight: 700 }}>Quiz Results</span>
         </div>
       </nav>
 
@@ -138,20 +141,30 @@ export default function QuizResultPage() {
         {/* Score card */}
         <div
           style={{
-            background: "#FFFCF7",
-            border: "1.5px solid #E0C9A8",
+            background: "var(--bg-card)",
+            border: "1.5px solid var(--border)",
             borderRadius: 20,
             padding: "40px 32px",
             textAlign: "center",
             marginBottom: 24,
           }}
         >
-          <div style={{ fontSize: 52, marginBottom: 8 }}>{emoji}</div>
+          {image ? (
+            <Image
+              src={image}
+              alt=""
+              width={96}
+              height={96}
+              style={{ borderRadius: "50%", margin: "0 auto 8px", display: "block", objectFit: "cover" }}
+            />
+          ) : (
+            <div style={{ fontSize: "calc(52px * var(--font-scale))", marginBottom: 8 }}>{emoji}</div>
+          )}
 
           <div
             style={{
-              fontFamily: "var(--font-lora, serif)",
-              fontSize: 64,
+              fontFamily: "var(--font-display, serif)",
+              fontSize: "calc(64px * var(--font-scale))",
               fontWeight: 700,
               color,
               lineHeight: 1,
@@ -163,25 +176,25 @@ export default function QuizResultPage() {
 
           <p
             style={{
-              fontFamily: "var(--font-lora, serif)",
-              fontSize: 18,
+              fontFamily: "var(--font-display, serif)",
+              fontSize: "calc(18px * var(--font-scale))",
               fontWeight: 600,
-              color: "#2E1A0C",
+              color: "var(--text)",
               marginBottom: 6,
             }}
           >
             {label}
           </p>
 
-          <p style={{ fontSize: 14, color: "#8A6E52", marginBottom: 0 }}>
+          <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-muted)", marginBottom: 0 }}>
             {result.correctCount} correct out of {result.totalQuestions} questions
           </p>
 
           {result.deckTitle && (
             <p
               style={{
-                fontSize: 13,
-                color: "#C49A6C",
+                fontSize: "calc(13px * var(--font-scale))",
+                color: "var(--text-faint)",
                 marginTop: 8,
                 fontStyle: "italic",
               }}
@@ -193,30 +206,30 @@ export default function QuizResultPage() {
 
         {/* Living Deck refresh banner */}
         {result.livingDeckRefreshTriggered && (
-          <div style={{ ...cardStyle, borderColor: "#5C7A35", background: "#EDF5E4" }}>
-            <p style={{ fontSize: 14, fontWeight: 600, color: "#3A5020", margin: "0 0 4px" }}>
+          <div style={{ ...cardStyle, borderColor: "var(--success)", background: "var(--success-bg)" }}>
+            <p style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--success-dark)", margin: "0 0 4px" }}>
               🌱 Living Deck refreshed
             </p>
-            <p style={{ fontSize: 13, color: "#5C7A35", margin: 0, lineHeight: 1.5 }}>
+            <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--success)", margin: 0, lineHeight: 1.5 }}>
               {result.reinforcedCardCount ?? 0} new{" "}
               {result.reinforcedCardCount === 1 ? "card was" : "cards were"} added to help
-              reinforce your weak areas. (1 credit used)
+              reinforce your weak areas. (1 Capycoin used)
             </p>
           </div>
         )}
 
         {/* Pro upsell for Living Decks */}
         {result.upsellMessage && (
-          <div style={{ ...cardStyle, borderColor: "#C47A2E", background: "#FFF6EB" }}>
-            <p style={{ fontSize: 14, fontWeight: 600, color: "#2E1A0C", margin: "0 0 4px" }}>
+          <div style={{ ...cardStyle, borderColor: "var(--primary)", background: "var(--bg-subtle)" }}>
+            <p style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--text)", margin: "0 0 4px" }}>
               ✨ Living Decks (Pro)
             </p>
-            <p style={{ fontSize: 13, color: "#8A6E52", margin: "0 0 10px", lineHeight: 1.5 }}>
+            <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)", margin: "0 0 10px", lineHeight: 1.5 }}>
               {result.upsellMessage}
             </p>
             <a
               href={Routes.upgrade}
-              style={{ color: "#C47A2E", fontWeight: 600, fontSize: 13, textDecoration: "none" }}
+              style={{ color: "var(--primary)", fontWeight: 600, fontSize: "calc(13px * var(--font-scale))", textDecoration: "none" }}
             >
               Upgrade to Pro →
             </a>
@@ -234,8 +247,8 @@ export default function QuizResultPage() {
         >
           <div
             style={{
-              background: "#FFFCF7",
-              border: "1.5px solid #E0C9A8",
+              background: "var(--bg-card)",
+              border: "1.5px solid var(--border)",
               borderRadius: 14,
               padding: "18px 20px",
               textAlign: "center",
@@ -243,22 +256,22 @@ export default function QuizResultPage() {
           >
             <div
               style={{
-                fontFamily: "var(--font-lora, serif)",
-                fontSize: 32,
+                fontFamily: "var(--font-display, serif)",
+                fontSize: "calc(32px * var(--font-scale))",
                 fontWeight: 700,
-                color: "#5C7A35",
+                color: "var(--success)",
                 lineHeight: 1,
                 marginBottom: 4,
               }}
             >
               {result.correctCount}
             </div>
-            <div style={{ fontSize: 13, color: "#8A6E52" }}>Correct</div>
+            <div style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)" }}>Correct</div>
           </div>
           <div
             style={{
-              background: "#FFFCF7",
-              border: "1.5px solid #E0C9A8",
+              background: "var(--bg-card)",
+              border: "1.5px solid var(--border)",
               borderRadius: 14,
               padding: "18px 20px",
               textAlign: "center",
@@ -266,17 +279,17 @@ export default function QuizResultPage() {
           >
             <div
               style={{
-                fontFamily: "var(--font-lora, serif)",
-                fontSize: 32,
+                fontFamily: "var(--font-display, serif)",
+                fontSize: "calc(32px * var(--font-scale))",
                 fontWeight: 700,
-                color: missed.length > 0 ? "#EF4444" : "#5C7A35",
+                color: missed.length > 0 ? "var(--error)" : "var(--success)",
                 lineHeight: 1,
                 marginBottom: 4,
               }}
             >
               {missed.length}
             </div>
-            <div style={{ fontSize: 13, color: "#8A6E52" }}>Missed</div>
+            <div style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)" }}>Missed</div>
           </div>
         </div>
 
@@ -284,8 +297,8 @@ export default function QuizResultPage() {
         {missed.length > 0 && (
           <div
             style={{
-              background: "#FFFCF7",
-              border: "1.5px solid #E0C9A8",
+              background: "var(--bg-card)",
+              border: "1.5px solid var(--border)",
               borderRadius: 16,
               overflow: "hidden",
               marginBottom: 28,
@@ -303,32 +316,32 @@ export default function QuizResultPage() {
                 background: "none",
                 border: "none",
                 cursor: "pointer",
-                fontFamily: "var(--font-dm-sans, sans-serif)",
+                fontFamily: "var(--font-body, sans-serif)",
               }}
             >
-              <span style={{ fontSize: 14, fontWeight: 600, color: "#2E1A0C" }}>
+              <span style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
                 📋 Review missed cards ({missed.length})
               </span>
-              <span style={{ fontSize: 14, color: "#8A6E52" }}>
+              <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-muted)" }}>
                 {showMissed ? "▲" : "▼"}
               </span>
             </button>
 
             {showMissed && (
-              <div style={{ borderTop: "1px solid #E0C9A8" }}>
+              <div style={{ borderTop: "1px solid var(--border)" }}>
                 {missed.map((a, i) => (
                   <div
                     key={i}
                     style={{
                       padding: "16px 20px",
-                      borderBottom: i < missed.length - 1 ? "1px solid #E0C9A8" : "none",
+                      borderBottom: i < missed.length - 1 ? "1px solid var(--border)" : "none",
                     }}
                   >
                     <p
                       style={{
-                        fontSize: 13,
+                        fontSize: "calc(13px * var(--font-scale))",
                         fontWeight: 600,
-                        color: "#2E1A0C",
+                        color: "var(--text)",
                         marginBottom: 6,
                         lineHeight: 1.4,
                       }}
@@ -337,21 +350,21 @@ export default function QuizResultPage() {
                     </p>
                     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                       <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
-                        <span style={{ fontSize: 12, color: "#5C7A35", fontWeight: 600, minWidth: 60 }}>
+                        <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--success)", fontWeight: 600, minWidth: 60 }}>
                           Correct:
                         </span>
-                        <span style={{ fontSize: 13, color: "#3A5020", lineHeight: 1.4 }}>
+                        <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--success-dark)", lineHeight: 1.4 }}>
                           {a.back}
                         </span>
                       </div>
                       {a.userAnswer && (
                         <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
                           <span
-                            style={{ fontSize: 12, color: "#EF4444", fontWeight: 600, minWidth: 60 }}
+                            style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error)", fontWeight: 600, minWidth: 60 }}
                           >
                             Yours:
                           </span>
-                          <span style={{ fontSize: 13, color: "#991B1B", lineHeight: 1.4 }}>
+                          <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--error-dark)", lineHeight: 1.4 }}>
                             {a.userAnswer}
                           </span>
                         </div>
@@ -372,12 +385,12 @@ export default function QuizResultPage() {
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
-              background: "#C47A2E",
-              color: "#FAF2E4",
+              background: "var(--primary)",
+              color: "var(--nav-text)",
               padding: "12px 24px",
               borderRadius: 10,
               fontWeight: 600,
-              fontSize: 14,
+              fontSize: "calc(14px * var(--font-scale))",
               textDecoration: "none",
             }}
           >
@@ -389,13 +402,13 @@ export default function QuizResultPage() {
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
-              background: "#FFFCF7",
-              color: "#2E1A0C",
-              border: "1.5px solid #E0C9A8",
+              background: "var(--bg-card)",
+              color: "var(--text)",
+              border: "1.5px solid var(--border)",
               padding: "12px 24px",
               borderRadius: 10,
               fontWeight: 600,
-              fontSize: 14,
+              fontSize: "calc(14px * var(--font-scale))",
               textDecoration: "none",
             }}
           >
@@ -407,10 +420,10 @@ export default function QuizResultPage() {
               display: "inline-flex",
               alignItems: "center",
               gap: 8,
-              color: "#8A6E52",
+              color: "var(--text-muted)",
               padding: "12px 24px",
               borderRadius: 10,
-              fontSize: 14,
+              fontSize: "calc(14px * var(--font-scale))",
               textDecoration: "none",
             }}
           >

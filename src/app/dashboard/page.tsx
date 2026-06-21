@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ApiPaths, App, Routes, SubscriptionTier, TableNames } from "@/lib/contracts";
 
@@ -68,8 +69,8 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <main style={{ minHeight: "100vh", background: "#FAF2E4", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ color: "#8A6E52", fontFamily: "var(--font-dm-sans, sans-serif)" }}>Loading…</p>
+      <main style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>Loading…</p>
       </main>
     );
   }
@@ -78,41 +79,42 @@ export default function DashboardPage() {
   const isPro = profile?.subscription_tier === SubscriptionTier.PRO;
 
   return (
-    <main style={{ minHeight: "100vh", background: "#FAF2E4", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
+    <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
 
       {/* ── NAVBAR ── */}
-      <nav style={{ background: "#2E1A0C", borderBottom: "1px solid #4A2512", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+      <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)", position: "sticky", top: 0, zIndex: 50 }}>
+        <div style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 24 }}>🦫</span>
-            <span style={{ fontFamily: "var(--font-lora, serif)", fontWeight: 700, fontSize: 18, color: "#FAF2E4" }}>
+            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
+            <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
               {App.name}
             </span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            {/* Credit balance — status display only (the doc's "remaining"); the
-                "earn-more link" is the Rewards item beside it + the Credits card. */}
+            {/* Capycoin balance — status display only (the doc's "remaining"); the
+                "earn-more link" is the Rewards item beside it + the Capycoins card. */}
             <div
-              title="Credits remaining"
-              style={{ display: "flex", alignItems: "center", gap: 6, background: "#4A2512", border: "1px solid rgba(196,122,46,0.3)", borderRadius: 20, padding: "5px 14px" }}
+              title="Capycoins remaining"
+              style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--nav-bg)", border: "1px solid rgba(196,122,46,0.3)", borderRadius: 20, padding: "5px 14px" }}
             >
-              <span style={{ fontSize: 14 }}>🪙</span>
-              <span style={{ fontSize: 13, fontWeight: 600, color: "#D4954A" }}>
-                {profile?.token_balance ?? 0} credits
+              <Image src="/capy/capycoin.png" alt="" width={32} height={32} style={{ borderRadius: "50%" }} />
+              <span style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--primary-soft)" }}>
+                {profile?.token_balance ?? 0} Capycoins
               </span>
             </div>
-            <Link href={Routes.rewards} style={{ fontSize: 13, color: "#C49A6C", textDecoration: "none" }}>
+            <Link href={Routes.rewards} className="nav-link" style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)", textDecoration: "none" }}>
               Rewards
             </Link>
-            <Link href={Routes.settings} style={{ fontSize: 13, color: "#C49A6C", textDecoration: "none" }}>
+            <Link href={Routes.settings} className="nav-link" style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)", textDecoration: "none" }}>
               Settings
             </Link>
-            <span style={{ fontSize: 13, color: "#C49A6C" }}>
-              {profile?.full_name ?? profile?.email}
+            <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>
+              {profile?.email}
             </span>
             <button
               onClick={handleLogout}
-              style={{ fontSize: 13, color: "#C49A6C", background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+              className="nav-link"
+              style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)", background: "none", border: "none", cursor: "pointer", fontFamily: "var(--font-body, sans-serif)" }}
             >
               Log out
             </button>
@@ -124,62 +126,76 @@ export default function DashboardPage() {
       <div style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 24px" }}>
 
         {/* Welcome */}
-        <div style={{ marginBottom: 36 }}>
-          <h1 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 28, fontWeight: 700, color: "#2E1A0C", marginBottom: 6 }}>
-            Welcome back, {firstName}! 👋
+        <div className="anim-fade-up" style={{ marginBottom: 36 }}>
+          <h1 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(28px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
+            Welcome back, {firstName}! <span className="wave">👋</span>
           </h1>
-          <p style={{ color: "#8A6E52", fontSize: 15 }}>
+          <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>
             Ready to cram for your next exam?
           </p>
         </div>
 
         {/* Stats row */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 40 }}>
-          <Link href={Routes.rewards} style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16, textDecoration: "none" }}>
-            <div style={{ width: 44, height: 44, background: "#FBF0E0", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🪙</div>
+          <Link href={Routes.rewards} className="anim-fade-up-1 hover-lift" style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16, textDecoration: "none" }}>
+            <div style={{ width: 44, height: 44, borderRadius: 12, overflow: "hidden" }}>
+              <Image src="/capy/capycoin.png" alt="" width={44} height={44} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+            </div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: "var(--font-lora, serif)", fontSize: 26, fontWeight: 700, color: "#2E1A0C", lineHeight: 1 }}>
+              <div style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(26px * var(--font-scale))", fontWeight: 700, color: "var(--text)", lineHeight: 1 }}>
                 {profile?.token_balance ?? 0}
               </div>
-              <div style={{ fontSize: 12, color: "#8A6E52", marginTop: 3 }}>Credits remaining</div>
+              <div style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginTop: 3 }}>Capycoins remaining</div>
             </div>
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#C47A2E", whiteSpace: "nowrap" }}>Earn more →</span>
+            <span style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--primary)", whiteSpace: "nowrap" }}>Earn more →</span>
           </Link>
 
-          <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16 }}>
-            <div style={{ width: 44, height: 44, background: "#EDF5E4", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>📚</div>
+          <div className="anim-fade-up-2 hover-lift" style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16 }}>
+            <div style={{ width: 44, height: 44, background: "var(--success-bg)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "calc(22px * var(--font-scale))" }}>📚</div>
             <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: "var(--font-lora, serif)", fontSize: 26, fontWeight: 700, color: "#2E1A0C", lineHeight: 1 }}>{decks.length}</div>
-              <div style={{ fontSize: 12, color: "#8A6E52", marginTop: 3 }}>Active decks</div>
+              <div style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(26px * var(--font-scale))", fontWeight: 700, color: "var(--text)", lineHeight: 1 }}>{decks.length}</div>
+              <div style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginTop: 3 }}>Active decks</div>
             </div>
-            <Link href={Routes.newDeck} style={{ fontSize: 20, color: "#C47A2E", textDecoration: "none", fontWeight: 700, lineHeight: 1 }} title="Create a new deck">+</Link>
+            <Link href={Routes.newDeck} style={{ fontSize: "calc(20px * var(--font-scale))", color: "var(--primary)", textDecoration: "none", fontWeight: 700, lineHeight: 1 }} title="Create a new deck">+</Link>
           </div>
 
-          <Link href={Routes.upgrade} style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16, textDecoration: "none" }}>
-            <div style={{ width: 44, height: 44, background: "#F8EBE0", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22 }}>🎯</div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontFamily: "var(--font-lora, serif)", fontSize: 26, fontWeight: 700, color: "#2E1A0C", lineHeight: 1 }}>
-                {isPro ? "Pro" : "Free"}
+          {isPro ? (
+            <div className="anim-fade-up-3 hover-lift" style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16 }}>
+              <div style={{ width: 44, height: 44, background: "var(--bg-subtle)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "calc(22px * var(--font-scale))" }}>🎯</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(26px * var(--font-scale))", fontWeight: 700, color: "var(--text)", lineHeight: 1 }}>
+                  Pro
+                </div>
+                <div style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginTop: 3 }}>Current plan</div>
               </div>
-              <div style={{ fontSize: 12, color: "#8A6E52", marginTop: 3 }}>Current plan</div>
             </div>
-            {!isPro && <span style={{ fontSize: 12, fontWeight: 600, color: "#C47A2E", whiteSpace: "nowrap" }}>Upgrade →</span>}
-          </Link>
+          ) : (
+            <Link href={Routes.upgrade} className="anim-fade-up-3 hover-lift" style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 14, padding: "20px 22px", display: "flex", alignItems: "center", gap: 16, textDecoration: "none" }}>
+              <div style={{ width: 44, height: 44, background: "var(--bg-subtle)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "calc(22px * var(--font-scale))" }}>🎯</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(26px * var(--font-scale))", fontWeight: 700, color: "var(--text)", lineHeight: 1 }}>
+                  Free
+                </div>
+                <div style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginTop: 3 }}>Current plan</div>
+              </div>
+              <span style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--primary)", whiteSpace: "nowrap" }}>Upgrade →</span>
+            </Link>
+          )}
         </div>
 
         {decks.length === 0 ? (
           /* Empty state */
-          <div style={{ background: "#FFFCF7", border: "1.5px dashed #E0C9A8", borderRadius: 20, padding: "60px 24px", textAlign: "center" }}>
-            <div style={{ fontSize: 56, marginBottom: 16 }}>🦫</div>
-            <h2 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 20, fontWeight: 600, color: "#2E1A0C", marginBottom: 8 }}>
+          <div className="anim-fade-up-3" style={{ background: "var(--bg-card)", border: "1.5px dashed var(--border)", borderRadius: 20, padding: "60px 24px", textAlign: "center" }}>
+            <img src="/capy/capy-idle.svg" alt="" width={68} height={56} style={{ height: "calc(56px * var(--font-scale))", width: "auto", marginBottom: 16 }} />
+            <h2 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(20px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
               No decks yet
             </h2>
-            <p style={{ color: "#8A6E52", fontSize: 14, marginBottom: 28, maxWidth: 360, margin: "0 auto 28px" }}>
+            <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))", marginBottom: 28, maxWidth: 360, margin: "0 auto 28px" }}>
               Upload a PDF reviewer and Capy will turn it into a flashcard deck in seconds.
             </p>
             <Link
               href={Routes.newDeck}
-              style={{ display: "inline-block", background: "#C47A2E", color: "#FAF2E4", padding: "12px 28px", borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: "none" }}
+              style={{ display: "inline-block", background: "var(--primary)", color: "var(--nav-text)", padding: "12px 28px", borderRadius: 10, fontWeight: 600, fontSize: "calc(14px * var(--font-scale))", textDecoration: "none" }}
             >
               + Create your first deck
             </Link>
@@ -187,13 +203,14 @@ export default function DashboardPage() {
         ) : (
           <>
             {/* Section header */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-              <h2 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 20, fontWeight: 700, color: "#2E1A0C" }}>
+            <div className="anim-fade-up-3" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+              <h2 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(20px * var(--font-scale))", fontWeight: 700, color: "var(--text)" }}>
                 Your decks
               </h2>
               <Link
                 href={Routes.newDeck}
-                style={{ display: "inline-block", background: "#C47A2E", color: "#FAF2E4", padding: "10px 20px", borderRadius: 10, fontWeight: 600, fontSize: 14, textDecoration: "none" }}
+                className="hover-lift"
+                style={{ display: "inline-block", background: "var(--primary)", color: "var(--nav-text)", padding: "10px 20px", borderRadius: 10, fontWeight: 600, fontSize: "calc(14px * var(--font-scale))", textDecoration: "none" }}
               >
                 + New deck
               </Link>
@@ -201,23 +218,24 @@ export default function DashboardPage() {
 
             {/* Deck grid */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
-              {decks.map((deck) => (
+              {decks.map((deck, i) => (
                 <Link
                   key={deck.id}
                   href={Routes.deck(deck.id)}
-                  style={{ display: "flex", flexDirection: "column", gap: 12, background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 16, padding: "20px 22px", textDecoration: "none" }}
+                  className="anim-fade-up hover-lift"
+                  style={{ display: "flex", flexDirection: "column", gap: 12, background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 16, padding: "20px 22px", textDecoration: "none", animationDelay: `${0.24 + i * 0.05}s` }}
                 >
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                    <span style={{ fontSize: 26 }}>📚</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: "#C49A6C", background: "rgba(196,122,46,0.12)", borderRadius: 12, padding: "3px 10px" }}>
+                    <span style={{ fontSize: "calc(26px * var(--font-scale))" }}>📚</span>
+                    <span style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--text-faint)", background: "rgba(196,122,46,0.12)", borderRadius: 12, padding: "3px 10px" }}>
                       {deck.card_count} {deck.card_count === 1 ? "card" : "cards"}
                     </span>
                   </div>
                   <div>
-                    <h3 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 17, fontWeight: 700, color: "#2E1A0C", lineHeight: 1.35, margin: 0 }}>
+                    <h3 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(17px * var(--font-scale))", fontWeight: 700, color: "var(--text)", lineHeight: 1.35, margin: 0 }}>
                       {deck.title}
                     </h3>
-                    <p style={{ fontSize: 12, color: "#8A6E52", marginTop: 6 }}>
+                    <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginTop: 6 }}>
                       {new Date(deck.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
                     </p>
                   </div>

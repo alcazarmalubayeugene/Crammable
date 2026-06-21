@@ -1,10 +1,11 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
+import { useTheme, FONT_SIZE_LABELS, FONT_PAIRS, type ThemeMode, type FontSizeKey, type FontPairKey } from "@/lib/theme/ThemeProvider";
 import {
   ApiErrorCode,
   ApiPaths,
@@ -30,6 +31,47 @@ interface MinProfile {
 function SettingsContent() {
   const searchParams = useSearchParams();
   const isResetMode = searchParams.get("mode") === "reset-password";
+  const {
+    theme, setTheme, previewTheme,
+    fontSize, setFontSize, previewFontSize,
+    fontPair, setFontPair, previewFontPair,
+  } = useTheme();
+
+  // Drafts preview live (so you can see the change) but only persist on
+  // "Save preferences" — leaving the page without saving reverts the preview.
+  const [draftTheme, setDraftTheme] = useState<ThemeMode>(theme);
+  const [draftFontSize, setDraftFontSize] = useState<FontSizeKey>(fontSize);
+  const [draftFontPair, setDraftFontPair] = useState<FontPairKey>(fontPair);
+  const [styleSaved, setStyleSaved] = useState(false);
+  const savedStyleRef = useRef({ theme, fontSize, fontPair });
+
+  useEffect(() => {
+    savedStyleRef.current = { theme, fontSize, fontPair };
+    setDraftTheme(theme);
+    setDraftFontSize(fontSize);
+    setDraftFontPair(fontPair);
+  }, [theme, fontSize, fontPair]);
+
+  useEffect(() => {
+    return () => {
+      const saved = savedStyleRef.current;
+      previewTheme(saved.theme);
+      previewFontSize(saved.fontSize);
+      previewFontPair(saved.fontPair);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const hasUnsavedStyleChanges =
+    draftTheme !== theme || draftFontSize !== fontSize || draftFontPair !== fontPair;
+
+  function handleSaveStyle() {
+    setTheme(draftTheme);
+    setFontSize(draftFontSize);
+    setFontPair(draftFontPair);
+    setStyleSaved(true);
+    setTimeout(() => setStyleSaved(false), 3000);
+  }
 
   const [profile, setProfile] = useState<MinProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,9 +89,7 @@ function SettingsContent() {
   // logout state
   const [loggingOut, setLoggingOut] = useState(false);
 
-  // export / delete account state (E5)
-  const [exporting, setExporting] = useState(false);
-  const [exportError, setExportError] = useState("");
+  // delete account state (E5)
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
@@ -142,37 +182,14 @@ function SettingsContent() {
   }
 
   async function handleLogout() {
-    if (!confirm("Sign out of Crammable?")) return;
+    if (!confirm("Log out of Crammable on all devices?")) return;
     setLoggingOut(true);
     const supabase = getSupabaseBrowserClient();
-    await supabase.auth.signOut();
+    // scope: "global" signs out every session for this user, not just this
+    // device — already supabase-js's default, but explicit here since the
+    // button now promises that behavior.
+    await supabase.auth.signOut({ scope: "global" });
     window.location.replace(Routes.home);
-  }
-
-  async function handleExportData() {
-    setExporting(true);
-    setExportError("");
-    try {
-      const res = await fetch(ApiPaths.accountExport, { headers: await authHeaders() });
-      if (!res.ok) {
-        const data = (await res.json()) as ApiResponse<never>;
-        setExportError(!data.success ? data.error.message : UIMessages.genericError);
-        return;
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `crammable-export-${new Date().toISOString().slice(0, 10)}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-    } catch {
-      setExportError(UIMessages.genericError);
-    } finally {
-      setExporting(false);
-    }
   }
 
   async function handleDeleteAccount() {
@@ -256,12 +273,12 @@ function SettingsContent() {
 
   if (isResetMode) {
     return (
-      <main style={{ minHeight: "100vh", background: "#FAF2E4", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
+      <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
         {/* ── NAVBAR ── */}
-        <nav style={{ background: "#2E1A0C", borderBottom: "1px solid #4A2512" }}>
+        <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)" }}>
           <div style={{ maxWidth: 1024, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 24 }}>🦫</span>
-            <span style={{ fontFamily: "var(--font-lora, serif)", fontWeight: 700, fontSize: 18, color: "#FAF2E4" }}>
+            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
+            <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
               {App.name}
             </span>
           </div>
@@ -272,25 +289,25 @@ function SettingsContent() {
           <div style={{ width: "100%", maxWidth: 420 }}>
 
             <div style={{ textAlign: "center", marginBottom: 32 }}>
-              <div style={{ fontSize: 48, marginBottom: 12 }}>🦫</div>
-              <h1 style={{ fontFamily: "var(--font-lora, serif)", fontSize: 26, fontWeight: 700, color: "#2E1A0C", marginBottom: 6 }}>
+              <img src="/capy/capy-idle.svg" alt="" width={59} height={48} style={{ height: "calc(48px * var(--font-scale))", width: "auto", marginBottom: 12 }} />
+              <h1 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(26px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
                 Set a new password
               </h1>
-              <p style={{ color: "#8A6E52", fontSize: 14 }}>
+              <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))" }}>
                 You&apos;re almost in. Choose a new password for your account.
               </p>
             </div>
 
-            <div style={{ background: "#FFFCF7", border: "1.5px solid #E0C9A8", borderRadius: 20, padding: 32 }}>
+            <div style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 20, padding: 32 }}>
 
               {resetDone ? (
-                <p style={{ textAlign: "center", fontSize: 14, color: "#5C7A35", fontWeight: 600, margin: 0 }}>
+                <p style={{ textAlign: "center", fontSize: "calc(14px * var(--font-scale))", color: "var(--success)", fontWeight: 600, margin: 0 }}>
                   Password updated! Redirecting…
                 </p>
               ) : resetExpired ? (
-                <div style={{ background: "#FEF0E0", border: "1px solid #E0C9A8", borderRadius: 10, padding: "14px 16px", fontSize: 13, color: "#8B5E38", lineHeight: 1.6 }}>
+                <div style={{ background: "var(--error-bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "14px 16px", fontSize: "calc(13px * var(--font-scale))", color: "var(--error-dark)", lineHeight: 1.6 }}>
                   Your reset link has expired.{" "}
-                  <Link href={Routes.forgotPassword} style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "underline" }}>
+                  <Link href={Routes.forgotPassword} style={{ color: "var(--primary)", fontWeight: 600, textDecoration: "underline" }}>
                     Request a new one
                   </Link>
                   .
@@ -298,14 +315,14 @@ function SettingsContent() {
               ) : (
                 <>
                   {resetError && (
-                    <div style={{ background: "#FEF0E0", border: "1px solid #E0C9A8", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 13, color: "#8B5E38" }}>
+                    <div style={{ background: "var(--error-bg)", border: "1px solid var(--border)", borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: "calc(13px * var(--font-scale))", color: "var(--error-dark)" }}>
                       {resetError}
                     </div>
                   )}
 
                   <form onSubmit={handleResetPassword}>
                     <div style={{ marginBottom: 16 }}>
-                      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#2E1A0C", marginBottom: 6 }}>
+                      <label style={{ display: "block", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
                         New password
                       </label>
                       <PasswordInput
@@ -318,7 +335,7 @@ function SettingsContent() {
                     </div>
 
                     <div style={{ marginBottom: 20 }}>
-                      <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#2E1A0C", marginBottom: 6 }}>
+                      <label style={{ display: "block", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 6 }}>
                         Confirm new password
                       </label>
                       <PasswordInput
@@ -333,7 +350,7 @@ function SettingsContent() {
                     <button
                       type="submit"
                       disabled={resetLoading}
-                      style={{ width: "100%", padding: "12px 0", background: resetLoading ? "#A86826" : "#C47A2E", color: "#FAF2E4", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: resetLoading ? "not-allowed" : "pointer", fontFamily: "var(--font-dm-sans, sans-serif)" }}
+                      style={{ width: "100%", padding: "12px 0", background: resetLoading ? "var(--primary-hover)" : "var(--primary)", color: "var(--nav-text)", border: "none", borderRadius: 10, fontSize: "calc(15px * var(--font-scale))", fontWeight: 600, cursor: resetLoading ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
                     >
                       {resetLoading ? "Updating…" : "Update password"}
                     </button>
@@ -355,13 +372,13 @@ function SettingsContent() {
       <main
         style={{
           minHeight: "100vh",
-          background: "#FAF2E4",
+          background: "var(--bg)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <p style={{ color: "#8A6E52", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
+        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>
           Loading…
         </p>
       </main>
@@ -374,15 +391,15 @@ function SettingsContent() {
     <main
       style={{
         minHeight: "100vh",
-        background: "#FAF2E4",
-        fontFamily: "var(--font-dm-sans, sans-serif)",
+        background: "var(--bg)",
+        fontFamily: "var(--font-body, sans-serif)",
       }}
     >
       {/* ── NAVBAR ── */}
       <nav
         style={{
-          background: "#2E1A0C",
-          borderBottom: "1px solid #4A2512",
+          background: "var(--nav-bg)",
+          borderBottom: "1px solid var(--nav-border)",
           position: "sticky",
           top: 0,
           zIndex: 50,
@@ -390,7 +407,7 @@ function SettingsContent() {
       >
         <div
           style={{
-            maxWidth: 1200,
+            maxWidth: "100%",
             margin: "0 auto",
             padding: "0 24px",
             height: 64,
@@ -402,24 +419,25 @@ function SettingsContent() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <a
               href={Routes.dashboard}
+              className="nav-link"
               style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
             >
-              <span style={{ fontSize: 14, color: "#C49A6C" }}>← Back</span>
+              <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
             </a>
-            <span style={{ color: "#4A2512", margin: "0 8px" }}>|</span>
-            <span style={{ fontSize: 24 }}>🦫</span>
+            <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
+            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
             <span
               style={{
-                fontFamily: "var(--font-lora, serif)",
+                fontFamily: "var(--font-display, serif)",
                 fontWeight: 700,
-                fontSize: 18,
-                color: "#FAF2E4",
+                fontSize: "calc(18px * var(--font-scale))",
+                color: "var(--nav-text)",
               }}
             >
               {App.name}
             </span>
           </div>
-          <span style={{ fontSize: 13, color: "#C49A6C" }}>Settings</span>
+          <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--primary)", fontWeight: 700 }}>Settings</span>
         </div>
       </nav>
 
@@ -428,10 +446,10 @@ function SettingsContent() {
 
         <h1
           style={{
-            fontFamily: "var(--font-lora, serif)",
-            fontSize: 26,
+            fontFamily: "var(--font-display, serif)",
+            fontSize: "calc(26px * var(--font-scale))",
             fontWeight: 700,
-            color: "#2E1A0C",
+            color: "var(--text)",
             marginBottom: 28,
           }}
         >
@@ -440,9 +458,10 @@ function SettingsContent() {
 
         {/* ── Account info (read-only) ── */}
         <div
+          className="anim-fade-up"
           style={{
-            background: "#FFFCF7",
-            border: "1.5px solid #E0C9A8",
+            background: "var(--bg-card)",
+            border: "1.5px solid var(--border)",
             borderRadius: 16,
             padding: "20px 22px",
             marginBottom: 16,
@@ -450,10 +469,10 @@ function SettingsContent() {
         >
           <p
             style={{
-              fontSize: 11,
+              fontSize: "calc(11px * var(--font-scale))",
               fontWeight: 700,
               letterSpacing: "0.08em",
-              color: "#C49A6C",
+              color: "var(--text-faint)",
               textTransform: "uppercase",
               marginBottom: 14,
             }}
@@ -468,16 +487,16 @@ function SettingsContent() {
               value={
                 <span
                   style={{
-                    fontSize: 13,
+                    fontSize: "calc(13px * var(--font-scale))",
                     fontWeight: 600,
-                    color: isPro ? "#C47A2E" : "#8A6E52",
+                    color: isPro ? "var(--primary)" : "var(--text-muted)",
                   }}
                 >
                   {isPro ? "Pro ✓" : "Free"}
                 </span>
               }
             />
-            <Row label="Credits" value={`${profile?.token_balance ?? 0}`} />
+            <Row label="Capycoins" value={`${profile?.token_balance ?? 0}`} />
             <Row label="Referral code" value={profile?.referral_code ?? "—"} mono />
           </div>
 
@@ -487,12 +506,12 @@ function SettingsContent() {
               style={{
                 display: "inline-block",
                 marginTop: 14,
-                background: "#C47A2E",
-                color: "#FAF2E4",
+                background: "var(--primary)",
+                color: "var(--nav-text)",
                 padding: "9px 20px",
                 borderRadius: 8,
                 fontWeight: 600,
-                fontSize: 13,
+                fontSize: "calc(13px * var(--font-scale))",
                 textDecoration: "none",
               }}
             >
@@ -503,9 +522,10 @@ function SettingsContent() {
 
         {/* ── Edit profile ── */}
         <div
+          className="anim-fade-up-1"
           style={{
-            background: "#FFFCF7",
-            border: "1.5px solid #E0C9A8",
+            background: "var(--bg-card)",
+            border: "1.5px solid var(--border)",
             borderRadius: 16,
             padding: "20px 22px",
             marginBottom: 16,
@@ -513,10 +533,10 @@ function SettingsContent() {
         >
           <p
             style={{
-              fontSize: 11,
+              fontSize: "calc(11px * var(--font-scale))",
               fontWeight: 700,
               letterSpacing: "0.08em",
-              color: "#C49A6C",
+              color: "var(--text-faint)",
               textTransform: "uppercase",
               marginBottom: 16,
             }}
@@ -526,7 +546,7 @@ function SettingsContent() {
 
           <form onSubmit={handleSave} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
-              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#2E1A0C", marginBottom: 5 }}>
+              <label style={{ display: "block", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 5 }}>
                 Full name
               </label>
               <input
@@ -540,7 +560,7 @@ function SettingsContent() {
             </div>
 
             <div>
-              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: "#2E1A0C", marginBottom: 5 }}>
+              <label style={{ display: "block", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 5 }}>
                 Course / Program
               </label>
               <input
@@ -554,29 +574,31 @@ function SettingsContent() {
             </div>
 
             {saveError && (
-              <p style={{ fontSize: 13, color: "#EF4444", margin: 0 }}>{saveError}</p>
+              <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--error)", margin: 0 }}>{saveError}</p>
             )}
             {saveSuccess && (
-              <p style={{ fontSize: 13, color: "#5C7A35", fontWeight: 600, margin: 0 }}>
+              <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--success)", fontWeight: 600, margin: 0 }}>
                 ✓ Profile saved!
-                {creditsAwarded > 0 && ` +${creditsAwarded} credits for completing your profile!`}
+                {creditsAwarded > 0 && ` +${creditsAwarded} Capycoins for completing your profile!`}
               </p>
             )}
 
             <button
               type="submit"
               disabled={saving}
+              className="btn-solid"
               style={{
                 alignSelf: "flex-start",
-                background: saving ? "#C49A6C" : "#C47A2E",
-                color: "#FAF2E4",
+                background: saving ? "var(--text-faint)" : "var(--primary)",
+                color: "var(--nav-text)",
                 border: "none",
                 borderRadius: 8,
                 padding: "10px 24px",
-                fontSize: 14,
+                fontSize: "calc(14px * var(--font-scale))",
                 fontWeight: 600,
                 cursor: saving ? "not-allowed" : "pointer",
-                fontFamily: "var(--font-dm-sans, sans-serif)",
+                fontFamily: "var(--font-body, sans-serif)",
+                transition: "background 0.15s ease",
               }}
             >
               {saving ? "Saving…" : "Save changes"}
@@ -584,21 +606,171 @@ function SettingsContent() {
           </form>
         </div>
 
-        {/* ── Danger zone ── */}
+        {/* ── Preferred style ── */}
         <div
+          className="anim-fade-up-2"
           style={{
-            background: "#FFFCF7",
-            border: "1.5px solid #E0C9A8",
+            background: "var(--bg-card)",
+            border: "1.5px solid var(--border)",
+            borderRadius: 16,
+            padding: "20px 22px",
+            marginBottom: 16,
+          }}
+        >
+          <p
+            style={{
+              fontSize: "calc(11px * var(--font-scale))",
+              fontWeight: 700,
+              letterSpacing: "0.08em",
+              color: "var(--text-faint)",
+              textTransform: "uppercase",
+              marginBottom: 16,
+            }}
+          >
+            Preferred style
+          </p>
+
+          <div style={{ marginBottom: 18 }}>
+            <label style={{ display: "block", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
+              Appearance
+            </label>
+            <div style={{ display: "inline-flex", border: "1.5px solid var(--border)", borderRadius: 10, padding: 3, gap: 2 }}>
+              {(["light", "dark"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => { setDraftTheme(mode); previewTheme(mode); }}
+                  className={`chip${draftTheme === mode ? " chip-active" : ""}`}
+                  style={{
+                    background: draftTheme === mode ? "var(--primary)" : "none",
+                    color: draftTheme === mode ? "var(--on-primary)" : "var(--text-muted)",
+                    border: "1.5px solid transparent",
+                    borderRadius: 8,
+                    padding: "7px 18px",
+                    fontSize: "calc(13px * var(--font-scale))",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "var(--font-body, sans-serif)",
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {mode === "light" ? "☀️ Light" : "🌙 Dark"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: "block", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
+              Font size
+            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {(Object.keys(FONT_SIZE_LABELS) as FontSizeKey[]).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => { setDraftFontSize(key); previewFontSize(key); }}
+                  className={`chip${draftFontSize === key ? " chip-active" : ""}`}
+                  style={{
+                    background: draftFontSize === key ? "var(--primary)" : "none",
+                    color: draftFontSize === key ? "var(--on-primary)" : "var(--text-muted)",
+                    border: draftFontSize === key ? "1.5px solid var(--primary)" : "1.5px solid var(--border)",
+                    borderRadius: 8,
+                    padding: "7px 14px",
+                    fontSize: "calc(13px * var(--font-scale))",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "var(--font-body, sans-serif)",
+                  }}
+                >
+                  {FONT_SIZE_LABELS[key]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 18 }}>
+            <label style={{ display: "block", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
+              Font
+            </label>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+              {(Object.keys(FONT_PAIRS) as FontPairKey[]).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => { setDraftFontPair(key); previewFontPair(key); }}
+                  className={`chip${draftFontPair === key ? " chip-active" : ""}`}
+                  style={{
+                    background: draftFontPair === key ? "var(--primary)" : "none",
+                    color: draftFontPair === key ? "var(--on-primary)" : "var(--text-muted)",
+                    border: draftFontPair === key ? "1.5px solid var(--primary)" : "1.5px solid var(--border)",
+                    borderRadius: 8,
+                    padding: "7px 14px",
+                    fontSize: "calc(13px * var(--font-scale))",
+                    fontWeight: 600,
+                    cursor: "pointer",
+                    fontFamily: "var(--font-body, sans-serif)",
+                  }}
+                >
+                  {FONT_PAIRS[key].label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ marginTop: 20, display: "flex", alignItems: "center", gap: 12 }}>
+            <button
+              type="button"
+              onClick={handleSaveStyle}
+              disabled={!hasUnsavedStyleChanges}
+              className="btn-solid"
+              style={{
+                background: hasUnsavedStyleChanges ? "var(--primary)" : "none",
+                color: hasUnsavedStyleChanges ? "var(--on-primary)" : "var(--text-faint)",
+                border: hasUnsavedStyleChanges ? "1.5px solid var(--primary)" : "1.5px solid var(--border)",
+                borderRadius: 8,
+                padding: "10px 24px",
+                fontSize: "calc(14px * var(--font-scale))",
+                fontWeight: 600,
+                cursor: hasUnsavedStyleChanges ? "pointer" : "not-allowed",
+                fontFamily: "var(--font-body, sans-serif)",
+                transition: "all 0.15s ease",
+              }}
+            >
+              Save preferences
+            </button>
+            {styleSaved ? (
+              <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--success)", fontWeight: 600, margin: 0 }}>
+                ✓ Preferences saved!
+              </p>
+            ) : hasUnsavedStyleChanges ? (
+              <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)", margin: 0 }}>
+                Previewing — not saved yet
+              </p>
+            ) : (
+              <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)", margin: 0 }}>
+                All changes saved
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* ── Session ── */}
+        <div
+          className="anim-fade-up-3"
+          style={{
+            background: "var(--bg-card)",
+            border: "1.5px solid var(--border)",
             borderRadius: 16,
             padding: "20px 22px",
           }}
         >
           <p
             style={{
-              fontSize: 11,
+              fontSize: "calc(11px * var(--font-scale))",
               fontWeight: 700,
               letterSpacing: "0.08em",
-              color: "#C49A6C",
+              color: "var(--text-faint)",
               textTransform: "uppercase",
               marginBottom: 14,
             }}
@@ -610,27 +782,29 @@ function SettingsContent() {
             type="button"
             onClick={handleLogout}
             disabled={loggingOut}
+            className="btn-outline"
             style={{
               background: "none",
-              border: "1.5px solid #E0C9A8",
+              border: "1.5px solid var(--border)",
               borderRadius: 8,
               padding: "9px 20px",
-              fontSize: 13,
+              fontSize: "calc(13px * var(--font-scale))",
               fontWeight: 600,
-              color: "#8A6E52",
+              color: "var(--text-muted)",
               cursor: loggingOut ? "not-allowed" : "pointer",
-              fontFamily: "var(--font-dm-sans, sans-serif)",
+              fontFamily: "var(--font-body, sans-serif)",
             }}
           >
-            {loggingOut ? "Signing out…" : "Sign out"}
+            {loggingOut ? "Signing out…" : "Log out of all devices"}
           </button>
         </div>
 
-        {/* ── Your data (E5) ── */}
+        {/* ── Danger zone (delete account) ── */}
         <div
+          className="anim-fade-up-4"
           style={{
-            background: "#FFFCF7",
-            border: "1.5px solid #E0C9A8",
+            background: "var(--bg-card)",
+            border: "1.5px solid var(--border)",
             borderRadius: 16,
             padding: "20px 22px",
             marginTop: 16,
@@ -638,72 +812,42 @@ function SettingsContent() {
         >
           <p
             style={{
-              fontSize: 11,
+              fontSize: "calc(11px * var(--font-scale))",
               fontWeight: 700,
               letterSpacing: "0.08em",
-              color: "#C49A6C",
+              color: "var(--error)",
               textTransform: "uppercase",
               marginBottom: 14,
             }}
           >
-            Your data
+            Danger zone
           </p>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div>
-              <button
-                type="button"
-                onClick={handleExportData}
-                disabled={exporting}
-                style={{
-                  background: "none",
-                  border: "1.5px solid #E0C9A8",
-                  borderRadius: 8,
-                  padding: "9px 20px",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: "#8A6E52",
-                  cursor: exporting ? "not-allowed" : "pointer",
-                  fontFamily: "var(--font-dm-sans, sans-serif)",
-                }}
-              >
-                {exporting ? "Preparing…" : "Export my data"}
-              </button>
-              {exportError && (
-                <p style={{ fontSize: 12, color: "#EF4444", marginTop: 8 }}>{exportError}</p>
-              )}
-            </div>
-
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 700, color: "#EF4444", marginBottom: 6 }}>
-                Danger zone
-              </p>
-              <p style={{ fontSize: 12, color: "#8A6E52", marginBottom: 10 }}>
-                {UIMessages.accountDeleteConfirm}
-              </p>
-              <button
-                type="button"
-                onClick={handleDeleteAccount}
-                disabled={deleting}
-                style={{
-                  background: "#EF4444",
-                  border: "none",
-                  borderRadius: 8,
-                  padding: "9px 20px",
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: "#FAF2E4",
-                  cursor: deleting ? "not-allowed" : "pointer",
-                  fontFamily: "var(--font-dm-sans, sans-serif)",
-                }}
-              >
-                {deleting ? "Deleting…" : "Delete my account"}
-              </button>
-              {deleteError && (
-                <p style={{ fontSize: 12, color: "#EF4444", marginTop: 8 }}>{deleteError}</p>
-              )}
-            </div>
-          </div>
+          <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginBottom: 10 }}>
+            {UIMessages.accountDeleteConfirm}
+          </p>
+          <button
+            type="button"
+            onClick={handleDeleteAccount}
+            disabled={deleting}
+            className="btn-solid"
+            style={{
+              background: "var(--error)",
+              border: "none",
+              borderRadius: 8,
+              padding: "9px 20px",
+              fontSize: "calc(13px * var(--font-scale))",
+              fontWeight: 600,
+              color: "var(--nav-text)",
+              cursor: deleting ? "not-allowed" : "pointer",
+              fontFamily: "var(--font-body, sans-serif)",
+            }}
+          >
+            {deleting ? "Deleting…" : "Delete my account"}
+          </button>
+          {deleteError && (
+            <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error)", marginTop: 8 }}>{deleteError}</p>
+          )}
         </div>
       </div>
     </main>
@@ -715,8 +859,8 @@ export default function SettingsPage() {
   return (
     <Suspense
       fallback={
-        <main style={{ minHeight: "100vh", background: "#FAF2E4", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <p style={{ color: "#8A6E52", fontFamily: "var(--font-dm-sans, sans-serif)" }}>Loading…</p>
+        <main style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>Loading…</p>
         </main>
       }
     >
@@ -765,7 +909,7 @@ function PasswordInput({
           padding: 8,
           display: "flex",
           alignItems: "center",
-          color: "#8A6E52",
+          color: "var(--text-muted)",
         }}
       >
         {show ? <EyeOffIcon /> : <EyeIcon />}
@@ -803,11 +947,11 @@ function Row({
 }) {
   return (
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-      <span style={{ fontSize: 13, color: "#8A6E52" }}>{label}</span>
+      <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)" }}>{label}</span>
       <span
         style={{
-          fontSize: 13,
-          color: "#2E1A0C",
+          fontSize: "calc(13px * var(--font-scale))",
+          color: "var(--text)",
           fontWeight: 500,
           fontFamily: mono ? "monospace" : undefined,
           letterSpacing: mono ? "0.06em" : undefined,
@@ -823,12 +967,12 @@ function Row({
 const inputStyle: React.CSSProperties = {
   width: "100%",
   boxSizing: "border-box",
-  background: "#FAF2E4",
-  border: "1.5px solid #E0C9A8",
+  background: "var(--bg)",
+  border: "1.5px solid var(--border)",
   borderRadius: 8,
   padding: "10px 12px",
-  fontSize: 14,
-  color: "#2E1A0C",
-  fontFamily: "var(--font-dm-sans, sans-serif)",
+  fontSize: "calc(14px * var(--font-scale))",
+  color: "var(--text)",
+  fontFamily: "var(--font-body, sans-serif)",
   outline: "none",
 };

@@ -1,8 +1,48 @@
 import type { Metadata } from "next";
-import { Lora, DM_Sans } from "next/font/google";
+import {
+  Lora,
+  DM_Sans,
+  Playfair_Display,
+  Fraunces,
+  Nunito,
+  EB_Garamond,
+  Plus_Jakarta_Sans,
+  Libre_Baskerville,
+} from "next/font/google";
 import { App } from "@/lib/contracts";
 import PaymentNotifications from "./PaymentNotifications";
+import {
+  ThemeProvider,
+  THEME_STORAGE_KEY,
+  FONT_SIZE_STORAGE_KEY,
+  FONT_SCALES,
+  FONT_PAIR_STORAGE_KEY,
+  FONT_PAIRS,
+} from "@/lib/theme/ThemeProvider";
 import "./globals.css";
+
+// Runs before paint so a returning dark-mode/font-scale/font-pair user never
+// sees a flash of the defaults. Reads from the same localStorage keys
+// ThemeProvider uses.
+const ANTI_FLASH_SCRIPT = `
+(function() {
+  try {
+    var theme = localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});
+    if (theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
+    var fontSize = localStorage.getItem(${JSON.stringify(FONT_SIZE_STORAGE_KEY)});
+    var scales = ${JSON.stringify(FONT_SCALES)};
+    if (fontSize && scales[fontSize]) {
+      document.documentElement.style.setProperty("--font-scale", String(scales[fontSize]));
+    }
+    var fontPair = localStorage.getItem(${JSON.stringify(FONT_PAIR_STORAGE_KEY)});
+    var pairs = ${JSON.stringify(FONT_PAIRS)};
+    if (fontPair && pairs[fontPair]) {
+      document.documentElement.style.setProperty("--font-display", pairs[fontPair].display);
+      document.documentElement.style.setProperty("--font-body", pairs[fontPair].body);
+    }
+  } catch (e) {}
+})();
+`;
 
 const lora = Lora({
   subsets: ["latin"],
@@ -14,6 +54,42 @@ const dmSans = DM_Sans({
   subsets: ["latin"],
   variable: "--font-dm-sans",
   weight: ["400", "500", "600"],
+});
+
+const playfair = Playfair_Display({
+  subsets: ["latin"],
+  variable: "--font-playfair",
+  weight: ["400", "500", "600", "700"],
+});
+
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-fraunces",
+  weight: ["400", "500", "600", "700"],
+});
+
+const nunito = Nunito({
+  subsets: ["latin"],
+  variable: "--font-nunito",
+  weight: ["400", "500", "600", "700"],
+});
+
+const garamond = EB_Garamond({
+  subsets: ["latin"],
+  variable: "--font-garamond",
+  weight: ["400", "500", "600", "700"],
+});
+
+const jakarta = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-jakarta",
+  weight: ["400", "500", "600", "700"],
+});
+
+const baskerville = Libre_Baskerville({
+  subsets: ["latin"],
+  variable: "--font-baskerville",
+  weight: ["400", "700"],
 });
 
 export const metadata: Metadata = {
@@ -29,32 +105,37 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: ANTI_FLASH_SCRIPT }} />
+      </head>
       <body
-        className={`${lora.variable} ${dmSans.variable} antialiased`}
-        style={{ fontFamily: "var(--font-dm-sans), sans-serif" }}
+        className={`${lora.variable} ${dmSans.variable} ${playfair.variable} ${fraunces.variable} ${nunito.variable} ${garamond.variable} ${jakarta.variable} ${baskerville.variable} antialiased`}
+        style={{ fontFamily: "var(--font-body, var(--font-dm-sans)), sans-serif" }}
       >
-        {children}
-        <PaymentNotifications />
-        <div
-          style={{
-            position: "fixed",
-            bottom: 12,
-            right: 14,
-            zIndex: 40,
-            fontSize: 11,
-            fontWeight: 600,
-            color: "#C49A6C",
-            background: "rgba(46,26,12,0.75)",
-            backdropFilter: "blur(4px)",
-            padding: "3px 9px",
-            borderRadius: 6,
-            letterSpacing: "0.04em",
-            pointerEvents: "none",
-            userSelect: "none",
-          }}
-        >
-          {App.version}
-        </div>
+        <ThemeProvider>
+          {children}
+          <PaymentNotifications />
+          <div
+            style={{
+              position: "fixed",
+              bottom: 12,
+              right: 14,
+              zIndex: 40,
+              fontSize: "calc(11px * var(--font-scale))",
+              fontWeight: 600,
+              color: "var(--nav-text-muted)",
+              background: "rgba(46,26,12,0.75)",
+              backdropFilter: "blur(4px)",
+              padding: "3px 9px",
+              borderRadius: 6,
+              letterSpacing: "0.04em",
+              pointerEvents: "none",
+              userSelect: "none",
+            }}
+          >
+            {App.version}
+          </div>
+        </ThemeProvider>
       </body>
     </html>
   );

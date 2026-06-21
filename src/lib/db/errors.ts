@@ -91,7 +91,7 @@ export function toDbError(
   if (msg.startsWith("INSUFFICIENT_CREDITS")) {
     return dbError(
       ApiErrorCode.INSUFFICIENT_CREDITS,
-      "You're out of credits. Upgrade to Pro or earn more to keep generating."
+      "You're out of Capycoins. Upgrade to Pro or earn more to keep generating."
     );
   }
   if (msg.startsWith("SESSION_NOT_FOUND")) {
@@ -122,7 +122,7 @@ export function toDbError(
   }
   if (msg.startsWith("INVALID_AMOUNT")) {
     // grant_credits() rejects a non-positive amount — a caller bug, surfaced as 400.
-    return dbError(ApiErrorCode.VALIDATION_ERROR, "Invalid credit amount.");
+    return dbError(ApiErrorCode.VALIDATION_ERROR, "Invalid Capycoin amount.");
   }
   if (msg.startsWith("SELF_REFERRAL")) {
     // claim_referral(): referrer == referred.

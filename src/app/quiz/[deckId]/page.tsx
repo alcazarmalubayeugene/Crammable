@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import {
   App,
@@ -267,13 +268,13 @@ export default function QuizPage() {
       <main
         style={{
           minHeight: "100vh",
-          background: "#FAF2E4",
+          background: "var(--bg)",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <p style={{ color: "#8A6E52", fontFamily: "var(--font-dm-sans, sans-serif)" }}>
+        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>
           {msg}
         </p>
       </main>
@@ -285,19 +286,19 @@ export default function QuizPage() {
       <main
         style={{
           minHeight: "100vh",
-          background: "#FAF2E4",
+          background: "var(--bg)",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
           gap: 16,
-          fontFamily: "var(--font-dm-sans, sans-serif)",
+          fontFamily: "var(--font-body, sans-serif)",
         }}
       >
-        <p style={{ color: "#8A6E52", fontSize: 15 }}>{loadError}</p>
+        <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>{loadError}</p>
         <a
           href={Routes.dashboard}
-          style={{ color: "#C47A2E", textDecoration: "none", fontWeight: 600, fontSize: 14 }}
+          style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600, fontSize: "calc(14px * var(--font-scale))" }}
         >
           ← Back to Dashboard
         </a>
@@ -311,15 +312,15 @@ export default function QuizPage() {
     <main
       style={{
         minHeight: "100vh",
-        background: "#FAF2E4",
-        fontFamily: "var(--font-dm-sans, sans-serif)",
+        background: "var(--bg)",
+        fontFamily: "var(--font-body, sans-serif)",
       }}
     >
       {/* ── NAVBAR ── */}
       <nav
         style={{
-          background: "#2E1A0C",
-          borderBottom: "1px solid #4A2512",
+          background: "var(--nav-bg)",
+          borderBottom: "1px solid var(--nav-border)",
           position: "sticky",
           top: 0,
           zIndex: 50,
@@ -327,7 +328,7 @@ export default function QuizPage() {
       >
         <div
           style={{
-            maxWidth: 1200,
+            maxWidth: "100%",
             margin: "0 auto",
             padding: "0 24px",
             height: 64,
@@ -339,18 +340,19 @@ export default function QuizPage() {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <a
               href={Routes.deck(deckId)}
+              className="nav-link"
               style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
             >
-              <span style={{ fontSize: 14, color: "#C49A6C" }}>← Back</span>
+              <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
             </a>
-            <span style={{ color: "#4A2512", margin: "0 8px" }}>|</span>
-            <span style={{ fontSize: 24 }}>🦫</span>
+            <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
+            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
             <span
               style={{
-                fontFamily: "var(--font-lora, serif)",
+                fontFamily: "var(--font-display, serif)",
                 fontWeight: 700,
-                fontSize: 18,
-                color: "#FAF2E4",
+                fontSize: "calc(18px * var(--font-scale))",
+                color: "var(--nav-text)",
               }}
             >
               {App.name}
@@ -358,12 +360,12 @@ export default function QuizPage() {
           </div>
 
           {phase === "quizzing" && (
-            <span style={{ fontSize: 13, color: "#C49A6C" }}>
+            <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>
               {currentIdx + 1} / {total}
             </span>
           )}
           {phase === "setup" && (
-            <span style={{ fontSize: 13, color: "#C49A6C" }}>
+            <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>
               {deck?.title}
             </span>
           )}
@@ -379,16 +381,16 @@ export default function QuizPage() {
             <div style={{ marginBottom: 32 }}>
               <h1
                 style={{
-                  fontFamily: "var(--font-lora, serif)",
-                  fontSize: 26,
+                  fontFamily: "var(--font-display, serif)",
+                  fontSize: "calc(26px * var(--font-scale))",
                   fontWeight: 700,
-                  color: "#2E1A0C",
+                  color: "var(--text)",
                   marginBottom: 6,
                 }}
               >
                 Quiz yourself
               </h1>
-              <p style={{ color: "#8A6E52", fontSize: 14 }}>
+              <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))" }}>
                 {deck?.card_count ?? 0}{" "}
                 {(deck?.card_count ?? 0) === 1 ? "card" : "cards"} · {deck?.title}
               </p>
@@ -397,19 +399,19 @@ export default function QuizPage() {
             {(deck?.card_count ?? 0) === 0 ? (
               <div
                 style={{
-                  background: "#FFFCF7",
-                  border: "1.5px dashed #E0C9A8",
+                  background: "var(--bg-card)",
+                  border: "1.5px dashed var(--border)",
                   borderRadius: 16,
                   padding: "48px 24px",
                   textAlign: "center",
                 }}
               >
-                <p style={{ color: "#8A6E52", fontSize: 15, marginBottom: 16 }}>
+                <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))", marginBottom: 16 }}>
                   This deck has no cards yet.
                 </p>
                 <a
                   href={Routes.deck(deckId)}
-                  style={{ color: "#C47A2E", fontWeight: 600, textDecoration: "none", fontSize: 14 }}
+                  style={{ color: "var(--primary)", fontWeight: 600, textDecoration: "none", fontSize: "calc(14px * var(--font-scale))" }}
                 >
                   ← Back to deck
                 </a>
@@ -418,9 +420,9 @@ export default function QuizPage() {
               <>
                 <p
                   style={{
-                    fontSize: 13,
+                    fontSize: "calc(13px * var(--font-scale))",
                     fontWeight: 600,
-                    color: "#2E1A0C",
+                    color: "var(--text)",
                     marginBottom: 12,
                     textTransform: "uppercase",
                     letterSpacing: "0.06em",
@@ -469,30 +471,30 @@ export default function QuizPage() {
                           display:    "flex",
                           alignItems: "flex-start",
                           gap:        14,
-                          background: active ? "#4A2512" : "#FFFCF7",
-                          border:     active ? "1.5px solid #C47A2E" : "1.5px solid #E0C9A8",
+                          background: active ? "var(--nav-bg)" : "var(--bg-card)",
+                          border:     active ? "1.5px solid var(--primary)" : "1.5px solid var(--border)",
                           borderRadius: 14,
                           padding:    "16px 20px",
                           cursor:     disabled ? "not-allowed" : "pointer",
                           opacity:    disabled ? 0.45 : 1,
                           textAlign:  "left",
                           width:      "100%",
-                          fontFamily: "var(--font-dm-sans, sans-serif)",
+                          fontFamily: "var(--font-body, sans-serif)",
                         }}
                       >
-                        <span style={{ fontSize: 20, lineHeight: 1.4 }}>{icon}</span>
+                        <span style={{ fontSize: "calc(20px * var(--font-scale))", lineHeight: 1.4 }}>{icon}</span>
                         <div>
                           <div
                             style={{
-                              fontSize:    15,
+                              fontSize: "calc(15px * var(--font-scale))",
                               fontWeight:  600,
-                              color:       active ? "#FAF2E4" : "#2E1A0C",
+                              color:       active ? "var(--nav-text)" : "var(--text)",
                               marginBottom: 2,
                             }}
                           >
                             {label}
                           </div>
-                          <div style={{ fontSize: 13, color: active ? "#C49A6C" : "#8A6E52" }}>
+                          <div style={{ fontSize: "calc(13px * var(--font-scale))", color: active ? "var(--text-faint)" : "var(--text-muted)" }}>
                             {disabled ? disabledNote : desc}
                           </div>
                         </div>
@@ -500,8 +502,8 @@ export default function QuizPage() {
                           <span
                             style={{
                               marginLeft: "auto",
-                              fontSize:   16,
-                              color:      "#C47A2E",
+                              fontSize: "calc(16px * var(--font-scale))",
+                              color: "var(--primary)",
                               alignSelf:  "center",
                             }}
                           >
@@ -518,22 +520,22 @@ export default function QuizPage() {
                     type="button"
                     onClick={startQuiz}
                     style={{
-                      background:  "#C47A2E",
-                      color:       "#FAF2E4",
+                      background: "var(--primary)",
+                      color: "var(--nav-text)",
                       border:      "none",
                       borderRadius: 10,
                       padding:     "13px 40px",
-                      fontSize:    15,
+                      fontSize: "calc(15px * var(--font-scale))",
                       fontWeight:  600,
                       cursor:      "pointer",
-                      fontFamily:  "var(--font-dm-sans, sans-serif)",
+                      fontFamily:  "var(--font-body, sans-serif)",
                     }}
                   >
                     🎯 Start Quiz
                   </button>
                 </div>
 
-                <p style={{ marginTop: 20, fontSize: 12, color: "#8A6E52", textAlign: "center", lineHeight: 1.6 }}>
+                <p style={{ marginTop: 20, fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", textAlign: "center", lineHeight: 1.6 }}>
                   {UIMessages.aiDisclaimer}
                 </p>
               </>
@@ -548,7 +550,7 @@ export default function QuizPage() {
             <div
               style={{
                 height:       4,
-                background:   "#E0C9A8",
+                background:   "var(--border)",
                 borderRadius: 4,
                 marginBottom: 28,
                 overflow:     "hidden",
@@ -557,7 +559,7 @@ export default function QuizPage() {
               <div
                 style={{
                   height:       "100%",
-                  background:   "#C47A2E",
+                  background: "var(--primary)",
                   borderRadius: 4,
                   width:        `${progressPct}%`,
                   transition:   "width 0.35s",
@@ -568,8 +570,8 @@ export default function QuizPage() {
             {/* Question card */}
             <div
               style={{
-                background:   "#FFFCF7",
-                border:       "1.5px solid #E0C9A8",
+                background: "var(--bg-card)",
+                border: "1.5px solid var(--border)",
                 borderRadius: 20,
                 padding:      "32px",
                 marginBottom: 20,
@@ -577,10 +579,10 @@ export default function QuizPage() {
             >
               <div
                 style={{
-                  fontSize:      11,
+                  fontSize: "calc(11px * var(--font-scale))",
                   fontWeight:    600,
                   letterSpacing: "0.08em",
-                  color:         "#C49A6C",
+                  color: "var(--text-faint)",
                   textTransform: "uppercase",
                   marginBottom:  14,
                 }}
@@ -591,10 +593,10 @@ export default function QuizPage() {
 
               <p
                 style={{
-                  fontFamily:  "var(--font-lora, serif)",
-                  fontSize:    20,
+                  fontFamily:  "var(--font-display, serif)",
+                  fontSize: "calc(20px * var(--font-scale))",
                   fontWeight:  600,
-                  color:       "#2E1A0C",
+                  color: "var(--text)",
                   lineHeight:  1.5,
                   margin:      0,
                 }}
@@ -608,18 +610,18 @@ export default function QuizPage() {
               <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 20 }}>
                 {(q.options ?? []).map((option) => {
                   const isSelected = selectedOption === option;
-                  let bg     = "#FFFCF7";
-                  let border = "1.5px solid #E0C9A8";
-                  let color  = "#2E1A0C";
+                  let bg     = "var(--bg-card)";
+                  let border = "1.5px solid var(--border)";
+                  let color  = "var(--text)";
 
                   if (hasAnswered) {
                     if (option === q.correctAnswer) {
-                      bg = "#EDF5E4"; border = "1.5px solid #5C7A35"; color = "#3A5020";
+                      bg = "var(--success-bg)"; border = "1.5px solid var(--success)"; color = "var(--success-dark)";
                     } else if (isSelected && !isCorrect) {
-                      bg = "#FEF2F2"; border = "1.5px solid #EF4444"; color = "#991B1B";
+                      bg = "var(--error-bg)"; border = "1.5px solid var(--error)"; color = "var(--error-dark)";
                     }
                   } else if (isSelected) {
-                    bg = "#4A2512"; border = "1.5px solid #C47A2E"; color = "#FAF2E4";
+                    bg = "var(--nav-bg)"; border = "1.5px solid var(--primary)"; color = "var(--nav-text)";
                   }
 
                   return (
@@ -639,18 +641,18 @@ export default function QuizPage() {
                         cursor:     hasAnswered ? "default" : "pointer",
                         textAlign:  "left",
                         width:      "100%",
-                        fontFamily: "var(--font-dm-sans, sans-serif)",
-                        fontSize:   14,
+                        fontFamily: "var(--font-body, sans-serif)",
+                        fontSize: "calc(14px * var(--font-scale))",
                         color,
                         fontWeight: isSelected ? 600 : 400,
                         transition: "all 0.15s",
                       }}
                     >
                       {hasAnswered && option === q.correctAnswer && (
-                        <span style={{ fontSize: 16 }}>✓</span>
+                        <span style={{ fontSize: "calc(16px * var(--font-scale))" }}>✓</span>
                       )}
                       {hasAnswered && isSelected && !isCorrect && option !== q.correctAnswer && (
-                        <span style={{ fontSize: 16 }}>✗</span>
+                        <span style={{ fontSize: "calc(16px * var(--font-scale))" }}>✗</span>
                       )}
                       {option}
                     </button>
@@ -677,13 +679,13 @@ export default function QuizPage() {
                   style={{
                     width:       "100%",
                     boxSizing:   "border-box",
-                    background:  hasAnswered ? "#F5F0EA" : "#FFFCF7",
-                    border:      "1.5px solid #E0C9A8",
+                    background:  hasAnswered ? "var(--bg-subtle)" : "var(--bg-card)",
+                    border: "1.5px solid var(--border)",
                     borderRadius: 12,
                     padding:     "14px 16px",
-                    fontSize:    14,
-                    color:       "#2E1A0C",
-                    fontFamily:  "var(--font-dm-sans, sans-serif)",
+                    fontSize: "calc(14px * var(--font-scale))",
+                    color: "var(--text)",
+                    fontFamily:  "var(--font-body, sans-serif)",
                     resize:      "vertical",
                     outline:     "none",
                     lineHeight:  1.5,
@@ -694,17 +696,17 @@ export default function QuizPage() {
                   <div
                     style={{
                       marginTop:    12,
-                      background:   isCorrect ? "#EDF5E4" : "#FFFCF7",
-                      border:       `1.5px solid ${isCorrect ? "#5C7A35" : "#E0C9A8"}`,
+                      background:   isCorrect ? "var(--success-bg)" : "var(--bg-card)",
+                      border:       `1.5px solid ${isCorrect ? "var(--success)" : "var(--border)"}`,
                       borderRadius: 10,
                       padding:      "12px 16px",
                     }}
                   >
                     <p
                       style={{
-                        fontSize:      12,
+                        fontSize: "calc(12px * var(--font-scale))",
                         fontWeight:    600,
-                        color:         "#8A6E52",
+                        color: "var(--text-muted)",
                         textTransform: "uppercase",
                         letterSpacing: "0.06em",
                         margin:        "0 0 4px",
@@ -714,11 +716,11 @@ export default function QuizPage() {
                     </p>
                     <p
                       style={{
-                        fontSize:   14,
-                        color:      "#2E1A0C",
+                        fontSize: "calc(14px * var(--font-scale))",
+                        color: "var(--text)",
                         lineHeight: 1.5,
                         margin:     0,
-                        fontFamily: "var(--font-lora, serif)",
+                        fontFamily: "var(--font-display, serif)",
                       }}
                     >
                       {q.correctAnswer}
@@ -728,31 +730,39 @@ export default function QuizPage() {
               </div>
             )}
 
-            {/* Feedback banner */}
+            {/* Feedback banner — the right/wrong call is already made by the option
+                highlighting above; this banner stays neutral so it reads as Capy's
+                tip, not a second red alarm stacked on top of the wrong-answer box. */}
             {hasAnswered && (
               <div
                 style={{
-                  background:   isCorrect ? "#EDF5E4" : "#FEF2F2",
-                  border:       `1.5px solid ${isCorrect ? "#5C7A35" : "#EF4444"}`,
+                  background:   isCorrect ? "var(--success-bg)" : "var(--bg-subtle)",
+                  border:       `1.5px solid ${isCorrect ? "var(--success)" : "var(--border)"}`,
                   borderRadius: 12,
                   padding:      "14px 18px",
                   marginBottom: 20,
                   display:      "flex",
-                  alignItems:   "center",
-                  gap:          10,
+                  alignItems:   "flex-start",
+                  gap:          12,
                 }}
               >
-                <span style={{ fontSize: 18 }}>{isCorrect ? "✅" : "❌"}</span>
-                <p
-                  style={{
-                    fontSize:   14,
-                    fontWeight: 600,
-                    color:      isCorrect ? "#3A5020" : "#991B1B",
-                    margin:     0,
-                  }}
-                >
-                  {isCorrect ? "Correct!" : "Not quite."}
-                </p>
+                {isCorrect ? (
+                  <span style={{ fontSize: "calc(18px * var(--font-scale))" }}>✅</span>
+                ) : (
+                  <Image src="/capy/teaching-capy.png" alt="" width={48} height={48} style={{ borderRadius: "50%", flexShrink: 0, objectFit: "cover" }} />
+                )}
+                <div>
+                  <p
+                    style={{
+                      fontSize: "calc(14px * var(--font-scale))",
+                      fontWeight: 600,
+                      color:      isCorrect ? "var(--success-dark)" : "var(--text-muted)",
+                      margin:     0,
+                    }}
+                  >
+                    {isCorrect ? "Correct!" : "Not quite — Capy's got you. Here's the right answer:"}
+                  </p>
+                </div>
               </div>
             )}
 
@@ -768,12 +778,12 @@ export default function QuizPage() {
                       : !typedAnswer.trim()
                   }
                   style={{
-                    background:  "#C47A2E",
-                    color:       "#FAF2E4",
+                    background: "var(--primary)",
+                    color: "var(--nav-text)",
                     border:      "none",
                     borderRadius: 10,
                     padding:     "12px 28px",
-                    fontSize:    14,
+                    fontSize: "calc(14px * var(--font-scale))",
                     fontWeight:  600,
                     cursor:
                       (q.quizType === QuizType.MULTIPLE_CHOICE
@@ -787,7 +797,7 @@ export default function QuizPage() {
                         : !typedAnswer.trim())
                         ? 0.45
                         : 1,
-                    fontFamily: "var(--font-dm-sans, sans-serif)",
+                    fontFamily: "var(--font-body, sans-serif)",
                   }}
                 >
                   Check Answer
@@ -797,15 +807,15 @@ export default function QuizPage() {
                   type="button"
                   onClick={() => nextQuestion(answers)}
                   style={{
-                    background:  "#C47A2E",
-                    color:       "#FAF2E4",
+                    background: "var(--primary)",
+                    color: "var(--nav-text)",
                     border:      "none",
                     borderRadius: 10,
                     padding:     "12px 28px",
-                    fontSize:    14,
+                    fontSize: "calc(14px * var(--font-scale))",
                     fontWeight:  600,
                     cursor:      "pointer",
-                    fontFamily:  "var(--font-dm-sans, sans-serif)",
+                    fontFamily:  "var(--font-body, sans-serif)",
                   }}
                 >
                   {currentIdx === total - 1 ? "Finish Quiz" : "Next →"}

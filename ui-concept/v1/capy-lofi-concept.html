@@ -1,0 +1,1083 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Crammable — "Capy Calm" Concept</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=EB+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Fraunces:ital,opsz,wght@0,9..144,600;0,9..144,700;1,9..144,500;1,9..144,600&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Lora:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Nunito:wght@400;500;600;700;800&family=Playfair+Display:ital,wght@0,700;0,800;1,700&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --font-display: 'Lora', serif;
+    --font-body: 'DM Sans', sans-serif;
+
+    /* Theme: Riverbank (default) */
+    --cream: #FAF2E4;
+    --paper: #FFFCF7;
+    --sand: #E0C9A8;
+    --fur: #C47A2E;
+    --ink: #2E1A0C;
+    --taupe: #7A5E42;
+    --yuzu: #E8A93D;
+    --clay: #B5402E;
+    --moss: #4D6B2D;
+    --river: #3E7C8A;
+    --night: #2B3A55;
+    --night-deep: #1E2940;
+    --lamp: #FFD89B;
+    --capy-fur: #C9A876;
+    --nav-bg: #2E1A0C;
+    --nav-text: #FFFCF7;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    font-family: var(--font-body);
+    background: var(--cream);
+    color: var(--ink);
+    line-height: 1.6;
+    transition: background 0.35s ease, color 0.35s ease;
+  }
+
+  html { scroll-behavior: smooth; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 32px 24px 96px; }
+
+  /* ---------- Shared ---------- */
+  .btn {
+    display: inline-block; border: none; padding: 12px 26px; border-radius: 999px;
+    font-weight: 600; font-size: 0.95rem; font-family: var(--font-body);
+    cursor: pointer; text-decoration: none;
+    background: var(--fur); color: var(--paper);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  }
+  .btn:hover { transform: translateY(-3px) scale(1.02); box-shadow: 0 8px 18px rgba(46,26,12,0.2); }
+  .btn:active { transform: translateY(-1px) scale(0.98); }
+  .btn.secondary { background: transparent; border: 2px solid var(--sand); color: var(--ink); box-shadow: none; }
+  .btn.secondary:hover { background: var(--sand); box-shadow: none; }
+
+  /* ---------- Nav ---------- */
+  .gizmo-nav {
+    position: sticky; top: 0; z-index: 50;
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 40px; background: var(--nav-bg); color: var(--nav-text);
+    box-shadow: 0 2px 14px rgba(0,0,0,0.18);
+    transition: background 0.35s ease;
+  }
+  .gizmo-nav .logo {
+    font-family: var(--font-display); font-weight: 700; font-size: 1.15rem;
+    letter-spacing: -0.01em; color: var(--nav-text);
+    transition: color 0.35s ease;
+  }
+  .gizmo-nav .actions { display: flex; align-items: center; gap: 20px; }
+  .gizmo-nav .login {
+    color: rgba(255,252,247,0.65); font-size: 0.9rem; cursor: pointer;
+    transition: color 0.2s ease; font-weight: 500;
+  }
+  .gizmo-nav .login:hover { color: var(--nav-text); }
+  .gizmo-nav .btn { padding: 9px 20px; font-size: 0.88rem; background: var(--fur); color: var(--paper); box-shadow: none; }
+  .gizmo-nav .btn:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(196,122,46,0.3); }
+
+  /* ---------- Keyframes ---------- */
+  @keyframes heroFadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes capyBob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+  @keyframes capyFadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+  /* ---------- Hero ---------- */
+  .gizmo-hero {
+    position: relative; padding: 84px 32px 64px;
+    background: var(--cream); color: var(--ink); overflow: hidden;
+    transition: background 0.35s ease;
+  }
+  .gizmo-hero::before {
+    content: ''; position: absolute; top: -80px; right: 8%;
+    width: 500px; height: 500px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(232,169,61,0.08), transparent 65%);
+    pointer-events: none;
+  }
+  .gizmo-hero .hero-inner {
+    position: relative; z-index: 1; max-width: 1100px; margin: 0 auto;
+    display: flex; align-items: center; gap: 56px; flex-wrap: wrap;
+  }
+  .gizmo-hero .hero-text { flex: 1 1 400px; max-width: 540px; }
+  .gizmo-hero .hero-visual { flex: 1 1 300px; max-width: 420px; display: flex; align-items: center; justify-content: center; }
+  @media (max-width: 860px) {
+    .gizmo-hero .hero-inner { flex-direction: column-reverse; text-align: center; }
+    .gizmo-hero .hero-text { max-width: 100%; }
+    .gizmo-hero .cta-row { justify-content: center; }
+  }
+  .gizmo-hero .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--sand); color: var(--ink);
+    font-size: 0.82rem; font-weight: 600; padding: 6px 16px; border-radius: 999px;
+    margin-bottom: 20px; letter-spacing: 0.01em; font-family: var(--font-body);
+    animation: heroFadeUp 0.6s ease both;
+  }
+  .gizmo-hero h1 {
+    font-family: var(--font-display); font-weight: 700; color: var(--ink);
+    font-size: clamp(2.1rem, 4.8vw, 3.4rem); line-height: 1.15; margin: 0 0 18px;
+    letter-spacing: -0.01em; animation: heroFadeUp 0.7s ease 0.1s both;
+  }
+  .pop { color: var(--fur); font-family: 'Fraunces', serif; font-style: italic; font-weight: 600; }
+  .gizmo-hero p.tagline {
+    color: var(--taupe); font-size: 1.05rem; margin: 0 0 32px; line-height: 1.65;
+    animation: heroFadeUp 0.7s ease 0.2s both;
+  }
+  .gizmo-hero .cta-row { display: flex; gap: 12px; flex-wrap: wrap; animation: heroFadeUp 0.7s ease 0.3s both; }
+  .gizmo-hero .cta-row .btn {
+    font-size: 1rem; padding: 14px 28px; font-weight: 600;
+    background: var(--fur); color: var(--paper); box-shadow: 0 6px 20px rgba(196,122,46,0.28);
+  }
+  .gizmo-hero .cta-row .btn.secondary { background: transparent; border: 2px solid var(--sand); color: var(--ink); box-shadow: none; }
+  .gizmo-hero .cta-row .btn.secondary:hover { background: var(--sand); transform: translateY(-2px); }
+  .capy-main {
+    width: 100%; max-width: 380px;
+    animation: capyBob 4.5s ease-in-out infinite, capyFadeIn 0.8s ease 0.4s both;
+    filter: drop-shadow(0 16px 40px rgba(196,122,46,0.22));
+  }
+
+  /* ---------- Reduced motion ---------- */
+  @media (prefers-reduced-motion: reduce) {
+    section.block { opacity: 1 !important; transform: none !important; transition: none !important; }
+    .capy-main, .logo-badge { animation: none !important; opacity: 1 !important; }
+    .gizmo-hero h1, .gizmo-hero .badge, .gizmo-hero p.tagline, .gizmo-hero .cta-row { animation: none; opacity: 1; }
+  }
+
+  /* ---------- Content sections ---------- */
+  header.intro { text-align: center; margin-bottom: 48px; }
+  header.intro h1 { font-family: var(--font-display); font-size: clamp(1.7rem, 3.5vw, 2.2rem); margin-bottom: 12px; }
+  header.intro p { color: var(--taupe); font-size: 1rem; max-width: 640px; margin: 0 auto; }
+
+  .logo-badge { width: 48px; height: 48px; vertical-align: middle; margin-right: 8px; animation: capyBob 4.5s ease-in-out infinite; }
+
+  section.block { margin-bottom: 56px; opacity: 0; transform: translateY(28px); transition: opacity 0.7s ease, transform 0.7s ease; }
+  section.block.in-view { opacity: 1; transform: translateY(0); }
+  section.block h2 {
+    font-family: var(--font-display); font-size: 1.35rem; font-weight: 600;
+    border-bottom: 2px solid var(--sand); padding-bottom: 8px; margin-bottom: 20px;
+  }
+  section.block .note { color: var(--taupe); font-size: 0.95rem; margin-bottom: 16px; }
+
+  /* ---------- Palette ---------- */
+  .palette { display: flex; flex-wrap: wrap; gap: 12px; }
+  .swatch {
+    width: 120px; border-radius: 14px; overflow: hidden; border: 1.5px solid var(--sand);
+    background: var(--paper); font-size: 0.78rem;
+    transition: transform 0.25s ease, box-shadow 0.25s ease; cursor: default;
+  }
+  .swatch:hover { transform: translateY(-4px) scale(1.04); box-shadow: 0 8px 16px rgba(46,26,12,0.15); }
+  .swatch .chip { height: 60px; }
+  .swatch .label { padding: 8px; }
+  .swatch .label b { display: block; }
+
+  /* ---------- Dashboard mockup ---------- */
+  .app-shell { border: 1.5px solid var(--sand); border-radius: 18px; overflow: hidden; box-shadow: 0 6px 24px rgba(46,26,12,0.08); background: var(--cream); }
+  .app-nav { background: var(--nav-bg); color: var(--nav-text); display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; transition: background 0.35s ease; }
+  .app-nav .logo { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-weight: 600; }
+  .app-nav .logo .dot { width: 26px; height: 26px; border-radius: 50%; background: var(--capy-fur); display: inline-block; }
+  .app-nav .right { display: flex; align-items: center; gap: 12px; font-size: 0.85rem; }
+  .app-nav .right span { transition: opacity 0.2s ease; cursor: pointer; }
+  .app-nav .right span:hover { opacity: 0.65; }
+  .avatar-wrap { position: relative; display: inline-flex; align-items: center; }
+  .avatar-pic { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; border: 2px solid var(--yuzu); cursor: pointer; transition: transform 0.2s ease, box-shadow 0.2s ease; }
+  .avatar-pic:hover { transform: scale(1.1); box-shadow: 0 0 0 3px rgba(232,169,61,0.35); }
+  .avatar-tooltip { position: absolute; top: 44px; right: 0; background: var(--nav-bg); border: 1.5px solid rgba(255,252,247,0.12); border-radius: 14px; padding: 12px; display: none; flex-direction: column; gap: 8px; min-width: 220px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); z-index: 99; }
+  .avatar-tooltip .tip-label { font-size: 0.62rem; font-weight: 700; letter-spacing: 0.1em; color: rgba(255,252,247,0.35); margin-bottom: 4px; }
+  .avatar-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .avatar-grid img { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid transparent; cursor: pointer; transition: transform 0.18s ease, border-color 0.18s ease; }
+  .avatar-grid img:hover { transform: scale(1.15); border-color: var(--yuzu); }
+  .avatar-grid img.selected { border-color: var(--yuzu); }
+  .avatar-wrap:hover .avatar-tooltip { display: flex; }
+  .pill { background: rgba(0,0,0,0.28); border: 1.5px solid var(--yuzu); color: var(--nav-text); border-radius: 999px; padding: 4px 12px; font-weight: 600; transition: transform 0.2s ease; display: inline-flex; align-items: center; gap: 5px; }
+  .pill:hover { transform: scale(1.06); }
+  .badge-pro { background: var(--fur); color: var(--paper); border-radius: 999px; padding: 4px 10px; font-size: 0.78rem; font-weight: 600; transition: transform 0.2s ease; }
+  .badge-pro:hover { transform: scale(1.06); }
+
+  .app-body { padding: 24px; }
+  .greeting { font-family: var(--font-display); font-size: 1.25rem; margin-bottom: 2px; }
+  .greeting-sub { color: var(--taupe); font-size: 0.95rem; margin-bottom: 0; }
+
+  .deck-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-top: 18px; }
+  .deck-card { background: var(--paper); border: 1.5px solid var(--sand); border-radius: 14px; padding: 16px; transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease; }
+  .deck-card:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(46,26,12,0.12); border-color: var(--fur); }
+  .deck-card h4 { font-family: var(--font-display); margin: 0 0 6px; font-size: 1.05rem; }
+  .deck-card .meta { color: var(--taupe); font-size: 0.8rem; margin-bottom: 12px; }
+  .deck-card .btn { padding: 6px 16px; font-size: 0.85rem; }
+  .deck-card.new { border: 1.5px dashed var(--sand); display: flex; align-items: center; justify-content: center; color: var(--taupe); font-weight: 600; cursor: pointer; min-height: 96px; transition: transform 0.25s ease, border-color 0.25s ease, color 0.25s ease; }
+  .deck-card.new:hover { border-color: var(--fur); color: var(--fur); transform: translateY(-4px); }
+
+  /* ---------- Comparison ---------- */
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .compare .col { border: 1.5px solid var(--sand); border-radius: 14px; padding: 18px; background: var(--paper); transition: transform 0.25s ease, box-shadow 0.25s ease; }
+  .compare .col:hover { transform: translateY(-4px); box-shadow: 0 10px 20px rgba(46,26,12,0.12); }
+  .compare .col h3 { margin-top: 0; font-family: var(--font-display); font-size: 1.05rem; }
+  .compare .col.keep { border-color: var(--moss); }
+  .compare .col.skip { border-color: var(--clay); opacity: 0.85; }
+  .compare ul { padding-left: 20px; margin: 8px 0 0; font-size: 0.92rem; }
+  .tag { font-size: 0.75rem; font-weight: 700; border-radius: 999px; padding: 2px 10px; }
+  .tag.keep { background: var(--moss); color: var(--paper); }
+  .tag.skip { background: var(--clay); color: var(--paper); }
+
+  footer { text-align: center; color: var(--taupe); font-size: 0.85rem; margin-top: 40px; }
+
+  /* ---------- Interactive: count buttons ---------- */
+  .count-btn { border-radius: 999px; padding: 4px 12px; font-size: 0.82rem; font-weight: 600; cursor: pointer; background: var(--sand); color: var(--ink); transition: background 0.18s ease, color 0.18s ease, transform 0.15s ease; }
+  .count-btn.active { background: var(--fur); color: var(--paper); }
+  .count-btn:hover { transform: scale(1.08); }
+
+  /* ---------- Interactive: quiz options ---------- */
+  .quiz-option { border: 1.5px solid var(--sand); border-radius: 10px; padding: 12px 16px; cursor: pointer; font-size: 0.93rem; transition: border-color 0.18s ease, background 0.18s ease; }
+  .quiz-option:hover { border-color: var(--fur); background: rgba(196,122,46,0.05); }
+  .quiz-option.selected { border-color: var(--fur); background: rgba(196,122,46,0.08); font-weight: 600; }
+  .quiz-option.correct { border-color: var(--moss); background: rgba(77,107,45,0.1); color: var(--moss); font-weight: 600; }
+  .quiz-option.wrong { border-color: var(--clay); background: rgba(181,64,46,0.08); color: var(--clay); }
+
+  /* ---------- Interactive: flashcard flip ---------- */
+  .flip-card { cursor: pointer; }
+  .flip-card .card-front, .flip-card .card-back { transition: opacity 0.3s ease; }
+  .flip-card .card-back { display: none; }
+  .flip-card.flipped .card-front { display: none; }
+  .flip-card.flipped .card-back { display: flex; }
+
+  /* ---------- Generation steps ---------- */
+  .gen-step { display:flex; align-items:center; gap:10px; font-size:0.88rem; padding:9px 14px; border-radius:10px; transition: all 0.3s ease; }
+  .gen-step.done { color:var(--moss); background:rgba(77,107,45,0.09); }
+  .gen-step.active { color:var(--fur); background:rgba(196,122,46,0.09); font-weight:600; }
+  .gen-step.pending { color:var(--taupe); opacity:0.5; }
+  @keyframes pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.4;transform:scale(0.85);} }
+  .pulse-dot { width:8px; height:8px; border-radius:50%; background:var(--fur); display:inline-block; animation:pulse 1.1s ease-in-out infinite; flex-shrink:0; }
+  .gen-progress-bar { height:100%; background: linear-gradient(90deg, var(--fur), var(--yuzu)); border-radius:999px; width:0%; transition: width 2.5s cubic-bezier(0.4,0,0.2,1); }
+
+  /* ---------- Spin icon ---------- */
+  .spin-icon { display:inline-block; transition: transform 0.4s ease; }
+  .btn:hover .spin-icon { transform: rotate(360deg); }
+
+  /* ---------- Quiz results ---------- */
+  .score-ring-fill { transition: stroke-dasharray 1.3s cubic-bezier(0.4,0,0.2,1); }
+
+  /* ---------- Style Picker ---------- */
+  .style-picker {
+    position: fixed; bottom: 24px; left: 24px; z-index: 200;
+    background: var(--nav-bg); border-radius: 16px; padding: 16px 18px;
+    box-shadow: 0 8px 32px rgba(0,0,0,0.35);
+    display: flex; flex-direction: column; gap: 16px;
+    min-width: 190px; transition: background 0.35s ease, padding 0.25s ease, gap 0.25s ease;
+  }
+  .picker-toggle {
+    background: none; border: none; color: rgba(255,252,247,0.45); font-size: 0.62rem;
+    font-weight: 700; letter-spacing: 0.12em; cursor: pointer; padding: 0;
+    display: flex; align-items: center; justify-content: space-between; width: 100%;
+    font-family: var(--font-body); transition: color 0.2s ease;
+  }
+  .picker-toggle:hover { color: rgba(255,252,247,0.85); }
+  .picker-toggle .toggle-icon { font-style: normal; font-size: 1rem; line-height: 1; font-weight: 400; }
+  .style-picker.collapsed { gap: 0; padding: 10px 16px; }
+  .style-picker.collapsed .picker-section { display: none; }
+  .picker-section { display: flex; flex-direction: column; gap: 5px; }
+  .picker-label {
+    font-size: 0.62rem; font-weight: 700; letter-spacing: 0.12em;
+    color: rgba(255,252,247,0.35); margin-bottom: 4px; font-family: var(--font-body);
+  }
+  .font-btn, .theme-btn {
+    background: transparent; border: 1.5px solid rgba(255,252,247,0.1);
+    color: rgba(255,252,247,0.7); border-radius: 8px; padding: 7px 11px;
+    font-size: 0.8rem; cursor: pointer; text-align: left;
+    transition: all 0.18s ease; font-family: var(--font-body); line-height: 1;
+  }
+  .font-btn:hover, .theme-btn:hover { background: rgba(255,252,247,0.08); color: rgba(255,252,247,0.95); border-color: rgba(255,252,247,0.2); }
+  .font-btn.active, .theme-btn.active { background: var(--fur); border-color: var(--fur); color: #fff; font-weight: 600; }
+  .theme-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 7px; vertical-align: middle; }
+
+  /* ---------- Image placeholder ---------- */
+  .img-placeholder {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; border: 2px dashed var(--sand); border-radius: 16px;
+    background: var(--paper); padding: 16px 12px; text-align: center;
+    color: var(--taupe); font-size: 0.72rem; font-weight: 600; line-height: 1.4;
+  }
+  .img-placeholder .ph-emoji { font-size: 2rem; }
+  .img-placeholder .ph-name { color: var(--fur); font-family: 'Fraunces', serif; font-style: italic; }
+  .img-placeholder .ph-prompt { font-size: 0.62rem; opacity: 0.6; font-weight: 400; }
+
+  /* Teacher Capy speech bubble */
+  .teacher-bubble {
+    background: var(--paper); border: 1.5px solid var(--sand); border-radius: 14px;
+    padding: 12px 14px; font-size: 0.82rem; line-height: 1.55; color: var(--ink);
+    position: relative; max-width: 180px;
+  }
+  .teacher-bubble::after {
+    content: ''; position: absolute; bottom: -10px; left: 50%; transform: translateX(-50%);
+    border-left: 10px solid transparent; border-right: 10px solid transparent;
+    border-top: 10px solid var(--sand);
+  }
+
+  /* ---------- Mobile ---------- */
+  @media (max-width: 640px) {
+    .wrap { padding: 20px 14px 80px; }
+
+    /* Main landing nav */
+    .gizmo-nav { padding: 12px 18px; }
+    .gizmo-nav .login { display: none; }
+    .gizmo-nav .btn { padding: 8px 16px; font-size: 0.82rem; }
+
+    /* Hero */
+    .gizmo-hero { padding: 52px 18px 44px; }
+    .gizmo-hero h1 { font-size: clamp(1.7rem, 7vw, 2.4rem); }
+    .gizmo-hero p.tagline { font-size: 0.95rem; }
+    .gizmo-hero .cta-row .btn { font-size: 0.9rem; padding: 12px 22px; }
+
+    /* Intro header */
+    header.intro h1 { font-size: 1.3rem; }
+
+    /* App shell nav inside sections */
+    .app-nav { padding: 10px 14px; flex-wrap: wrap; gap: 8px; }
+    .app-nav .right { gap: 8px; font-size: 0.78rem; }
+    .pill { font-size: 0.78rem; padding: 3px 10px; }
+    .badge-pro { font-size: 0.72rem; padding: 3px 8px; }
+    .app-body { padding: 18px 14px; }
+    .greeting { font-size: 1.05rem; }
+
+    /* Deck grid */
+    .deck-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* Compare — stack */
+    .compare { grid-template-columns: 1fr; }
+
+    /* Section 9 avatar image */
+    section.block img[src="ALL Selection.png"] { width: 100% !important; max-width: 280px; }
+
+    /* Section 10 grid */
+    .style-picker ~ .wrap section:last-of-type > div { grid-template-columns: 1fr !important; }
+
+    /* Flashcard */
+    .flip-card { padding: 32px 20px !important; }
+
+    /* Style picker — bottom sheet on mobile */
+    .style-picker {
+      bottom: 0; left: 0; right: 0; border-radius: 16px 16px 0 0;
+      min-width: unset; flex-direction: column; padding: 14px 16px 20px;
+    }
+    .style-picker.collapsed { padding: 10px 16px 14px; }
+    .picker-section { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+    .picker-label { width: 100%; margin-bottom: 2px; }
+    .font-btn, .theme-btn { font-size: 0.74rem; padding: 6px 10px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Style Picker Panel -->
+<div class="style-picker" id="style-picker">
+  <button class="picker-toggle" id="picker-toggle" aria-label="Minimize style picker">
+    STYLE PICKER <span class="toggle-icon" id="toggle-icon" title="Minimize">−</span>
+  </button>
+  <div class="picker-section">
+    <div class="picker-label">FONT</div>
+    <button class="font-btn active" data-display="'Lora', serif" data-body="'DM Sans', sans-serif">Lora · DM Sans (Current)</button>
+    <button class="font-btn" data-display="'Playfair Display', serif" data-body="'DM Sans', sans-serif">Playfair · DM Sans</button>
+    <button class="font-btn" data-display="'Fraunces', serif" data-body="'Nunito', sans-serif">Fraunces · Nunito</button>
+    <button class="font-btn" data-display="'EB Garamond', serif" data-body="'Plus Jakarta Sans', sans-serif">EB Garamond · Jakarta</button>
+    <button class="font-btn" data-display="'Libre Baskerville', serif" data-body="'Nunito', sans-serif">Baskerville · Nunito</button>
+  </div>
+  <div class="picker-section">
+    <div class="picker-label">THEME</div>
+    <button class="theme-btn active" data-theme="current"><span class="theme-dot" style="background:#C47A2E;"></span>Current Theme</button>
+    <button class="theme-btn" data-theme="nightlamp"><span class="theme-dot" style="background:#E8A93D;"></span>Night Lamp</button>
+    <button class="theme-btn" data-theme="sunset"><span class="theme-dot" style="background:#C44E28;"></span>Sunset</button>
+  </div>
+</div>
+
+<nav class="gizmo-nav">
+  <div class="logo">Crammable</div>
+  <div class="actions">
+    <span class="login">Log in</span>
+    <a class="btn">Get Started Free</a>
+  </div>
+</nav>
+
+<header class="gizmo-hero">
+  <div class="hero-inner">
+    <div class="hero-text">
+      <span class="badge">✦ concept · for co-founder review</span>
+      <h1>Kaya mo 'yan. <span class="pop">Capy's</span> got your notes.</h1>
+      <p class="tagline">Upload your PDF — Capy turns it into flashcards and quizzes while you breathe. One more chapter. No panic, just progress.</p>
+      <div class="cta-row">
+        <a class="btn">Start cramming</a>
+        <a class="btn secondary">See how it works</a>
+      </div>
+    </div>
+    <div class="hero-visual">
+      <img class="capy-main" src="capy-hero.png" alt="Capy the capybara, wearing glasses, writing in a journal">
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <header class="intro">
+    <h1 style="margin-top:0;"><img class="logo-badge" src="capycoin.png" alt="Capy logo"> Crammable — "Capy Calm" Concept</h1>
+    <p>A warm, illustration-led UI direction for Crammable — anchored by the Capy mascot, the existing warm palette, and scroll-triggered motion polish. Rough concept for co-founder review only.</p>
+  </header>
+
+  <!-- Empty State -->
+  <section class="block">
+    <h2>1. First visit — empty state</h2>
+    <p class="note">A brand new user's first dashboard. No decks yet — Capy steps in as a calm guide, not a feature list. This is the first impression.</p>
+    <p class="note">(This is just a concept, I ran out of tokens lmfao)</p>
+    <div class="app-shell">
+      <div class="app-nav">
+        <div class="logo">Crammable</div>
+        <div class="right">
+          <span class="pill"><img src="capycoin.png" style="height:18px;width:18px;"> 12 credits</span>
+          <span>Settings</span>
+          <div class="avatar-wrap">
+            <img class="avatar-pic" src="Chosen selection.png" alt="Your avatar">
+            <div class="avatar-tooltip">
+              <div class="tip-label">CHOOSE YOUR CAPY</div>
+              <div class="avatar-grid">
+                <img src="Chosen selection.png" class="selected" data-filter="" data-label="Happy" title="Happy">
+                <img src="Chosen selection.png" data-filter="sepia(0.4) brightness(0.8) saturate(1.3)" data-label="Sleepy" title="Sleepy">
+                <img src="Chosen selection.png" data-filter="hue-rotate(22deg) brightness(0.88)" data-label="Grad Cap" title="Grad Cap">
+                <img src="Chosen selection.png" data-filter="hue-rotate(-20deg) saturate(1.6) brightness(0.92)" data-label="Beanie" title="Beanie">
+                <img src="Chosen selection.png" data-filter="brightness(0.7) contrast(1.18) saturate(0.85)" data-label="Headphones" title="Headphones">
+              </div>
+              <div class="avatar-name-label" style="font-size:0.78rem;color:rgba(255,252,247,0.6);margin-top:6px;font-weight:600;">Happy Capy ✦</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="app-body" style="text-align:center;padding:60px 24px 72px;">
+        <video src="1. Animation.mp4" autoplay loop muted playsinline style="width:200px;margin-bottom:24px;border-radius:20px;filter:drop-shadow(0 16px 36px rgba(196,122,46,0.22));"></video>
+        <div style="font-family:var(--font-display);font-size:1.45rem;font-weight:700;margin-bottom:10px;">Hello! <span class="pop">Capy's</span> ready.</div>
+        <p style="color:var(--taupe);font-size:0.97rem;max-width:400px;margin:0 auto 32px;line-height:1.7;">Drop your first PDF — Capy turns it into flashcards and quizzes while you breathe. No panic, just progress.</p>
+        <a class="btn" style="font-size:1rem;padding:14px 36px;box-shadow:0 6px 20px rgba(196,122,46,0.3);">Upload your first PDF</a>
+        <div style="margin-top:14px;color:var(--taupe);font-size:0.78rem;">1 credit per generation · 12 credits free on signup · no card required</div>
+        <div style="margin-top:28px;display:inline-block;background:#FFF9C4;border:1.5px solid #E8D84A;border-radius:10px;padding:8px 16px;font-size:0.82rem;color:#7A6A00;font-family:var(--font-body);transform:rotate(-1.5deg);box-shadow:2px 3px 8px rgba(0,0,0,0.1);">📌 This is just a concept — ran out of tokens lmfao</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>2. Dashboard — returning user</h2>
+    <div class="app-shell">
+      <div class="app-nav">
+        <div class="logo">Crammable</div>
+        <div class="right">
+          <span class="pill"><img src="capycoin.png" style="height:18px;width:18px;"> 12 credits</span>
+          <span class="badge-pro">Pro ✦</span>
+          <span>Rewards</span><span>Settings</span><div class="avatar-wrap">
+            <img class="avatar-pic" src="Chosen selection.png" alt="Your avatar">
+            <div class="avatar-tooltip">
+              <div class="tip-label">CHOOSE YOUR CAPY</div>
+              <div class="avatar-grid">
+                <img src="Chosen selection.png" class="selected" data-filter="" data-label="Happy" title="Happy">
+                <img src="Chosen selection.png" data-filter="sepia(0.4) brightness(0.8) saturate(1.3)" data-label="Sleepy" title="Sleepy">
+                <img src="Chosen selection.png" data-filter="hue-rotate(22deg) brightness(0.88)" data-label="Grad Cap" title="Grad Cap">
+                <img src="Chosen selection.png" data-filter="hue-rotate(-20deg) saturate(1.6) brightness(0.92)" data-label="Beanie" title="Beanie">
+                <img src="Chosen selection.png" data-filter="brightness(0.7) contrast(1.18) saturate(0.85)" data-label="Headphones" title="Headphones">
+              </div>
+              <div class="avatar-name-label" style="font-size:0.78rem;color:rgba(255,252,247,0.6);margin-top:6px;font-weight:600;">Happy Capy ✦</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="app-body">
+        <div class="greeting">Good evening, Ana</div>
+        <p class="greeting-sub">— <span class="pop">Capy</span> kept your decks warm ☕</p>
+        <div class="deck-grid">
+          <div class="deck-card new">＋ New deck</div>
+          <div class="deck-card">
+            <h4>Ecology Midterms</h4>
+            <div class="meta">42 cards · edited 2 days ago</div>
+            <a class="btn">Quiz me</a>
+          </div>
+          <div class="deck-card">
+            <h4>Animal Behavior Ch.4</h4>
+            <div class="meta">18 cards · edited yesterday</div>
+            <a class="btn">Quiz me</a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="note" style="margin-top:10px;">Same warm palette applied to the app shell — Capy appears in empty states and key moments, not crowding the workspace.</p>
+  </section>
+
+  <!-- Upload Page -->
+  <section class="block">
+    <h2>3. Upload — drop your PDF</h2>
+    <div class="app-shell">
+      <div class="app-nav">
+        <div class="logo">Crammable</div>
+        <div class="right">
+          <span class="pill"><img src="capycoin.png" style="height:18px;width:18px;"> 12 credits</span>
+          <span class="badge-pro">Pro ✦</span>
+          <span>Rewards</span><span>Settings</span><div class="avatar-wrap">
+            <img class="avatar-pic" src="Chosen selection.png" alt="Your avatar">
+            <div class="avatar-tooltip">
+              <div class="tip-label">CHOOSE YOUR CAPY</div>
+              <div class="avatar-grid">
+                <img src="Chosen selection.png" class="selected" data-filter="" data-label="Happy" title="Happy">
+                <img src="Chosen selection.png" data-filter="sepia(0.4) brightness(0.8) saturate(1.3)" data-label="Sleepy" title="Sleepy">
+                <img src="Chosen selection.png" data-filter="hue-rotate(22deg) brightness(0.88)" data-label="Grad Cap" title="Grad Cap">
+                <img src="Chosen selection.png" data-filter="hue-rotate(-20deg) saturate(1.6) brightness(0.92)" data-label="Beanie" title="Beanie">
+                <img src="Chosen selection.png" data-filter="brightness(0.7) contrast(1.18) saturate(0.85)" data-label="Headphones" title="Headphones">
+              </div>
+              <div class="avatar-name-label" style="font-size:0.78rem;color:rgba(255,252,247,0.6);margin-top:6px;font-weight:600;">Happy Capy ✦</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="app-body" style="display:flex;flex-direction:column;align-items:center;padding:48px 24px;">
+        <div style="width:100%;max-width:520px;">
+          <div style="font-family:var(--font-display);font-size:1.2rem;font-weight:600;margin-bottom:4px;">New deck</div>
+          <div style="color:var(--taupe);font-size:0.9rem;margin-bottom:28px;"><span class="pop">Capy</span> will turn your notes into flashcards ✦</div>
+          <div class="upload-zone" style="border:2px dashed var(--sand);border-radius:18px;padding:48px 32px;text-align:center;background:var(--paper);cursor:pointer;transition:border-color 0.25s ease,background 0.25s ease;">
+            <div style="font-size:2.4rem;margin-bottom:12px;">📄</div>
+            <div style="font-family:var(--font-display);font-size:1.05rem;font-weight:600;margin-bottom:6px;">Drop your PDF here</div>
+            <div style="color:var(--taupe);font-size:0.85rem;margin-bottom:20px;">or click to browse — max 15 pages (free) · 50 pages (Pro)</div>
+            <a class="btn" style="font-size:0.9rem;padding:10px 24px;">Choose file</a>
+          </div>
+          <div style="margin-top:20px;background:var(--paper);border:1.5px solid var(--sand);border-radius:14px;padding:16px 20px;">
+            <div style="font-size:0.82rem;font-weight:600;margin-bottom:10px;color:var(--taupe);letter-spacing:0.04em;">DECK SETTINGS</div>
+            <div style="display:flex;flex-direction:column;gap:10px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:0.9rem;">Deck name</span>
+                <input type="text" placeholder="e.g. Ecology Midterms" style="border:1.5px solid var(--sand);border-radius:8px;padding:6px 12px;font-size:0.88rem;background:var(--cream);color:var(--ink);font-family:var(--font-body);width:200px;outline:none;">
+              </div>
+              <div style="display:flex;justify-content:space-between;align-items:center;">
+                <span style="font-size:0.9rem;">Cards to generate</span>
+                <div style="display:flex;gap:6px;" id="count-btns">
+                  <span class="count-btn active" data-count="10">10</span>
+                  <span class="count-btn" data-count="20">20</span>
+                  <span class="count-btn" data-count="30">30</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end;">
+            <a class="btn secondary" style="font-size:0.9rem;padding:10px 20px;">Cancel</a>
+            <a class="btn" style="font-size:0.9rem;padding:10px 24px;">Generate flashcards</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Generation Loading State -->
+  <section class="block" id="gen-section">
+    <h2>4. Generating — <span class="pop">Capy</span> is on it</h2>
+    <p class="note">What the user sees while the AI works. <span class="pop">Capy</span> holds their attention — no blank spinner, no anxiety. This is the "<span class="pop">Capy</span> Calm" concept made visible.</p>
+    <p class="note" style="color:var(--clay);">⚠️ Animation not yet generated (ran out of Kling credits). Imagine <span class="pop">Capy</span> sitting at a desk, reading through a notebook that's supposed to be your PDF — scribbling notes, pushing up glasses, fully focused. That's what goes here.</p>
+    <div class="app-shell">
+      <div class="app-nav">
+        <div class="logo">Crammable</div>
+        <div class="right">
+          <span class="pill"><img src="capycoin.png" style="height:18px;width:18px;"> 11 credits</span>
+          <span class="badge-pro">Pro ✦</span>
+          <span>Settings</span>
+          <div class="avatar-wrap">
+            <img class="avatar-pic" src="Chosen selection.png" alt="Your avatar">
+            <div class="avatar-tooltip">
+              <div class="tip-label">CHOOSE YOUR CAPY</div>
+              <div class="avatar-grid">
+                <img src="Chosen selection.png" class="selected" data-filter="" data-label="Happy" title="Happy">
+                <img src="Chosen selection.png" data-filter="sepia(0.4) brightness(0.8) saturate(1.3)" data-label="Sleepy" title="Sleepy">
+                <img src="Chosen selection.png" data-filter="hue-rotate(22deg) brightness(0.88)" data-label="Grad Cap" title="Grad Cap">
+                <img src="Chosen selection.png" data-filter="hue-rotate(-20deg) saturate(1.6) brightness(0.92)" data-label="Beanie" title="Beanie">
+                <img src="Chosen selection.png" data-filter="brightness(0.7) contrast(1.18) saturate(0.85)" data-label="Headphones" title="Headphones">
+              </div>
+              <div class="avatar-name-label" style="font-size:0.78rem;color:rgba(255,252,247,0.6);margin-top:6px;font-weight:600;">Happy Capy ✦</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="app-body" style="display:flex;flex-direction:column;align-items:center;padding:52px 24px 60px;">
+        <img src="%234%20static%20example.png" style="width:130px;margin-bottom:20px;filter:drop-shadow(0 12px 28px rgba(196,122,46,0.22));animation:capyBob 3s ease-in-out infinite;" alt="Capy working">
+        <div style="font-family:var(--font-display);font-size:1.2rem;font-weight:700;margin-bottom:4px;">Reading your PDF, hang tight...</div>
+        <div style="color:var(--taupe);font-size:0.88rem;margin-bottom:32px;">Ecology Midterms · 14 pages · generating 20 cards</div>
+
+        <div style="display:flex;flex-direction:column;gap:8px;width:100%;max-width:400px;margin-bottom:28px;">
+          <div class="gen-step done"><span>✓</span> Extracted text from 14 pages</div>
+          <div class="gen-step active"><span class="pulse-dot"></span> Finding key concepts...</div>
+          <div class="gen-step pending"><span style="width:8px;height:8px;border-radius:50%;border:1.5px solid var(--taupe);display:inline-block;flex-shrink:0;"></span> Writing your flashcards</div>
+        </div>
+
+        <div style="width:100%;max-width:400px;height:8px;background:var(--sand);border-radius:999px;overflow:hidden;margin-bottom:10px;">
+          <div class="gen-progress-bar"></div>
+        </div>
+        <div style="color:var(--taupe);font-size:0.78rem;"><span class="pop">Capy</span> used 1 credit · 11 remaining</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Flashcard Study Page -->
+  <section class="block">
+    <h2>5. Flashcard — study mode</h2>
+    <div class="app-shell">
+      <div class="app-nav">
+        <div class="logo">Crammable</div>
+        <div class="right">
+          <span class="pill"><img src="capycoin.png" style="height:18px;width:18px;"> 12 credits</span>
+          <span class="badge-pro">Pro ✦</span>
+          <span>Rewards</span><span>Settings</span><div class="avatar-wrap">
+            <img class="avatar-pic" src="Chosen selection.png" alt="Your avatar">
+            <div class="avatar-tooltip">
+              <div class="tip-label">CHOOSE YOUR CAPY</div>
+              <div class="avatar-grid">
+                <img src="Chosen selection.png" class="selected" data-filter="" data-label="Happy" title="Happy">
+                <img src="Chosen selection.png" data-filter="sepia(0.4) brightness(0.8) saturate(1.3)" data-label="Sleepy" title="Sleepy">
+                <img src="Chosen selection.png" data-filter="hue-rotate(22deg) brightness(0.88)" data-label="Grad Cap" title="Grad Cap">
+                <img src="Chosen selection.png" data-filter="hue-rotate(-20deg) saturate(1.6) brightness(0.92)" data-label="Beanie" title="Beanie">
+                <img src="Chosen selection.png" data-filter="brightness(0.7) contrast(1.18) saturate(0.85)" data-label="Headphones" title="Headphones">
+              </div>
+              <div class="avatar-name-label" style="font-size:0.78rem;color:rgba(255,252,247,0.6);margin-top:6px;font-weight:600;">Happy Capy ✦</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="app-body">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+          <div>
+            <div style="font-family:var(--font-display);font-size:1.1rem;font-weight:600;">Ecology Midterms</div>
+            <div style="color:var(--taupe);font-size:0.85rem;">Card 3 of 42 · Study mode</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <a class="btn secondary" style="font-size:0.85rem;padding:7px 16px;">← Back to deck</a>
+            <a class="btn" style="font-size:0.85rem;padding:7px 16px;">Quiz me instead</a>
+          </div>
+        </div>
+        <!-- Progress bar -->
+        <div style="height:6px;background:var(--sand);border-radius:999px;margin-bottom:28px;overflow:hidden;">
+          <div style="height:100%;width:7%;background:var(--fur);border-radius:999px;transition:width 0.4s ease;"></div>
+        </div>
+        <!-- Flashcard -->
+        <div style="perspective:1000px;margin:0 auto 24px;max-width:560px;">
+          <div class="flip-card" style="background:var(--paper);border:1.5px solid var(--sand);border-radius:20px;padding:48px 36px;text-align:center;min-height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 8px 24px rgba(46,26,12,0.08);transition:transform 0.2s ease,box-shadow 0.2s ease;">
+            <div class="card-front" style="display:flex;flex-direction:column;align-items:center;">
+              <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.1em;color:var(--taupe);margin-bottom:16px;">QUESTION</div>
+              <div style="font-family:var(--font-display);font-size:1.25rem;font-weight:600;line-height:1.4;">What is the primary driver of nutrient cycling in a tropical rainforest ecosystem?</div>
+              <div style="margin-top:24px;color:var(--taupe);font-size:0.82rem;">Tap to reveal answer ↓</div>
+            </div>
+            <div class="card-back" style="flex-direction:column;align-items:center;">
+              <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.1em;color:var(--moss);margin-bottom:16px;">ANSWER</div>
+              <div style="font-family:var(--font-display);font-size:1.25rem;font-weight:600;line-height:1.4;">Decomposers — fungi and bacteria break down organic matter, releasing nutrients back into the soil for plant uptake.</div>
+              <div style="margin-top:24px;color:var(--taupe);font-size:0.82rem;">Tap to flip back ↑</div>
+            </div>
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;">
+          <a class="btn secondary" style="font-size:0.9rem;padding:10px 22px;">← Prev</a>
+          <a class="btn secondary" style="font-size:0.9rem;padding:10px 22px;background:rgba(77,107,45,0.12);border-color:var(--moss);color:var(--moss);">✓ Got it</a>
+          <a class="btn secondary" style="font-size:0.9rem;padding:10px 22px;background:rgba(181,64,46,0.1);border-color:var(--clay);color:var(--clay);">✗ Review again</a>
+          <a class="btn" style="font-size:0.9rem;padding:10px 22px;">Next →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quiz Page -->
+  <section class="block">
+    <h2>6. Quiz — test yourself</h2>
+    <div class="app-shell">
+      <div class="app-nav">
+        <div class="logo">Crammable</div>
+        <div class="right">
+          <span class="pill"><img src="capycoin.png" style="height:18px;width:18px;"> 12 credits</span>
+          <span class="badge-pro">Pro ✦</span>
+          <span>Rewards</span><span>Settings</span><div class="avatar-wrap">
+            <img class="avatar-pic" src="Chosen selection.png" alt="Your avatar">
+            <div class="avatar-tooltip">
+              <div class="tip-label">CHOOSE YOUR CAPY</div>
+              <div class="avatar-grid">
+                <img src="Chosen selection.png" class="selected" data-filter="" data-label="Happy" title="Happy">
+                <img src="Chosen selection.png" data-filter="sepia(0.4) brightness(0.8) saturate(1.3)" data-label="Sleepy" title="Sleepy">
+                <img src="Chosen selection.png" data-filter="hue-rotate(22deg) brightness(0.88)" data-label="Grad Cap" title="Grad Cap">
+                <img src="Chosen selection.png" data-filter="hue-rotate(-20deg) saturate(1.6) brightness(0.92)" data-label="Beanie" title="Beanie">
+                <img src="Chosen selection.png" data-filter="brightness(0.7) contrast(1.18) saturate(0.85)" data-label="Headphones" title="Headphones">
+              </div>
+              <div class="avatar-name-label" style="font-size:0.78rem;color:rgba(255,252,247,0.6);margin-top:6px;font-weight:600;">Happy Capy ✦</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="app-body">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+          <div>
+            <div style="font-family:var(--font-display);font-size:1.1rem;font-weight:600;">Ecology Midterms — Quiz</div>
+            <div style="color:var(--taupe);font-size:0.85rem;">Question 4 of 10</div>
+          </div>
+          <a class="btn secondary" style="font-size:0.85rem;padding:7px 16px;">End quiz</a>
+        </div>
+        <div style="height:6px;background:var(--sand);border-radius:999px;margin-bottom:28px;overflow:hidden;">
+          <div style="height:100%;width:40%;background:var(--fur);border-radius:999px;"></div>
+        </div>
+        <!-- Pre-answered wrong state + Teaching Capy -->
+        <div style="display:flex;gap:20px;align-items:flex-start;">
+          <div style="flex:1;">
+            <div style="background:var(--paper);border:1.5px solid var(--sand);border-radius:16px;padding:28px 28px 24px;margin-bottom:20px;">
+              <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.1em;color:var(--taupe);margin-bottom:14px;">MULTIPLE CHOICE</div>
+              <div style="font-family:var(--font-display);font-size:1.1rem;font-weight:600;line-height:1.45;margin-bottom:22px;">Which process describes the movement of energy through trophic levels in an ecosystem?</div>
+              <div style="display:flex;flex-direction:column;gap:10px;" id="quiz-options">
+                <div class="quiz-option" data-correct="false">A. Bioaccumulation</div>
+                <div class="quiz-option correct" data-correct="true">B. Energy flow</div>
+                <div class="quiz-option wrong" data-correct="false">C. Photosynthesis</div>
+                <div class="quiz-option" data-correct="false">D. Decomposition</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px;justify-content:flex-end;">
+              <a class="btn secondary" style="font-size:0.9rem;padding:10px 20px;">Skip</a>
+              <a class="btn" style="font-size:0.9rem;padding:10px 24px;">Next question →</a>
+            </div>
+          </div>
+          <!-- Teaching Capy sidebar — appears on wrong answer -->
+          <div style="flex:0 0 160px;display:flex;flex-direction:column;align-items:center;gap:10px;padding-top:8px;">
+            <div class="teacher-bubble">
+              Ay, not quite! 😊 Photosynthesis is how plants make food. <strong>Energy flow</strong> is how energy moves between trophic levels.
+            </div>
+            <img src="Teaching Capy.png" alt="Capy teaching" style="width:130px;filter:drop-shadow(0 8px 20px rgba(196,122,46,0.2));">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Quiz Results -->
+  <section class="block" id="results-section">
+    <h2>7. Quiz results — <span class="pop">Capy</span> reacts</h2>
+    <p class="note">The emotional payoff. <span class="pop">Capy's</span> message changes by score. This is the "Capy Calm" concept made real — a companion that celebrates with you, not a leaderboard that ranks you.</p>
+    <div class="app-shell">
+      <div class="app-nav">
+        <div class="logo">Crammable</div>
+        <div class="right">
+          <span class="pill"><img src="capycoin.png" style="height:18px;width:18px;"> 11 credits</span>
+          <span class="badge-pro">Pro ✦</span>
+          <span>Settings</span>
+          <div class="avatar-wrap">
+            <img class="avatar-pic" src="Chosen selection.png" alt="Your avatar">
+            <div class="avatar-tooltip">
+              <div class="tip-label">CHOOSE YOUR CAPY</div>
+              <div class="avatar-grid">
+                <img src="Chosen selection.png" class="selected" data-filter="" data-label="Happy" title="Happy">
+                <img src="Chosen selection.png" data-filter="sepia(0.4) brightness(0.8) saturate(1.3)" data-label="Sleepy" title="Sleepy">
+                <img src="Chosen selection.png" data-filter="hue-rotate(22deg) brightness(0.88)" data-label="Grad Cap" title="Grad Cap">
+                <img src="Chosen selection.png" data-filter="hue-rotate(-20deg) saturate(1.6) brightness(0.92)" data-label="Beanie" title="Beanie">
+                <img src="Chosen selection.png" data-filter="brightness(0.7) contrast(1.18) saturate(0.85)" data-label="Headphones" title="Headphones">
+              </div>
+              <div class="avatar-name-label" style="font-size:0.78rem;color:rgba(255,252,247,0.6);margin-top:6px;font-weight:600;">Happy Capy ✦</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="app-body" style="display:flex;flex-direction:column;align-items:center;padding:40px 24px 52px;">
+
+        <!-- Score ring -->
+        <div style="position:relative;width:140px;height:140px;margin-bottom:24px;">
+          <svg viewBox="0 0 36 36" style="transform:rotate(-90deg);width:140px;height:140px;">
+            <circle cx="18" cy="18" r="15.9" fill="none" stroke="var(--sand)" stroke-width="2.2"/>
+            <circle class="score-ring-fill" cx="18" cy="18" r="15.9" fill="none" stroke="var(--fur)" stroke-width="2.2"
+              stroke-dasharray="0 100" stroke-linecap="round"/>
+          </svg>
+          <div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);text-align:center;">
+            <div style="font-family:var(--font-display);font-size:2.2rem;font-weight:700;line-height:1;color:var(--fur);">8</div>
+            <div style="font-size:0.72rem;color:var(--taupe);font-weight:600;">of 10</div>
+          </div>
+        </div>
+
+        <!-- Capy reaction bubble -->
+        <div style="display:flex;align-items:center;gap:14px;background:var(--paper);border:1.5px solid var(--sand);border-radius:18px;padding:16px 20px;margin-bottom:24px;max-width:440px;width:100%;box-shadow:0 4px 16px rgba(46,26,12,0.07);">
+          <img src="Chosen selection.png" style="width:52px;height:52px;border-radius:50%;border:2px solid var(--yuzu);object-fit:cover;flex-shrink:0;">
+          <div>
+            <div style="font-family:var(--font-display);font-weight:700;font-size:1rem;margin-bottom:3px;">Grabe ka! 80% — <span class="pop">Capy's</span> impressed. 🎉</div>
+            <div style="color:var(--taupe);font-size:0.85rem;line-height:1.5;">One more round and you'll own this chapter. Hindi ka pa tapos.</div>
+          </div>
+        </div>
+
+        <!-- Score breakdown -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;max-width:440px;margin-bottom:28px;">
+          <div style="background:rgba(77,107,45,0.08);border:1.5px solid var(--moss);border-radius:14px;padding:18px;text-align:center;">
+            <div style="font-family:var(--font-display);font-size:2rem;font-weight:700;color:var(--moss);line-height:1;">8</div>
+            <div style="font-size:0.82rem;color:var(--moss);font-weight:600;margin-top:4px;">Correct ✓</div>
+          </div>
+          <div style="background:rgba(181,64,46,0.07);border:1.5px solid var(--clay);border-radius:14px;padding:18px;text-align:center;">
+            <div style="font-family:var(--font-display);font-size:2rem;font-weight:700;color:var(--clay);line-height:1;">2</div>
+            <div style="font-size:0.82rem;color:var(--clay);font-weight:600;margin-top:4px;">Review again</div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+          <a class="btn secondary" style="font-size:0.9rem;padding:10px 20px;">← Back to deck</a>
+          <a class="btn secondary" style="font-size:0.9rem;padding:10px 20px;border-color:var(--clay);color:var(--clay);">Review 2 wrong</a>
+          <a class="btn" style="font-size:0.9rem;padding:10px 28px;">Try again <span class="spin-icon">↺</span></a>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- Perfect score variant -->
+  <section class="block">
+    <h2>7b. Quiz results — perfect score (100%)</h2>
+    <p class="note"><span class="pop">Capy's</span> reaction changes based on score. This is the 10/10 variant — full celebration mode.</p>
+    <div class="app-shell">
+      <div class="app-nav">
+        <div class="logo">Crammable</div>
+        <div class="right">
+          <span class="pill"><img src="capycoin.png" style="height:18px;width:18px;"> 11 credits</span>
+          <span class="badge-pro">Pro ✦</span>
+          <span>Settings</span>
+          <div class="avatar-wrap">
+            <img class="avatar-pic" src="Chosen selection.png" alt="Your avatar">
+            <div class="avatar-tooltip">
+              <div class="tip-label">CHOOSE YOUR CAPY</div>
+              <div class="avatar-grid">
+                <img src="Chosen selection.png" class="selected" data-filter="" data-label="Happy" title="Happy">
+                <img src="Chosen selection.png" data-filter="sepia(0.4) brightness(0.8) saturate(1.3)" data-label="Sleepy" title="Sleepy">
+                <img src="Chosen selection.png" data-filter="hue-rotate(22deg) brightness(0.88)" data-label="Grad Cap" title="Grad Cap">
+                <img src="Chosen selection.png" data-filter="hue-rotate(-20deg) saturate(1.6) brightness(0.92)" data-label="Beanie" title="Beanie">
+                <img src="Chosen selection.png" data-filter="brightness(0.7) contrast(1.18) saturate(0.85)" data-label="Headphones" title="Headphones">
+              </div>
+              <div class="avatar-name-label" style="font-size:0.78rem;color:rgba(255,252,247,0.6);margin-top:6px;font-weight:600;">Happy Capy ✦</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="app-body" style="display:flex;flex-direction:column;align-items:center;padding:40px 24px 52px;">
+        <!-- Congrats Capy front and center -->
+        <img src="Congrats Capy.png" alt="Capy celebrating" style="width:160px;margin-bottom:16px;filter:drop-shadow(0 12px 32px rgba(196,122,46,0.3));animation:capyBob 3s ease-in-out infinite;">
+        <div style="font-family:var(--font-display);font-size:1.5rem;font-weight:700;color:var(--fur);margin-bottom:6px;">10 / 10 🎉</div>
+        <div style="background:var(--paper);border:1.5px solid var(--sand);border-radius:18px;padding:16px 20px;margin-bottom:24px;max-width:440px;width:100%;box-shadow:0 4px 16px rgba(46,26,12,0.07);text-align:center;">
+          <div style="font-family:var(--font-display);font-weight:700;font-size:1.05rem;margin-bottom:4px;">Perfect score! <span class="pop">Capy's</span> so proud. ✨</div>
+          <div style="color:var(--taupe);font-size:0.85rem;line-height:1.5;">You crushed it. Ibig sabihin talaga — ikaw na. 🔥</div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center;">
+          <a class="btn secondary" style="font-size:0.9rem;padding:10px 20px;">← Back to deck</a>
+          <a class="btn" style="font-size:0.9rem;padding:10px 28px;">Try a harder deck →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Avatar System Concept -->
+  <!-- Capycoin showcase -->
+  <section class="block">
+    <h2>8. Capycoin — the credit currency</h2>
+    <p class="note">Capycoins are the in-app credit currency. Every generation costs 1 coin. Earn them, buy them, or get them free on signup.</p>
+    <div style="display:flex;align-items:center;gap:40px;flex-wrap:wrap;background:var(--paper);border:1.5px solid var(--sand);border-radius:18px;padding:32px;">
+      <div style="flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:10px;">
+        <video src="Capy coin.mp4" autoplay loop muted playsinline style="width:160px;height:160px;mix-blend-mode:multiply;"></video>
+        <div style="font-size:0.78rem;color:var(--taupe);font-weight:600;">Capycoin ✦ animated</div>
+      </div>
+      <div style="flex:1 1 240px;">
+        <div style="font-family:var(--font-display);font-size:1.1rem;font-weight:700;margin-bottom:8px;">Capycoin — the in-app credit.</div>
+        <p style="color:var(--taupe);font-size:0.9rem;line-height:1.7;margin:0;">Every generation spends a coin. Shown live in the nav so users always know where they stand.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h2>9. Avatar system — your <span class="pop">Capy</span> identity</h2>
+    <p class="note">Every user picks their own capybara. Hats, moods, styles — AI-generated in the same sticker art style. Hover the avatar circle in any nav above to try the picker.</p>
+    <div style="display:flex;gap:32px;align-items:flex-start;flex-wrap:wrap;">
+      <div style="flex:0 0 auto;">
+        <img src="ALL Selection.png" alt="All avatar options" style="width:300px;border-radius:18px;box-shadow:0 8px 28px rgba(0,0,0,0.18);">
+        <div style="font-size:0.78rem;color:var(--taupe);margin-top:8px;text-align:center;">First batch — AI-generated sticker set</div>
+      </div>
+      <div style="flex:1 1 260px;display:flex;flex-direction:column;gap:16px;">
+        <div style="background:var(--paper);border:1.5px solid var(--sand);border-radius:14px;padding:20px;">
+          <div style="font-size:0.78rem;font-weight:700;letter-spacing:0.08em;color:var(--taupe);margin-bottom:12px;">YOUR CURRENT CAPY</div>
+          <div style="display:flex;align-items:center;gap:14px;">
+            <img id="live-avatar-display" src="Chosen selection.png" style="width:64px;height:64px;border-radius:50%;border:2px solid var(--yuzu);object-fit:cover;">
+            <div>
+              <div id="live-avatar-name" style="font-family:var(--font-display);font-weight:600;font-size:1rem;">Happy Capy</div>
+              <div style="color:var(--taupe);font-size:0.82rem;">Default avatar</div>
+            </div>
+          </div>
+        </div>
+        <div style="background:var(--paper);border:1.5px solid var(--sand);border-radius:14px;padding:20px;">
+          <div style="font-size:0.78rem;font-weight:700;letter-spacing:0.08em;color:var(--taupe);margin-bottom:12px;">PLANNED CUSTOMIZATION</div>
+          <ul style="margin:0;padding-left:18px;font-size:0.9rem;line-height:1.9;color:var(--ink);">
+            <li>9+ avatar styles at launch</li>
+            <li>Unlock new Capys with credits</li>
+            <li>Seasonal drops (exam season, holidays)</li>
+            <li>Rare "Pro only" capybara variants</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Live Style Picker -->
+  <section class="block">
+    <h2>10. Live style picker — try it yourself</h2>
+    <p class="note">The floating panel on the bottom-left lets you switch fonts and themes across the entire concept in real time. This is the most interactive part of the mockup — try it.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div style="background:var(--paper);border:1.5px solid var(--sand);border-radius:14px;padding:20px;">
+        <div style="font-size:0.78rem;font-weight:700;letter-spacing:0.08em;color:var(--taupe);margin-bottom:12px;">FONT OPTIONS</div>
+        <ul style="margin:0;padding-left:18px;font-size:0.9rem;line-height:2;color:var(--ink);">
+          <li>Lora · DM Sans <span style="color:var(--fur);font-weight:600;">(current Crammable)</span></li>
+          <li>Playfair · DM Sans</li>
+          <li>Fraunces · Nunito</li>
+          <li>EB Garamond · Jakarta</li>
+          <li>Baskerville · Nunito</li>
+        </ul>
+      </div>
+      <div style="background:var(--paper);border:1.5px solid var(--sand);border-radius:14px;padding:20px;">
+        <div style="font-size:0.78rem;font-weight:700;letter-spacing:0.08em;color:var(--taupe);margin-bottom:12px;">THEME OPTIONS</div>
+        <ul style="margin:0;padding-left:18px;font-size:0.9rem;line-height:2;color:var(--ink);">
+          <li><span style="color:var(--fur);">●</span> Current Theme <span style="color:var(--fur);font-weight:600;">(live Crammable)</span></li>
+          <li><span style="color:#E8A93D;">●</span> Night Lamp — dark, warm gold</li>
+          <li><span style="color:#C44E28;">●</span> Sunset — terracotta, energetic</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Rough concept for co-founder discussion · Capy Calm direction · Crammable
+  </footer>
+
+</div>
+<script>
+  // Scroll reveal
+  const blocks = document.querySelectorAll('section.block');
+  if ('IntersectionObserver' in window) {
+    const io = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in-view'); io.unobserve(e.target); } });
+    }, { threshold: 0.15 });
+    blocks.forEach(b => io.observe(b));
+  } else {
+    blocks.forEach(b => b.classList.add('in-view'));
+  }
+
+  // Font switcher
+  const fontBtns = document.querySelectorAll('.font-btn');
+  fontBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.documentElement.style.setProperty('--font-display', btn.dataset.display);
+      document.documentElement.style.setProperty('--font-body', btn.dataset.body);
+      fontBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  // Loading bar animation — triggers when section scrolls into view
+  const genBar = document.querySelector('.gen-progress-bar');
+  const genSection = document.getElementById('gen-section');
+  if (genBar && genSection) {
+    const genObs = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) { genBar.style.width = '62%'; genObs.disconnect(); }
+    }, { threshold: 0.4 });
+    genObs.observe(genSection);
+  }
+
+  // Score ring animation — triggers when results section scrolls into view
+  const scoreRing = document.querySelector('.score-ring-fill');
+  const resultsSection = document.getElementById('results-section');
+  if (scoreRing && resultsSection) {
+    const ringObs = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting) {
+        scoreRing.style.strokeDasharray = '80 100';
+        ringObs.disconnect();
+      }
+    }, { threshold: 0.4 });
+    ringObs.observe(resultsSection);
+  }
+
+  // Avatar picker — updates ALL nav avatars + concept section display
+  document.querySelectorAll('.avatar-grid img').forEach(img => {
+    img.addEventListener('click', () => {
+      const filter = img.dataset.filter || '';
+      const label = img.dataset.label || 'Capy';
+      document.querySelectorAll('.avatar-pic').forEach(pic => pic.style.filter = filter);
+      document.querySelectorAll('.avatar-grid img').forEach(g => g.classList.remove('selected'));
+      document.querySelectorAll(`.avatar-grid img[data-label="${label}"]`).forEach(g => g.classList.add('selected'));
+      document.querySelectorAll('.avatar-name-label').forEach(el => el.textContent = label + ' Capy ✦');
+      const liveAvatar = document.getElementById('live-avatar-display');
+      if (liveAvatar) liveAvatar.style.filter = filter;
+      const liveName = document.getElementById('live-avatar-name');
+      if (liveName) liveName.textContent = label + ' Capy';
+    });
+  });
+
+  // Card count selector
+  document.querySelectorAll('.count-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.count-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+
+  // Flashcard flip
+  document.querySelectorAll('.flip-card').forEach(card => {
+    card.addEventListener('click', () => card.classList.toggle('flipped'));
+  });
+
+  // Quiz option selection
+  document.querySelectorAll('.quiz-option').forEach(opt => {
+    opt.addEventListener('click', () => {
+      const alreadyAnswered = document.querySelector('.quiz-option.correct');
+      if (alreadyAnswered) return;
+      document.querySelectorAll('.quiz-option').forEach(o => o.classList.remove('selected'));
+      opt.classList.add('selected');
+    });
+  });
+
+  // Quiz confirm button
+  const confirmBtn = document.querySelector('#quiz-options')?.closest('.app-body')?.querySelector('.btn:not(.secondary)');
+  if (confirmBtn) {
+    confirmBtn.addEventListener('click', () => {
+      const selected = document.querySelector('.quiz-option.selected');
+      if (!selected) return;
+      document.querySelectorAll('.quiz-option').forEach(o => {
+        o.classList.remove('selected');
+        if (o.dataset.correct === 'true') o.classList.add('correct');
+        else if (o === selected) o.classList.add('wrong');
+      });
+    });
+  }
+
+  // Style picker minimize / restore toggle
+  document.getElementById('picker-toggle').addEventListener('click', () => {
+    const picker = document.getElementById('style-picker');
+    const icon = document.getElementById('toggle-icon');
+    const collapsed = picker.classList.toggle('collapsed');
+    icon.textContent = collapsed ? '+' : '−';
+    icon.title = collapsed ? 'Restore' : 'Minimize';
+  });
+
+  // Theme switcher
+  const themes = {
+    current: {
+      '--cream':'#FAF2E4','--paper':'#FFFCF7','--sand':'#E0C9A8',
+      '--fur':'#C47A2E','--ink':'#2E1A0C','--taupe':'#8A6E52',
+      '--yuzu':'#E8A93D','--clay':'#B5402E','--moss':'#4D6B2D',
+      '--nav-bg':'#2E1A0C','--nav-text':'#FAF2E4',
+    },
+    nightlamp: {
+      '--cream':'#1E1C16','--paper':'#252318','--sand':'#3D3824',
+      '--fur':'#E8A93D','--ink':'#EDE5D0','--taupe':'#8A7D65',
+      '--yuzu':'#FFD060','--clay':'#C44E3A','--moss':'#6B8B45',
+      '--nav-bg':'#121009','--nav-text':'#EDE5D0',
+    },
+    sunset: {
+      '--cream':'#FEF0E4','--paper':'#FFF8F3','--sand':'#EDBF96',
+      '--fur':'#C44E28','--ink':'#2E1410','--taupe':'#7A4E3A',
+      '--yuzu':'#E87828','--clay':'#A8301A','--moss':'#6B5E42',
+      '--nav-bg':'#2E1410','--nav-text':'#FFF8F3',
+    },
+  };
+
+  const themeBtns = document.querySelectorAll('.theme-btn');
+  themeBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = themes[btn.dataset.theme];
+      Object.entries(t).forEach(([k, v]) => document.documentElement.style.setProperty(k, v));
+      themeBtns.forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+    });
+  });
+</script>
+</body>
+</html>
