@@ -7,6 +7,8 @@ import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { ApiPaths, App, Routes, SubscriptionTier, TableNames } from "@/lib/contracts";
 import { AvatarPicker } from "@/components/nav/AvatarPicker";
+import { PageLoading } from "@/components/ui/PageLoading";
+import { readPausedQuiz } from "@/lib/quiz/pauseState";
 
 interface Profile {
   full_name: string | null;
@@ -29,6 +31,31 @@ export default function DashboardPage() {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [decks, setDecks] = useState<DeckListItem[]>([]);
   const [loading, setLoading] = useState(true);
+  // Which deck's "⋮" menu is open — at most one at a time, closed by clicking
+  // anywhere else (see the document click listener below).
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!openMenuId) return;
+    function closeMenu() {
+      setOpenMenuId(null);
+    }
+    document.addEventListener("click", closeMenu);
+    return () => document.removeEventListener("click", closeMenu);
+  }, [openMenuId]);
+
+  async function handleDeleteDeck(deckId: string, title: string) {
+    setOpenMenuId(null);
+    if (!window.confirm(`Delete "${title}"? This can't be undone.`)) return;
+
+    const res = await fetch(ApiPaths.deck(deckId), { method: "DELETE" });
+    const json = (await res.json()) as { success: boolean; error?: { message: string } };
+    if (!json.success) {
+      window.alert(json.error?.message ?? "Failed to delete deck. Please try again.");
+      return;
+    }
+    setDecks((prev) => prev.filter((d) => d.id !== deckId));
+  }
 
   // The course onboarding step reads a name from localStorage left by the
   // name step — seed it here so jumping straight to "course" (when full_name
@@ -95,11 +122,7 @@ export default function DashboardPage() {
   }
 
   if (loading) {
-    return (
-      <main style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>Loading…</p>
-      </main>
-    );
+    return <PageLoading />;
   }
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
@@ -300,37 +323,136 @@ export default function DashboardPage() {
               >
                 ＋ New deck
               </Link>
-              {decks.map((deck, i) => (
-                <Link
-                  key={deck.id}
-                  href={Routes.deck(deck.id)}
-                  className="anim-fade-up hover-lift"
-                  style={{ display: "flex", flexDirection: "column", gap: 10, background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 16, padding: "20px 22px", textDecoration: "none", animationDelay: `${0.24 + i * 0.05}s` }}
-                >
-                  <h3 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(17px * var(--font-scale))", fontWeight: 700, color: "var(--text)", lineHeight: 1.35, margin: 0 }}>
-                    {deck.title}
-                  </h3>
-                  <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
-                    {deck.card_count} {deck.card_count === 1 ? "card" : "cards"} · edited{" "}
-                    {new Date(deck.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
-                  </p>
-                  <span
-                    className="btn-solid"
+              {decks.map((deck, i) => {
+                const paused = readPausedQuiz(deck.id);
+                return (
+                  <div
+                    key={deck.id}
+                    onClick={() => router.push(Routes.deck(deck.id))}
+                    className="anim-fade-up hover-lift"
                     style={{
-                      alignSelf: "flex-start",
-                      marginTop: 4,
-                      background: "var(--primary)",
-                      color: "var(--on-primary)",
-                      borderRadius: 8,
-                      padding: "7px 18px",
-                      fontSize: "calc(13px * var(--font-scale))",
-                      fontWeight: 600,
+                      position: "relative",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 10,
+                      background: "var(--bg-card)",
+                      border: "1.5px solid var(--border)",
+                      borderRadius: 16,
+                      padding: "20px 22px",
+                      cursor: "pointer",
+                      animationDelay: `${0.24 + i * 0.05}s`,
                     }}
                   >
-                    Quiz me
-                  </span>
-                </Link>
-              ))}
+                    {/* "⋮" menu — Edit (reuses the deck detail page's existing
+                        rename/card editing) and Delete. Stops propagation so it
+                        never also triggers the card's own navigate-to-deck click. */}
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuId(openMenuId === deck.id ? null : deck.id);
+                      }}
+                      className="icon-btn"
+                      style={{
+                        position:     "absolute",
+                        top:          12,
+                        right:        12,
+                        background:   "transparent",
+                        border:       "none",
+                        color:        "var(--text-faint)",
+                        fontSize:     "calc(18px * var(--font-scale))",
+                        lineHeight:   1,
+                        cursor:       "pointer",
+                        padding:      "4px 8px",
+                        borderRadius: 8,
+                      }}
+                      aria-label="Deck options"
+                    >
+                      ⋮
+                    </button>
+                    {openMenuId === deck.id && (
+                      <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="anim-pop"
+                        style={{
+                          position:     "absolute",
+                          top:          40,
+                          right:        12,
+                          background:   "var(--bg-card)",
+                          border:       "1.5px solid var(--border)",
+                          borderRadius: 10,
+                          boxShadow:    "0 4px 16px rgba(0,0,0,0.12)",
+                          overflow:     "hidden",
+                          zIndex:       10,
+                          minWidth:     140,
+                        }}
+                      >
+                        <Link
+                          href={Routes.deck(deck.id)}
+                          onClick={() => setOpenMenuId(null)}
+                          className="menu-item"
+                          style={{
+                            display:    "block",
+                            padding:    "10px 16px",
+                            fontSize:   "calc(13px * var(--font-scale))",
+                            color:      "var(--text)",
+                            textDecoration: "none",
+                            fontFamily: "var(--font-body, sans-serif)",
+                          }}
+                        >
+                          ✎ Edit
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDeck(deck.id, deck.title)}
+                          className="menu-item menu-item-danger"
+                          style={{
+                            display:      "block",
+                            width:        "100%",
+                            textAlign:    "left",
+                            padding:      "10px 16px",
+                            fontSize:     "calc(13px * var(--font-scale))",
+                            color:        "var(--error-dark)",
+                            background:   "transparent",
+                            border:       "none",
+                            borderTop:    "1px solid var(--border)",
+                            cursor:       "pointer",
+                            fontFamily:   "var(--font-body, sans-serif)",
+                          }}
+                        >
+                          🗑 Delete
+                        </button>
+                      </div>
+                    )}
+
+                    <h3 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(17px * var(--font-scale))", fontWeight: 700, color: "var(--text)", lineHeight: 1.35, margin: 0, paddingRight: 24 }}>
+                      {deck.title}
+                    </h3>
+                    <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
+                      {deck.card_count} {deck.card_count === 1 ? "card" : "cards"} · edited{" "}
+                      {new Date(deck.created_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                    </p>
+                    <Link
+                      href={Routes.quiz(deck.id)}
+                      onClick={(e) => e.stopPropagation()}
+                      className="btn-solid quiz-pill"
+                      style={{
+                        alignSelf: "flex-start",
+                        marginTop: 4,
+                        background: "var(--primary)",
+                        color: "var(--on-primary)",
+                        borderRadius: 8,
+                        padding: "7px 18px",
+                        fontSize: "calc(13px * var(--font-scale))",
+                        fontWeight: 600,
+                        textDecoration: "none",
+                      }}
+                    >
+                      {paused ? `Continue: Question ${paused.currentIdx + 1} of ${paused.questions.length}` : "Quiz me"}
+                    </Link>
+                  </div>
+                );
+              })}
             </div>
           </>
         )}

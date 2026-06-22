@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
 import { useTheme, FONT_SIZE_LABELS, FONT_PAIRS, type ThemeMode, type FontSizeKey, type FontPairKey } from "@/lib/theme/ThemeProvider";
+import { PageLoading } from "@/components/ui/PageLoading";
 import {
   ApiErrorCode,
   ApiPaths,
@@ -366,21 +367,7 @@ function SettingsContent() {
   // ── loading ───────────────────────────────────────────────────────────────────
 
   if (loading) {
-    return (
-      <main
-        style={{
-          minHeight: "100vh",
-          background: "var(--bg)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>
-          Loading…
-        </p>
-      </main>
-    );
+    return <PageLoading />;
   }
 
   const isPro = profile?.subscription_tier === SubscriptionTier.PRO;
@@ -854,13 +841,7 @@ function SettingsContent() {
 // useSearchParams must be wrapped in a Suspense boundary (Next.js requirement).
 export default function SettingsPage() {
   return (
-    <Suspense
-      fallback={
-        <main style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>Loading…</p>
-        </main>
-      }
-    >
+    <Suspense fallback={<PageLoading />}>
       <SettingsContent />
     </Suspense>
   );

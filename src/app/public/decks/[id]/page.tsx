@@ -10,6 +10,7 @@ import {
   type Deck,
   type Flashcard,
 } from "@/lib/contracts";
+import { PageLoading } from "@/components/ui/PageLoading";
 
 /**
  * Read-only public deck viewer (B5) — no auth required. Fetches via
@@ -72,21 +73,7 @@ export default function PublicDeckPage() {
   const total = cards.length;
 
   if (loading) {
-    return (
-      <main
-        style={{
-          minHeight: "100vh",
-          background: "var(--bg)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>
-          Loading…
-        </p>
-      </main>
-    );
+    return <PageLoading />;
   }
 
   if (error || !deck) {

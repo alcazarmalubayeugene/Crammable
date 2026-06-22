@@ -71,6 +71,7 @@ function buildQuestions(cards: Flashcard[], quizType: QuizType): QuizQuestion[] 
         quizType:     QuizType.MULTIPLE_CHOICE,
         options,
         correctAnswer: card.back,
+        correctExplanation: card.explanation,
       };
     }
 
@@ -79,6 +80,7 @@ function buildQuestions(cards: Flashcard[], quizType: QuizType): QuizQuestion[] 
       questionText: card.front,
       quizType:     QuizType.IDENTIFICATION,
       correctAnswer: card.back,
+      correctExplanation: card.explanation,
     };
   });
 }

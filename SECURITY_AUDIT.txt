@@ -277,16 +277,30 @@ grant/revocation with a timestamp server-side rather than only a boolean flag.
 ===============================================================================
 
 -------------------------------------------------------------------------------
-8.1 [MED] No security response headers (CSP, X-Frame-Options, etc.)
+8.1 [MED] No security response headers (CSP, X-Frame-Options, etc.) — RESOLVED
 -------------------------------------------------------------------------------
-next.config.ts defines no headers() block and there's no CSP. The app renders
-AI-generated content and is a payments-adjacent app, so at minimum add:
-  - Content-Security-Policy (even a report-only baseline),
-  - X-Frame-Options: DENY / frame-ancestors 'none' (clickjacking on the payment
-    + admin pages),
-  - Referrer-Policy: strict-origin-when-cross-origin,
-  - X-Content-Type-Options: nosniff.
-Add via next.config headers() or the proxy. Low effort, broad benefit.
+RESOLVED (2026-06-21): next.config.ts now ships a headers() block on every route
+with a full host-allowlist Content-Security-Policy plus X-Frame-Options: DENY,
+X-Content-Type-Options: nosniff, Referrer-Policy: strict-origin-when-cross-origin,
+and Permissions-Policy. poweredByHeader is also disabled (drops X-Powered-By).
+
+CSP design notes (static allowlist, no per-request nonce):
+  - script-src/style-src use 'unsafe-inline' (Next injects an inline bootstrap
+    script; Next/Tailwind inject inline styles). 'unsafe-eval' is added in dev
+    only (React Refresh / HMR), omitted in production.
+  - The client OCR/PDF pipeline needs these allowances or extraction breaks:
+    'wasm-unsafe-eval' + blob: + worker-src 'self' blob' for Tesseract WASM and
+    the pdf.js worker; CDN origins https://unpkg.com (pdf.js worker),
+    https://cdn.jsdelivr.net (Tesseract core), https://tessdata.projectnaptha.com
+    (language data).
+  - connect-src allows the Supabase origin (https + wss for Realtime), derived
+    from NEXT_PUBLIC_SUPABASE_URL rather than hardcoded.
+  - frame-ancestors 'none' + object-src 'none' + base-uri 'self' + form-action
+    'self' + upgrade-insecure-requests round out the policy.
+
+Nonce + 'strict-dynamic' (the stricter alternative) was deliberately not used: it
+would block the cross-origin pdf.js worker loaded from unpkg and force dynamic
+rendering on all pages. Revisit only if the CDN assets are self-hosted.
 
 -------------------------------------------------------------------------------
 8.2 [LOW] Upload body is fully buffered before the size check
@@ -336,7 +350,7 @@ This is the strongest part of the system; no action required beyond keeping the
 ===============================================================================
 [ ] 1.1  Always enforce auth/consent/rate-limit on /api/upload (no env gate).  HIGH
 [ ] 2.1  Atomic single-path referral claim + unique signup index.             HIGH
-[ ] 8.1  Add CSP + X-Frame-Options + nosniff + Referrer-Policy headers.        MED
+[x] 8.1  Add CSP + X-Frame-Options + nosniff + Referrer-Policy headers.        MED  (done 2026-06-21; + poweredByHeader off)
 [ ] 4.1  Add origin/referer (or CSRF token) check on state-changing routes,
          especially multipart /api/upload.                                     MED
 [ ] 3.1  Re-derive quiz correctness server-side; stop trusting client isCorrect.MED

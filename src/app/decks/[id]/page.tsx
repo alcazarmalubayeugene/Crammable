@@ -5,10 +5,15 @@ import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
+import { PageLoading } from "@/components/ui/PageLoading";
+import { readPausedQuiz, clearPausedQuiz } from "@/lib/quiz/pauseState";
+import { readDefaultQuizType, saveDefaultQuizType } from "@/lib/quiz/defaultQuizType";
+import { AvatarPicker } from "@/components/nav/AvatarPicker";
 import {
   ApiPaths,
   App,
   GenerationMode,
+  QuizType,
   ReferralCaps,
   ReferralEventType,
   Routes,
@@ -26,6 +31,8 @@ import {
   type QuizHistoryRow,
   type RenameDeckRequest,
   type RenameDeckResult,
+  type ReviewCardRequest,
+  type ReviewCardResult,
   type ShareDeckResult,
   type UpdateFlashcardRequest,
   type UpdateFlashcardResult,
@@ -100,6 +107,24 @@ export default function DeckDetailPage() {
 
   // D4 — study weak cards mode (sort by difficulty_score desc)
   const [studyWeakMode, setStudyWeakMode] = useState(false);
+
+  // Default quiz sub-type for this deck — pre-selects on the quiz page's
+  // setup screen but doesn't skip it (still changeable there).
+  const [defaultQuizType, setDefaultQuizType] = useState<QuizType>(
+    () => readDefaultQuizType(deckId) ?? QuizType.MULTIPLE_CHOICE
+  );
+
+  // Study-mode self-report — "Got it" / "Review again" on the flip card
+  const [reviewingCard, setReviewingCard] = useState(false);
+  const [reviewError, setReviewError] = useState("");
+  const [lastReviewed, setLastReviewed] = useState<{ cardId: string; wasCorrect: boolean } | null>(null);
+  // Card id → outcome, answered in THIS visit — separate from times_seen
+  // (which persists across past quiz/study history). Free navigation
+  // (arrows/dots) lets you jump straight to the last card without ever
+  // answering the ones before it; tracked here so auto-advance can route back
+  // to whatever's still unanswered instead of dead-ending on the last card,
+  // and so the dot indicators can badge which cards are already done.
+  const [reviewedThisVisit, setReviewedThisVisit] = useState<Map<string, boolean>>(new Map());
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -177,9 +202,78 @@ export default function DeckDetailPage() {
     };
   }, [deckId]);
 
+  // Adding a card mid-session (or any future card with a fresh times_seen: 0)
+  // can flip a deck from "fully passed" back to not — drop out of weak-cards
+  // mode automatically rather than leaving it on with a now-locked toggle.
+  useEffect(() => {
+    if (studyWeakMode && !(cards.length > 0 && cards.every((c) => c.times_seen > 0))) {
+      setStudyWeakMode(false);
+    }
+  }, [cards, studyWeakMode]);
+
   function goTo(idx: number) {
     setCurrentIdx(idx);
     setIsFlipped(false);
+    setReviewError("");
+  }
+
+  // Wraps forward from just past `fromIdx` looking for a card not yet in
+  // `reviewed`; wraps back around through the start of the deck if needed.
+  // Returns `fromIdx` unchanged if every card is already reviewed.
+  function findNextUnanswered(deckCards: Flashcard[], fromIdx: number, reviewed: Map<string, boolean>): number {
+    const n = deckCards.length;
+    for (let step = 1; step <= n; step++) {
+      const idx = (fromIdx + step) % n;
+      if (!reviewed.has(deckCards[idx].id)) return idx;
+    }
+    return fromIdx;
+  }
+
+  async function submitCardReview(wasCorrect: boolean) {
+    if (!card || reviewingCard) return;
+    setReviewingCard(true);
+    setReviewError("");
+
+    // Answering judges you against the actual answer, so reveal it (smooth
+    // 3D-flip already on the card) the moment you answer if you haven't
+    // already flipped it yourself — never on its own, only as a result of
+    // clicking Got it/Review again. Runs concurrently with the network
+    // request (not stacked after it) — just a floor so the rotation always
+    // gets to finish playing even if the API responds faster than that.
+    const needsFlip = !isFlipped;
+    if (needsFlip) setIsFlipped(true);
+    const minReveal = new Promise<void>((resolve) => setTimeout(resolve, needsFlip ? 600 : 250));
+
+    try {
+      const [res] = await Promise.all([
+        fetch(ApiPaths.flashcardReview(card.id), {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...(await authHeaders()) },
+          body: JSON.stringify({ wasCorrect } satisfies ReviewCardRequest),
+        }),
+        minReveal,
+      ]);
+      const data = (await res.json()) as ApiResponse<ReviewCardResult>;
+      if (!data.success) {
+        setReviewError(data.error.message);
+        return;
+      }
+      setCards((cs) =>
+        cs.map((c) =>
+          c.id === card.id
+            ? { ...c, difficulty_score: data.newDifficultyScore, times_seen: c.times_seen + 1 }
+            : c
+        )
+      );
+      setLastReviewed({ cardId: card.id, wasCorrect });
+      const updatedReviewed = new Map(reviewedThisVisit).set(card.id, wasCorrect);
+      setReviewedThisVisit(updatedReviewed);
+      goTo(findNextUnanswered(displayCards, currentIdx, updatedReviewed));
+    } catch {
+      setReviewError(UIMessages.genericError);
+    } finally {
+      setReviewingCard(false);
+    }
   }
 
   async function handleDelete() {
@@ -404,23 +498,16 @@ export default function DeckDetailPage() {
     : cards;
   const card = displayCards[currentIdx] ?? null;
   const total = displayCards.length;
+  // difficulty_score only diverges between cards once each has actually been
+  // reviewed at least once (study mode or quiz both bump times_seen) — before
+  // that every card is sitting at its untouched default, so "weak cards" has
+  // nothing real to sort by yet.
+  const hasCompletedFullPass = cards.length > 0 && cards.every((c) => c.times_seen > 0);
+  // Only meaningful once we're past the loading gate below (client-only read).
+  const pausedQuiz = readPausedQuiz(deckId);
 
   if (loading) {
-    return (
-      <main
-        style={{
-          minHeight: "100vh",
-          background: "var(--bg)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>
-          Loading…
-        </p>
-      </main>
-    );
+    return <PageLoading />;
   }
 
   if (error || !deck) {
@@ -517,10 +604,11 @@ export default function DeckDetailPage() {
                 </span>
               </div>
               {profile.full_name && (
-                <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>
+                <span style={{ fontSize: "calc(15px * var(--font-scale))", fontWeight: 600, color: "var(--nav-text)" }}>
                   {profile.full_name.split(" ")[0]}
                 </span>
               )}
+              <AvatarPicker />
             </div>
           )}
         </div>
@@ -701,35 +789,39 @@ export default function DeckDetailPage() {
                       Export PDF
                     </a>
                   ) : (
-                    <a
-                      href={Routes.upgrade}
-                      title={UIMessages.proFeatureLocked}
-                      style={{
-                        display: "inline-flex",
-                        alignItems: "center",
-                        gap: 8,
-                        background: "var(--bg-card)",
-                        border: "1.5px solid var(--border)",
-                        color: "var(--text-faint)",
-                        padding: "10px 20px",
-                        borderRadius: 10,
-                        fontWeight: 600,
-                        fontSize: "calc(14px * var(--font-scale))",
-                        textDecoration: "none",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
-                      Export PDF (Pro)
-                    </a>
+                    <span className="tooltip-wrap" style={{ display: "inline-flex", position: "relative" }}>
+                      <a
+                        href={Routes.upgrade}
+                        title={UIMessages.proFeatureLocked}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 8,
+                          background: "var(--bg-card)",
+                          border: "1.5px solid var(--border)",
+                          color: "var(--text-faint)",
+                          padding: "10px 20px",
+                          borderRadius: 10,
+                          fontWeight: 600,
+                          fontSize: "calc(14px * var(--font-scale))",
+                          textDecoration: "none",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        Export PDF (Pro)
+                      </a>
+                      <span className="tooltip-bubble">{UIMessages.proFeatureLocked}</span>
+                    </span>
                   )}
                   <a
                     href={Routes.quiz(deckId)}
+                    className="quiz-pill"
                     style={{
                       display: "inline-flex",
                       alignItems: "center",
                       gap: 8,
                       background: "var(--primary)",
-                      color: "var(--nav-text)",
+                      color: "var(--on-primary)",
                       padding: "11px 24px",
                       borderRadius: 10,
                       fontWeight: 600,
@@ -738,13 +830,14 @@ export default function DeckDetailPage() {
                       whiteSpace: "nowrap",
                     }}
                   >
-                    Start Quiz →
+                    {pausedQuiz ? "Continue Quiz →" : "Start Quiz →"}
                   </a>
                 </>
               )}
               <button
                 onClick={handleDelete}
                 disabled={deleting}
+                className="btn-outline-danger"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
@@ -797,10 +890,11 @@ export default function DeckDetailPage() {
                 type="button"
                 onClick={toggleShare}
                 disabled={sharing}
+                className={deck.is_public ? "btn-outline" : "btn-solid"}
                 style={{
                   background: deck.is_public ? "var(--bg-card)" : "var(--primary)",
                   border: deck.is_public ? "1.5px solid var(--border)" : "none",
-                  color: deck.is_public ? "var(--text-muted)" : "var(--nav-text)",
+                  color: deck.is_public ? "var(--text-muted)" : "var(--on-primary)",
                   padding: "8px 16px",
                   borderRadius: 8,
                   fontSize: "calc(13px * var(--font-scale))",
@@ -886,23 +980,49 @@ export default function DeckDetailPage() {
           }}
         >
           {total > 0 ? (
-            <button
-              type="button"
-              onClick={toggleStudyWeakMode}
-              style={{
-                background: studyWeakMode ? "var(--primary)" : "var(--bg-card)",
-                border: "1.5px solid var(--border)",
-                color: studyWeakMode ? "var(--nav-text)" : "var(--text)",
-                padding: "8px 16px",
-                borderRadius: 8,
-                fontSize: "calc(13px * var(--font-scale))",
-                fontWeight: 600,
-                cursor: "pointer",
-                fontFamily: "var(--font-body, sans-serif)",
-              }}
-            >
-              {studyWeakMode ? "✓ Studying weak cards" : "Study weak cards"}
-            </button>
+            hasCompletedFullPass ? (
+              <button
+                type="button"
+                onClick={toggleStudyWeakMode}
+                className={studyWeakMode ? "btn-solid" : "btn-outline"}
+                style={{
+                  background: studyWeakMode ? "var(--primary)" : "var(--bg-card)",
+                  border: "1.5px solid var(--border)",
+                  color: studyWeakMode ? "var(--on-primary)" : "var(--text)",
+                  padding: "8px 16px",
+                  borderRadius: 8,
+                  fontSize: "calc(13px * var(--font-scale))",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                  fontFamily: "var(--font-body, sans-serif)",
+                }}
+              >
+                {studyWeakMode ? "✓ Studying weak cards" : "Study weak cards"}
+              </button>
+            ) : (
+              <span className="tooltip-wrap" style={{ display: "inline-flex", position: "relative" }}>
+                <button
+                  type="button"
+                  disabled
+                  title={UIMessages.studyWeakCardsLocked}
+                  className="btn-outline"
+                  style={{
+                    background: "var(--bg-card)",
+                    border: "1.5px solid var(--border)",
+                    color: "var(--text-faint)",
+                    padding: "8px 16px",
+                    borderRadius: 8,
+                    fontSize: "calc(13px * var(--font-scale))",
+                    fontWeight: 600,
+                    cursor: "not-allowed",
+                    fontFamily: "var(--font-body, sans-serif)",
+                  }}
+                >
+                  Study weak cards
+                </button>
+                <span className="tooltip-bubble">{UIMessages.studyWeakCardsLocked}</span>
+              </span>
+            )
           ) : (
             <span />
           )}
@@ -912,6 +1032,7 @@ export default function DeckDetailPage() {
               setAddingCard((a) => !a);
               setAddCardError("");
             }}
+            className="btn-outline"
             style={{
               background: "var(--bg-card)",
               border: "1.5px solid var(--border)",
@@ -1048,6 +1169,7 @@ export default function DeckDetailPage() {
                     <button
                       type="button"
                       onClick={startEditCard}
+                      className="text-link"
                       style={{ background: "none", border: "none", color: "var(--primary)", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body, sans-serif)" }}
                     >
                       Edit
@@ -1056,15 +1178,18 @@ export default function DeckDetailPage() {
                       type="button"
                       onClick={deleteCurrentCard}
                       disabled={deletingCard}
+                      className="text-link-danger"
                       style={{ background: "none", border: "none", color: "var(--error-dark)", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, cursor: deletingCard ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
                     >
                       {deletingCard ? "Deleting…" : "Delete"}
                     </button>
                   </>
                 )}
-                <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)" }}>
-                  {editingCard ? "Editing card" : "Click card to flip"}
-                </span>
+                {editingCard && (
+                  <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)" }}>
+                    Editing card
+                  </span>
+                )}
               </div>
             </div>
 
@@ -1332,6 +1457,57 @@ export default function DeckDetailPage() {
             </div>
             )}
 
+            {!editingCard && (
+              <p style={{ textAlign: "center", fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)", marginBottom: 14 }}>
+                {isFlipped ? "Click card to flip back" : "Click card to view answer"}
+              </p>
+            )}
+
+            {/* Study-mode self-report */}
+            {!editingCard && (
+              <div style={{ display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap", marginBottom: 20 }}>
+                <button
+                  type="button"
+                  onClick={() => submitCardReview(true)}
+                  disabled={reviewingCard}
+                  className={`btn-review-correct${lastReviewed?.cardId === card?.id && lastReviewed.wasCorrect ? " is-active" : ""}`}
+                  style={{
+                    borderRadius: 10,
+                    padding: "10px 22px",
+                    fontSize: "calc(13px * var(--font-scale))",
+                    fontWeight: 600,
+                    cursor: reviewingCard ? "not-allowed" : "pointer",
+                    opacity: reviewingCard ? 0.6 : 1,
+                    fontFamily: "var(--font-body, sans-serif)",
+                  }}
+                >
+                  ✓ Got it
+                </button>
+                <button
+                  type="button"
+                  onClick={() => submitCardReview(false)}
+                  disabled={reviewingCard}
+                  className={`btn-review-wrong${lastReviewed?.cardId === card?.id && !lastReviewed.wasCorrect ? " is-active" : ""}`}
+                  style={{
+                    borderRadius: 10,
+                    padding: "10px 22px",
+                    fontSize: "calc(13px * var(--font-scale))",
+                    fontWeight: 600,
+                    cursor: reviewingCard ? "not-allowed" : "pointer",
+                    opacity: reviewingCard ? 0.6 : 1,
+                    fontFamily: "var(--font-body, sans-serif)",
+                  }}
+                >
+                  ✗ Review again
+                </button>
+              </div>
+            )}
+            {reviewError && (
+              <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error-dark)", textAlign: "center", marginTop: -10, marginBottom: 16 }}>
+                {reviewError}
+              </p>
+            )}
+
             {/* Navigation controls */}
             <div
               style={{
@@ -1364,30 +1540,45 @@ export default function DeckDetailPage() {
                 ←
               </button>
 
-              {/* Dot indicators (max 12 shown) */}
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                {cards.slice(0, Math.min(total, 12)).map((_, i) => (
-                  <button
-                    key={i}
-                    onClick={() => goTo(i)}
-                    style={{
-                      width: i === currentIdx ? 20 : 8,
-                      height: 8,
-                      borderRadius: 4,
-                      background: i === currentIdx ? "var(--primary)" : "var(--border)",
-                      border: "none",
-                      padding: 0,
-                      cursor: "pointer",
-                      transition: "all 0.2s",
-                    }}
-                    aria-label={`Go to card ${i + 1}`}
-                  />
-                ))}
-                {total > 12 && (
-                  <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginLeft: 2 }}>
-                    +{total - 12}
-                  </span>
-                )}
+              {/* Dot indicators — every card gets one, wrapping onto extra
+                  rows for larger decks (was capped at 12 + a plain "+N" text
+                  count, which meant the current dot and every answered badge
+                  past card 12 were simply invisible — for an 18-of-20 card,
+                  there was no dot at all to show it, current or answered).
+                  Position (current card) and outcome (answered green/red)
+                  are two independent signals, so they get two independent
+                  visual channels instead of fighting over one fill color:
+                  outcome is always the fill (gray/green/red regardless of
+                  current-ness), current-ness is always a gold ring + the
+                  wider pill shape, regardless of fill color. Iterates
+                  displayCards, not cards — weak-cards mode re-sorts, so index
+                  i needs the card actually shown at that position, not raw
+                  insertion order. */}
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "center" }}>
+                {displayCards.map((c, i) => {
+                  const outcome = reviewedThisVisit.get(c.id);
+                  const fill = outcome === undefined ? "var(--border)" : outcome ? "var(--success)" : "var(--error)";
+                  const isCurrent = i === currentIdx;
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => goTo(i)}
+                      style={{
+                        width: isCurrent ? 20 : 8,
+                        height: 8,
+                        borderRadius: 4,
+                        background: fill,
+                        border: isCurrent ? "1.5px solid var(--primary)" : "none",
+                        padding: 0,
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                      aria-label={`Go to card ${i + 1}${
+                        outcome === undefined ? "" : outcome ? " (answered: got it)" : " (answered: review again)"
+                      }${isCurrent ? " (current)" : ""}`}
+                    />
+                  );
+                })}
               </div>
 
               <button
@@ -1417,16 +1608,62 @@ export default function DeckDetailPage() {
             {/* Quiz CTA — bottom */}
             <div style={{ textAlign: "center", marginTop: 36, paddingTop: 28, borderTop: "1px solid var(--border)" }}>
               <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-muted)", marginBottom: 14 }}>
-                Feeling ready? Test yourself on all {total} cards.
+                {pausedQuiz
+                  ? "Want a clean slate? This resets your progress and re-quizzes the whole deck from question 1."
+                  : `Feeling ready? Test yourself on all ${total} cards.`}
               </p>
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 18, flexWrap: "wrap" }}>
+                <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)", fontWeight: 600 }}>
+                  Quiz type:
+                </span>
+                {(
+                  [
+                    { type: QuizType.MULTIPLE_CHOICE, label: "🔘 Multiple Choice" },
+                    { type: QuizType.IDENTIFICATION, label: "✏️ Identification" },
+                    { type: QuizType.MIXED, label: "🎲 Mixed" },
+                  ] as const
+                ).map(({ type, label }) => (
+                  <button
+                    key={type}
+                    type="button"
+                    onClick={() => {
+                      setDefaultQuizType(type);
+                      saveDefaultQuizType(deckId, type);
+                    }}
+                    className={`chip${defaultQuizType === type ? " chip-active" : ""}`}
+                    style={{
+                      background: defaultQuizType === type ? "var(--primary)" : "var(--bg-card)",
+                      color: defaultQuizType === type ? "var(--on-primary)" : "var(--text-muted)",
+                      border: defaultQuizType === type ? "1.5px solid var(--primary)" : "1.5px solid var(--border)",
+                      borderRadius: 8,
+                      padding: "6px 14px",
+                      fontSize: "calc(12px * var(--font-scale))",
+                      fontWeight: 600,
+                      cursor: "pointer",
+                      fontFamily: "var(--font-body, sans-serif)",
+                    }}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
               <a
                 href={Routes.quiz(deckId)}
+                onClick={() => {
+                  // Always a fresh attempt from this button, regardless of
+                  // any in-progress pause — that's the top "Continue Quiz →"
+                  // button's job. Clear it so the quiz page doesn't resume.
+                  if (pausedQuiz) clearPausedQuiz(deckId);
+                }}
+                className="quiz-pill"
                 style={{
                   display: "inline-flex",
                   alignItems: "center",
                   gap: 8,
                   background: "var(--primary)",
-                  color: "var(--nav-text)",
+                  color: "var(--on-primary)",
                   padding: "13px 32px",
                   borderRadius: 10,
                   fontWeight: 600,
@@ -1434,7 +1671,7 @@ export default function DeckDetailPage() {
                   textDecoration: "none",
                 }}
               >
-                🎯 Start Quiz
+                {pausedQuiz ? "🔁 Redo Quiz" : "🎯 Start Quiz"}
               </a>
             </div>
           </>

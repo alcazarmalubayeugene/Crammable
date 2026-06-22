@@ -139,6 +139,9 @@ CREATE TABLE IF NOT EXISTS public.flashcards (
   user_id          UUID        NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   front            TEXT        NOT NULL,
   back             TEXT        NOT NULL,
+  explanation      TEXT,                  -- "Why" lesson for the quiz wrong-answer banner. NULL for
+                                          -- cards generated before this column existed (frontend
+                                          -- falls back to a live /api/quiz/explain call when NULL).
   tags             TEXT[]      NOT NULL DEFAULT '{}',
   category         TEXT        NOT NULL DEFAULT '',
   is_reinforcement BOOLEAN     NOT NULL DEFAULT false,
@@ -1241,11 +1244,12 @@ BEGIN
   )
   RETURNING id INTO v_deck_id;
 
-  INSERT INTO public.flashcards (deck_id, user_id, front, back, tags, category, is_reinforcement)
+  INSERT INTO public.flashcards (deck_id, user_id, front, back, explanation, tags, category, is_reinforcement)
   SELECT v_deck_id,
          p_user_id,
          c->>'front',
          c->>'back',
+         NULLIF(c->>'explanation', ''),
          COALESCE(
            (SELECT array_agg(t) FROM jsonb_array_elements_text(c->'tags') AS t),
            '{}'::text[]
@@ -1320,11 +1324,12 @@ BEGIN
       USING HINT = 'p_cards must contain at least one card';
   END IF;
 
-  INSERT INTO public.flashcards (deck_id, user_id, front, back, tags, category, is_reinforcement)
+  INSERT INTO public.flashcards (deck_id, user_id, front, back, explanation, tags, category, is_reinforcement)
   SELECT p_deck_id,
          p_user_id,
          c->>'front',
          c->>'back',
+         NULLIF(c->>'explanation', ''),
          COALESCE(
            (SELECT array_agg(t) FROM jsonb_array_elements_text(c->'tags') AS t),
            '{}'::text[]

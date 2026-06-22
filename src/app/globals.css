@@ -183,6 +183,15 @@ button:not(:disabled):active {
 .ellipsis-dot:nth-child(2) { animation-delay: 0.2s; }
 .ellipsis-dot:nth-child(3) { animation-delay: 0.4s; }
 
+/* Quiz "Correct!" feedback — a small spring-like overshoot so a right answer
+   feels like a little celebration instead of text just appearing. */
+@keyframes pop {
+  0%   { opacity: 0; transform: scale(0.85); }
+  60%  { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.anim-pop { animation: pop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) both; }
+
 .anim-fade-up { animation: fadeUp 0.6s ease both; }
 .anim-fade-up-1 { animation: fadeUp 0.6s ease 0.06s both; }
 .anim-fade-up-2 { animation: fadeUp 0.6s ease 0.12s both; }
@@ -213,6 +222,83 @@ button:not(:disabled):active {
   background: var(--bg-subtle) !important;
 }
 
+/* ── Destructive variant of .btn-outline (Delete deck) — hovers red instead
+   of primary-orange, so a delete button doesn't look like it's inviting a
+   click the same way a normal action would. ──────────────────────────────── */
+.btn-outline-danger:hover:not(:disabled) {
+  border-color: var(--error) !important;
+  color: var(--error-dark) !important;
+  background: var(--error-bg) !important;
+}
+
+/* ── Study-mode "Got it" / "Review again" self-report buttons (/decks/[id]
+   flip card) — Discord sidebar-style hover: idle is just an outline, hovering
+   fades the background in smoothly to a solid fill rather than snapping.
+   `.is-active` (applied in JS once that card's review has been recorded)
+   reuses the exact same filled look so "you already reviewed this" reads as
+   a persistent highlight instead of appending a second checkmark to the
+   label, which looked like a doubled-up icon. ─────────────────────────── */
+.btn-review-correct,
+.btn-review-wrong {
+  position: relative;
+  background: transparent;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+.btn-review-correct {
+  border: 1.5px solid var(--success);
+  color: var(--success-dark);
+}
+.btn-review-wrong {
+  border: 1.5px solid var(--error);
+  color: var(--error-dark);
+}
+/* Hover/active fills with the same muted token the theme already uses for
+   tinted success/error surfaces elsewhere (e.g. the validation banners),
+   rather than a fully saturated solid fill — keeps it in the same low-
+   contrast register as the rest of dark mode instead of reading as a bright
+   block of color. */
+.btn-review-correct:hover:not(:disabled),
+.btn-review-correct.is-active {
+  background: var(--success-bg) !important;
+  border-color: var(--success) !important;
+}
+.btn-review-wrong:hover:not(:disabled),
+.btn-review-wrong.is-active {
+  background: var(--error-bg) !important;
+  border-color: var(--error) !important;
+}
+
+/* A soft underline bar at the bottom edge that grows outward from center on
+   hover/active, rather than Discord's left-edge pill (moved per feedback).
+   Uses the same muted success/error token as the border — no white glow —
+   so the accent stays in the theme's own palette instead of standing out. */
+.btn-review-correct::before,
+.btn-review-wrong::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 4px;
+  transform: translateX(-50%);
+  width: 0;
+  height: 2px;
+  border-radius: 2px;
+  opacity: 0;
+  transition: width 0.22s ease, opacity 0.22s ease;
+}
+.btn-review-correct::before {
+  background: var(--success);
+}
+.btn-review-wrong::before {
+  background: var(--error);
+}
+.btn-review-correct:hover:not(:disabled)::before,
+.btn-review-correct.is-active::before,
+.btn-review-wrong:hover:not(:disabled)::before,
+.btn-review-wrong.is-active::before {
+  width: 55%;
+  opacity: 0.8;
+}
+
 /* ── Chip/pill toggle buttons (Settings' Appearance, Font size, Font picker) —
    brightens the border on hover when not the active selection. Selected chips
    already stand out via their own background, so they're excluded. ──────── */
@@ -236,6 +322,13 @@ button:not(:disabled):active {
   text-decoration: underline;
 }
 
+/* ── Destructive variant of .text-link (per-card "Delete" on /decks/[id]) —
+   hovers to a clear error red instead of the primary token. ──────────────── */
+.text-link-danger:hover {
+  color: var(--error) !important;
+  text-decoration: underline;
+}
+
 /* ── Solid-background buttons (Save changes, Save preferences, Delete my
    account) — a brightness shift on hover, no movement. Filter works on any
    background color without needing a hover token per color. ──────────── */
@@ -247,6 +340,48 @@ button:not(:disabled):active {
 }
 .btn-solid:active:not(:disabled) {
   filter: brightness(0.95);
+}
+
+/* ── "Quiz me" / "Continue" / "Redo Quiz" pills (dashboard deck cards + the
+   deck detail page) — already primary-colored, so a brightness filter alone
+   reads as "barely changed" (same lesson as .text-link below: swap to the
+   dedicated --primary-hover token instead). A plain color swap, same
+   treatment as the quiz-type chips — no shadow/lift, that read as the button
+   moving rather than highlighting. */
+.quiz-pill {
+  transition: background 0.15s ease;
+}
+.quiz-pill:hover {
+  background: var(--primary-hover) !important;
+}
+
+/* ── Small icon-only buttons (deck card "⋮" menu trigger) — transparent by
+   default, a real solid highlight on hover (var(--bg-subtle) was too close
+   to var(--bg-card) in dark mode to actually read as "hovered"). !important
+   on both: the button's own inline `style` (background/color) otherwise wins
+   over a plain class rule and silently kills the hover entirely. ────────── */
+.icon-btn {
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.icon-btn:hover {
+  background: var(--primary) !important;
+  color: var(--on-primary) !important;
+}
+
+/* ── Dropdown menu items (deck card's Edit/Delete menu) — a solid highlight
+   bar on hover, like a native OS context menu, not just a faint tint. ───── */
+.menu-item {
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.menu-item:hover {
+  background: var(--primary) !important;
+  color: var(--on-primary) !important;
+}
+/* Delete stays visibly "destructive" on hover instead of the same primary
+   highlight as Edit — must come after .menu-item:hover to win the tie. */
+.menu-item-danger:hover {
+  background: var(--error) !important;
+  color: var(--on-primary) !important;
 }
 
 /* ── Upload dropzone (PdfUploadFlow) — border brightens on hover/drag. ──── */
@@ -325,4 +460,33 @@ button:not(:disabled):active {
 }
 .avatar-wrap:hover .avatar-tooltip {
   display: flex;
+}
+
+/* ── Generic small hover tooltip (e.g. "Export PDF (Pro)" explaining the Pro
+   gate) — a styled bubble instead of relying on the native `title` attribute,
+   which is slow to appear and looks like plain OS chrome. Keep `title` too
+   for accessibility; this is the visible one. ───────────────────────────── */
+.tooltip-wrap {
+  position: relative;
+}
+.tooltip-bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--nav-bg);
+  color: var(--nav-text);
+  border: 1.5px solid rgba(255, 252, 247, 0.12);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  white-space: nowrap;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+  z-index: 50;
+}
+.tooltip-wrap:hover .tooltip-bubble {
+  opacity: 1;
 }

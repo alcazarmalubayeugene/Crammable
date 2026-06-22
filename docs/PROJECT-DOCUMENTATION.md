@@ -60,6 +60,9 @@ and the roadmap. (Deferred work is tracked separately in `docs/TODO.md`.)
   **`app_reviews`** (B4 in-app reviews). `admin_action_log` extended with
   `target_user_id` / `credits_amount` and nullable `payment_id` (for `credit_grant` /
   `account_deleted` actions); `referral_events` gained `deck_id` (deck_share attribution).
+  `flashcards` gained `explanation TEXT` (nullable) — Capy's "why" lesson shown on a wrong
+  quiz answer; NULL on cards generated before the column existed (live `/api/quiz/explain`
+  fallback covers those).
 - **RLS** enabled on every table with per-user and admin policies, plus additive
   "anyone read public" SELECT policies on `decks` / `flashcards` (B5 public sharing).
 - **Triggers:** auto-create profile on signup (`handle_new_user`), `updated_at` maintenance,
@@ -91,6 +94,7 @@ and the roadmap. (Deferred work is tracked separately in `docs/TODO.md`.)
 | `DELETE /api/decks/[id]` | `src/app/api/decks/[id]/route.ts` | ✅ Cascade-deletes flashcards/sessions via FK |
 | `POST /api/quiz/[id]` | `src/app/api/quiz/[id]/route.ts` | ✅ Server-side question builder; same-category MC distractors; creates `quiz_sessions` row |
 | `POST /api/quiz/result` | `src/app/api/quiz/result/route.ts` | ✅ Rate-limited; one atomic `submit_quiz_result` RPC; **score re-derived server-side** from `flashcards.back` (2026-06-10) |
+| `POST /api/quiz/explain` | `src/app/api/quiz/explain/route.ts` | ✅ Capy's "why" lesson on a wrong answer; consent-gated + rate-limited (30/hr); **no credit charged**. Live fallback only — new cards carry a baked-in `explanation` (2026-06-21) |
 | `POST /api/payment/submit` | `src/app/api/payment/submit/route.ts` | ✅ 13-digit ref + amount/method validation; 2/24h; one pending per user; never auto-activates Pro |
 | `GET /api/admin/payments` | `src/app/api/admin/payments/route.ts` | ✅ `requireAdmin`; joins `userEmail`; computes `minutesSinceSubmission` |
 | `POST /api/admin/payments/approve` | `src/app/api/admin/payments/approve/route.ts` | ✅ atomic `approve_payment` RPC (verify → Pro → +30 credits → audit) |

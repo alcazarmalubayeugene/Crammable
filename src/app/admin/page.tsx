@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
+import { PageLoading } from "@/components/ui/PageLoading";
 import {
   AdminConfig,
   App,
@@ -312,11 +313,7 @@ export default function AdminPage() {
   // ── loading ───────────────────────────────────────────────────────────────────
 
   if (loading) {
-    return (
-      <main style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>Loading…</p>
-      </main>
-    );
+    return <PageLoading />;
   }
 
   // ── not admin ─────────────────────────────────────────────────────────────────

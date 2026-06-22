@@ -50,6 +50,7 @@ export {
   insertFlashcards,
   getFlashcardsForDeck,
   getWeakCardsForDeck,
+  getFlashcardById,
   applyCardReview,
   insertReinforcementCardsAndCharge,
   createFlashcard,

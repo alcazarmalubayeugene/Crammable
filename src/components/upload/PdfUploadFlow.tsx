@@ -58,7 +58,6 @@ export function PdfUploadFlow() {
   const [pageProgress, setPageProgress] = useState({ current: 0, total: 0 });
   const [pastedText, setPastedText]           = useState("");
   const [errorMessage, setErrorMessage]       = useState("");
-  const [statusLine, setStatusLine]           = useState("");
   const [layer1Payload, setLayer1Payload]     = useState<unknown>(null);
   const [resultView, setResultView]           = useState<ResultView | null>(null);
   // Populated when the upload returns path: "ocr" — used for selective page rendering.
@@ -76,6 +75,9 @@ export function PdfUploadFlow() {
   const [subscriptionTier, setSubscriptionTier] = useState<(typeof SubscriptionTier)[keyof typeof SubscriptionTier]>(SubscriptionTier.FREE);
   const [generationMode, setGenerationMode] = useState<GenerationMode>(GenerationMode.STANDARD);
   const isPro = subscriptionTier === SubscriptionTier.PRO;
+  // Current balance, read alongside consent/tier below — lets the generating
+  // screen show a real anticipated remaining count instead of a static line.
+  const [tokenBalance, setTokenBalance] = useState<number | null>(null);
 
   // ── Deck settings (name + card count) ───────────────────────────────────────
   const [deckName, setDeckName] = useState("");
@@ -86,6 +88,18 @@ export function PdfUploadFlow() {
   // explicitly clicks "Generate flashcards" — lets deck settings be filled in first.
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
+  // Concept #4's "Generating" checklist (Finding key concepts… / Writing your
+  // flashcards) splits the single opaque /api/generate call into two
+  // perceived-progress stages — there's no real sub-progress signal from the
+  // backend (one DeepSeek round trip, no streaming), so this is a timer-based
+  // approximation purely for "no blank spinner" feel, not a measured metric.
+  const [genStage, setGenStage] = useState<1 | 2>(1);
+  useEffect(() => {
+    if (phase !== "generating") return;
+    const t = setTimeout(() => setGenStage(2), 2500);
+    return () => clearTimeout(t);
+  }, [phase]);
+
   useEffect(() => {
     async function checkConsent() {
       const supabase = getSupabaseBrowserClient();
@@ -93,12 +107,15 @@ export function PdfUploadFlow() {
       if (!user) { setConsentChecked(true); return; }
       const { data } = await supabase
         .from(TableNames.profiles)
-        .select("consent_deepseek, subscription_tier")
+        .select("consent_deepseek, subscription_tier, token_balance")
         .eq("id", user.id)
         .single();
       setHasConsented(data?.consent_deepseek === true);
       if (data?.subscription_tier) {
         setSubscriptionTier(data.subscription_tier as (typeof SubscriptionTier)[keyof typeof SubscriptionTier]);
+      }
+      if (typeof data?.token_balance === "number") {
+        setTokenBalance(data.token_balance);
       }
       setConsentChecked(true);
     }
@@ -129,7 +146,6 @@ export function PdfUploadFlow() {
     setPageProgress({ current: 0, total: 0 });
     setPastedText("");
     setErrorMessage("");
-    setStatusLine("");
     setLayer1Payload(null);
     setResultView(null);
     setImagePageNumbers([]);
@@ -141,7 +157,6 @@ export function PdfUploadFlow() {
     (label: string, payload: unknown, extractedText?: string) => {
       setResultView({ label, debug: payload, extractedText });
       setPhase("result");
-      setStatusLine("");
     },
     [],
   );
@@ -153,7 +168,7 @@ export function PdfUploadFlow() {
       debug?: unknown,
     ) => {
       setPhase("generating");
-      setStatusLine("Sending to DeepSeek and generating flashcards…");
+      setGenStage(1);
       setErrorMessage("");
 
       const payload: GenerateRequest = {
@@ -199,11 +214,9 @@ export function PdfUploadFlow() {
           debug,
         });
         setPhase("result");
-        setStatusLine("");
         return;
       }
 
-      setStatusLine(UIMessages.creditDeducted(data.creditsRemaining));
       router.push(Routes.deck(data.deckId));
     },
     [router, generationMode, deckName, cardCount],
@@ -214,7 +227,6 @@ export function PdfUploadFlow() {
       setPhase("uploading");
       setErrorMessage("");
       setResultView(null);
-      setStatusLine("Uploading and analyzing PDF (Layer 1)…");
 
       const formData = new FormData();
       formData.append("file", file);
@@ -296,14 +308,12 @@ export function PdfUploadFlow() {
         pdfFile,
         (current, total) => {
           setPageProgress({ current, total });
-          setStatusLine(UIMessages.ocrProgress(current, total));
         },
         pagesToOcr,
       );
 
       const ocrResult = await runOcrOnPages(rendered, (current, total) => {
         setPageProgress({ current, total });
-        setStatusLine(UIMessages.ocrProgress(current, total));
       });
 
       const debug = {
@@ -751,26 +761,83 @@ export function PdfUploadFlow() {
         </>
       )}
 
-      {(phase === "uploading" || phase === "generating") && (
-        <div
-          className="anim-fade-up"
-          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, borderRadius: 20, padding: "24px", border: "1.5px solid var(--border)", background: "var(--bg-card)", textAlign: "center", fontFamily: "var(--font-body, sans-serif)" }}
-          role="status"
-        >
-          <img
-            src="/capy/capy-reading.png"
-            alt=""
-            width={120}
-            height={120}
-            className="capy-reading-bob"
-            style={{ width: 120, height: "auto" }}
-          />
-          <span style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "calc(14px * var(--font-scale))", color: "var(--text)" }}>
-            <span className="spinner" />
-            {statusLine || "Working…"}
-          </span>
-        </div>
-      )}
+      {(phase === "uploading" || phase === "generating") && (() => {
+        const extracting = phase === "uploading";
+        const rows: Array<{ label: string; state: "done" | "active" | "pending" }> = [
+          {
+            label: pageProgress.total > 0 ? `Extracted text from ${pageProgress.total} pages` : "Extracted your text",
+            state: extracting ? "active" : "done",
+          },
+          { label: "Finding key concepts…", state: extracting ? "pending" : genStage === 1 ? "active" : "done" },
+          { label: "Writing your flashcards", state: extracting || genStage === 1 ? "pending" : "active" },
+        ];
+        const progressPercent = extracting ? 20 : genStage === 1 ? 55 : 85;
+
+        return (
+          <div
+            className="anim-fade-up"
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, borderRadius: 20, padding: "32px 24px", border: "1.5px solid var(--border)", background: "var(--bg-card)", textAlign: "center", fontFamily: "var(--font-body, sans-serif)" }}
+            role="status"
+            aria-live="polite"
+          >
+            <img
+              src="/capy/capy-reading.png"
+              alt=""
+              width={120}
+              height={120}
+              className="capy-reading-bob"
+              style={{ width: 120, height: "auto" }}
+            />
+            <div>
+              <p style={{ margin: 0, fontFamily: "var(--font-display, serif)", fontSize: "calc(18px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
+                Reading your PDF, hang tight…
+              </p>
+              <p style={{ margin: "4px 0 0", fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)" }}>
+                {deckName.trim() || "Your deck"} · generating {cardCount} cards
+              </p>
+            </div>
+
+            <div style={{ width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", gap: 6 }}>
+              {rows.map((row) => (
+                <div
+                  key={row.label}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "9px 14px",
+                    borderRadius: 10,
+                    background: row.state === "active" ? "var(--bg-subtle)" : "transparent",
+                    fontSize: "calc(13px * var(--font-scale))",
+                    color: row.state === "pending" ? "var(--text-faint)" : "var(--text)",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 14,
+                      textAlign: "center",
+                      color: row.state === "done" ? "var(--success)" : row.state === "active" ? "var(--primary)" : "var(--text-faint)",
+                    }}
+                  >
+                    {row.state === "done" ? "✓" : row.state === "active" ? "●" : "○"}
+                  </span>
+                  {row.label}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ width: "100%", maxWidth: 360, height: 6, borderRadius: 999, overflow: "hidden", background: "var(--border)" }}>
+              <div style={{ height: "100%", width: `${progressPercent}%`, borderRadius: 999, background: "var(--primary)", transition: "width 0.4s ease" }} />
+            </div>
+
+            <p style={{ margin: 0, fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)" }}>
+              {tokenBalance !== null
+                ? `Capy will use 1 Capycoin · ${Math.max(0, tokenBalance - 1)} remaining`
+                : "Capy will use 1 Capycoin for this."}
+            </p>
+          </div>
+        );
+      })()}
 
       {phase === "ocr_confirm" && pdfFile && (
         <div
@@ -799,10 +866,7 @@ export function PdfUploadFlow() {
             </button>
             <button
               type="button"
-              onClick={() => {
-                setPhase("paste_fallback");
-                setStatusLine("");
-              }}
+              onClick={() => setPhase("paste_fallback")}
               className="btn-outline"
               style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, cursor: "pointer", border: "1.5px solid var(--border)", color: "var(--text)", background: "none", fontFamily: "var(--font-body, sans-serif)" }}
             >
