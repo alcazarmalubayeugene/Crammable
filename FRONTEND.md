@@ -475,6 +475,7 @@ changes everywhere automatically.
 | v.06 | **Merged `main`'s feature-completion push (B/C/D/E) + security hardening.** Deck-detail rebuilt — rename, add/edit/delete card, share + copy public link, PDF export (Pro), study-weak-cards mode, per-deck quiz history (kept FrontEnd's existing delete-deck button, ported onto main's rebuilt page). Deep Dive (Pro) toggle in upload flow; Living Deck reinforcement notice / upsell on quiz result; public read-only deck viewer (`/public/decks/[id]`). Rewards page gained all 4 earn methods (share-a-deck, write-a-review, complete-profile — kept FrontEnd's "Referred by [name]" history entry alongside them); settings gained data export + account deletion; admin gained review verification, user list + grant credits, and audit log. Backend: `app_reviews` table + new atomic RPCs (Living Deck, self-referral earns, review verify, account deletion), Pro-expiry cron, payment Realtime. Security audit: closed a public-deck IDOR (owner-scoped deck lookups), CSRF/JSON/rate-limit gaps on new routes, trimmed public projection, pinned function `search_path`. Full schema applied live; typecheck + lint + 75 tests green. |
 | v.07 | **Theming + polish pass.** New "Preferred style" section in Settings — dark mode (Night Lamp palette), font-size adjuster, and a 5-pairing font picker, all wired through a new `ThemeProvider` (`src/lib/theme/ThemeProvider.tsx`) with live-preview-then-explicit-Save UX (anti-flash inline script in `layout.tsx`, localStorage-only persistence, whole app re-themed via CSS custom properties, not per-page). Header/nav fixed to span the full width and sit at the screen corners (`maxWidth: 1200` → `"100%"` across all app pages); the active page's own nav label now bolds/colors itself; every header nav link/button got a hover state (`.nav-link` class in `globals.css`). New hover-lift / button-press / fade-up animation system ported from the design concept (fade-up explicitly overrides `prefers-reduced-motion` per product decision — see Known fixes). **Export-my-data removed entirely** per product decision — deleted `/api/account/export`, `exportAccountData()`, its tests, and the Settings UI for it. Renamed all user-facing "credits" copy to "Capycoins" (display text only — `deduct_credit()`, `ApiErrorCode.INSUFFICIENT_CREDITS`, `token_balance`, and other internal identifiers were deliberately left unchanged). Added 3 new Capy character images (`public/capy/teaching-capy.png`, `congrats-capy.png`, `capycoin.png`) — teaching-capy on a wrong quiz answer, congrats-capy on a perfect quiz score, capycoin replacing the 🪙 emoji on every balance display. Typecheck/build/72-test suite all green (3 export tests removed). |
 | v.09 | **Swapped the beaver emoji for real Capy artwork, everywhere.** `🦫` (the literal beaver emoji — there is no capybara emoji in Unicode, flagged as a known gap in `docs/DESIGN_PROPOSAL_CAPY_CALM.md`) was still in use as the mascot on every single page: the nav logo (24px) on all 13 pages, plus the larger loading/empty/error-state mascot (48–56px) on `/`, `/login`, `/signup`, `/settings` (reset-password view), `/dashboard`, and the quiz-result/public-deck "not found" states. Replaced all 22 instances with the existing `public/capy/capy-idle.svg` artwork (a real capybara, already in the repo but never wired up). Typecheck + full 72-test suite green. |
+| v.11 | **Gizmo-reference fidelity pass: unified auth card + name/course/referral onboarding wizard.** Restored the Generation Mode card and animated the "Checking account…" loading state in `PdfUploadFlow.tsx`; fixed the same unresolved-Tailwind-class root cause across its remaining phases (root cause first found in v.10, this finished the sweep). Added header buttons + a Pro/Upgrade pill to `/decks/new`'s nav and fixed a real `maxWidth: 1024` nav-centering bug (content clumping mid-bar instead of sitting at the corners) on `/decks/new`, `/dashboard`, `/login`, `/signup`, `/`, `/forgot-password`, and `/settings`. Replaced the 5-option CSS-filter avatar "mood" picker with a real client-side profile-picture upload (`src/lib/theme/customAvatar.ts` — canvas square-crop, localStorage, frontend-only). Removed the `capy-idle.svg` nav-logo icon app-wide (verified zero remaining references). Replicated the concept's dashboard returning-user layout (smaller greeting, italic "Capy," removed a duplicate "Your decks" header) while keeping the stats row per standing precedent. Cropped ~55%-of-canvas transparent padding baked into `public/capy/capy-hero.png` (root cause of "too much spacing" below the image, via `sharp().trim()`), then removed the image from the login page entirely per a later explicit call; added `src/app/icon.png`/`apple-icon.png` (favicon/apple-touch-icon generated from `capy-hero.png`, solid cream background — accepted as-is); simplified `<title>` to "Crammable". Fixed a persistent login-page scrollbar via a `useEffect` forcing `document.documentElement`/`body` `overflow:hidden`. **Merged `/login` and `/signup` into one `AuthCard.tsx` component** with an in-place Sign up/Sign in pill toggle (`history.replaceState`, no remount — feels like one card, not two pages), restructured into a single floating card (logo + header + toggle + form + alt-options all inside one `bg-card` box, no separate nav bar) matching a competitor reference (Gizmo) while keeping our own theme colors; added disabled OAuth (Apple/Google) and phone-number placeholders (flagged for a backend session — needs Supabase OAuth provider config, a callback route, and an SMS gateway for phone auth); added a show/hide eye-icon toggle to all three password fields. **Trimmed signup to email/password/confirm/consent only** — full name, course, and referral code moved to a new one-question-at-a-time `/onboarding/name` → `/onboarding/course` → `/onboarding/referral` wizard that runs after email confirmation (gated by a `cm_pending_onboarding` localStorage flag checked on dashboard load). Reuses the existing `claim-profile-complete` and `referral/claim` endpoints as-is — **zero backend changes**; confirmed with Yujin that referral rewards stay referrer-only (not the person entering the code, despite the wizard's copy possibly reading that way at a glance). Added a floating to-do checklist on the dashboard (fixed to the right edge of the viewport) for any account — not just fresh signups — that never finished the name/course steps, with a "Finish now →" button that routes to whichever step is actually missing. `npx tsc --noEmit` clean and the full 72-test suite green throughout; committed + pushed to `origin/FrontEnd` (`42b8dc8`). |
 | v.10 | **Applied the "Capy Calm" concept UI to Dashboard + Upload** (`ui-concept/v1/capy-lofi-concept.html`, sections 2+3 only this pass — co-devs' explicit ask). Added `CardCountOptions` (10/20/30) + `GenerateRequest.maxCards` to `contracts.ts`, clamped server-side in `/api/generate` against the user's tier max (silent fallback, same pattern as Deep Dive's downgrade). New localStorage-only nav avatar mood picker (`AvatarPicker.tsx` + `avatarMood.ts` — 5 CSS-filter "moods" over one real image, `public/capy/avatar-default.png`, the actual concept-supplied art, not a placeholder). Both navbars (`/dashboard`, `/decks/new`) gained a Pro badge + the avatar picker; nav logo restored to `public/capy/capy-hero.png` after a brief, corrected detour to text-only. Dashboard deck grid restyled to the concept's look — dashed "+ New deck" tile first, each deck card got an inline "Quiz me" button — while keeping the existing stats row (Capycoins/Active decks/Plan) the concept doesn't show, per explicit instruction not to remove existing features. Upload flow (`PdfUploadFlow.tsx`) reordered to dropzone → Deck Settings (deck name + card-count chips, `30` Pro-locked for free tier) → explicit Cancel/Generate flashcards buttons — picking a file no longer auto-starts extraction; generation now only fires on "Generate flashcards" click, matching the concept exactly. Typecheck + full 72-test suite green throughout. |
 | v.08 | **Dark-mode bug fix + UI polish.** Fixed `/decks/new`'s upload card being nearly unreadable in dark mode — `PdfUploadFlow.tsx` never migrated off Tailwind `dark:` classes (see Known fixes); rewrote it fully onto the CSS-variable theme tokens and redesigned its Generation-mode picker as clickable radio-cards (was a native `<fieldset>`/`<legend>`) with a smooth `Upgrade to Pro` link/badge for non-Pro users instead of a disabled control. Fixed a real CSS bug where `hover-lift` silently stopped working on any card that also had a `fadeUp` entrance animation (see Known fixes — both were fighting over `transform`). Settings: nav now shows email instead of display name; "Sign out" relabeled "Log out of all devices" with explicit `scope: "global"`; added entrance animation + non-moving hover states (chip/btn-outline/btn-solid CSS classes) across Settings and the dashboard; dashboard's 👋 now does a single gentle wave on hover (not constant); Capycoin icons enlarged and now fill their containers edge-to-edge instead of floating with padding. Typecheck/build/72-test suite all green. *(A wrong-answer "teaching lesson" feature — a per-card `explanation` baked in at generation time, plus a `flashcards.explanation` schema column/RPC change and a new `/api/quiz/explain` route — was built and then fully reverted later the same day: those files are backend-owned per the project's doc-ownership boundary, and the change had not been applied to the live Supabase project. See the 2026-06-20 revert note below.)* |
 
@@ -482,19 +483,108 @@ changes everywhere automatically.
 
 ## For Claude (Session Lifeline)
 
-> **Current status (2026-06-21):** All app pages and backend routes the UI calls are
-> built and wired. Tonight's session (Personal PC) applied the co-devs' "Capy Calm"
-> concept UI (`ui-concept/v1/capy-lofi-concept.html`) to the Dashboard and Upload pages
-> only — a card-count picker, a nav avatar picker, Pro badges in both navbars, a
-> restyled deck grid, and an upload flow that now waits for an explicit "Generate
-> flashcards" click instead of auto-starting on file pick. The remaining concept
-> sections (generating screen, flashcard study mode, quiz, results ring, avatar
-> showcase, the floating style-picker) are explicitly out of scope for this pass. The
-> app-wide chrome gap (404/error/loading pages, shared Navbar/Footer, admin nav link)
-> from prior sessions is still open — see Pending below. The dated log below is
+> **Current status (2026-06-22):** All app pages and backend routes the UI calls are
+> built and wired. This session (Mom's PC) did a Gizmo-reference fidelity pass across
+> nav sizing, the avatar picker, and the login/signup flow — the biggest change is that
+> `/login` and `/signup` are now one shared `AuthCard.tsx` component (single floating
+> card, in-place Sign up/Sign in toggle, disabled OAuth/phone placeholders), and signup
+> itself was trimmed to email/password/consent with full name/course/referral moved to
+> a new post-confirmation `/onboarding/*` wizard. That wizard reuses existing reward
+> endpoints with **zero backend changes**. Apple/Google OAuth and phone-number auth are
+> UI-only placeholders — turning them on for real needs a backend session (OAuth
+> provider registration, Supabase Auth config, a callback route, an SMS gateway). The
+> remaining concept sections (generating screen, flashcard study mode, quiz, results
+> ring, avatar showcase, the floating style-picker) are still explicitly out of scope.
+> The app-wide chrome gap (404/error/loading pages, shared Navbar/Footer, admin nav
+> link) from prior sessions is still open — see Pending below. The dated log below is
 > historical.
 
-**Last session: 2026-06-21 [Personal PC] — Capy Calm concept UI: Dashboard + Upload**
+**Last session: 2026-06-22 [Mom's PC → switching to Personal PC] — Gizmo-reference fidelity pass: unified auth card + onboarding wizard**
+
+### What happened
+- Continued the standing Capy Calm fidelity pass: restored the Generation Mode card,
+  animated the "Checking account…" loading state, and finished the unresolved-Tailwind
+  sweep across the rest of `PdfUploadFlow.tsx`'s phases (root cause first found in the
+  prior v.10 session). Added header buttons + a Pro/Upgrade pill to `/decks/new`'s nav.
+- **Real bug found and fixed: nav-centering regression.** Several pages had
+  `maxWidth: 1024` (not `"100%"`) on the nav's inner wrapper, clumping the logo and
+  right-side links together in the middle of wide screens instead of sitting at the
+  corners. Fixed on `/decks/new`, `/dashboard`, `/login`, `/signup`, `/`,
+  `/forgot-password`, and `/settings`. A detour to *constrain* the nav to match the
+  content column instead was tried first, looked worse (full-width dark bar with a
+  centered island and empty voids either side), and was reverted — confirmed with
+  Yujin to keep full-width nav rather than box the whole page like a literal app-shell.
+- Replaced the 5-option CSS-filter avatar "mood" picker with a real client-side
+  profile-picture upload (`src/lib/theme/customAvatar.ts` — canvas-based square crop,
+  localStorage only, no backend touched per the standing boundary rule). Removed the
+  `capy-idle.svg` nav-logo icon entirely from the app (verified via grep: zero
+  remaining references across all 13 pages that had it).
+- Replicated the concept's dashboard returning-user layout (smaller, lighter greeting;
+  italic "Capy" in the subtitle; removed a redundant "Your decks" header + duplicate
+  "+ New deck" button) — kept the 3-card stats row per the existing standing precedent
+  that real functionality doesn't get cut just because a static concept mockup didn't
+  model it.
+- **Root-caused the login hero image's "too much spacing" complaint** after several
+  rounds of pure-CSS resizing didn't fix it: the source `public/capy/capy-hero.png` had
+  ~55%-of-canvas transparent padding baked in (`sharp(src).trim()` revealed a
+  368×279 visible bounding box inside a 408×612 canvas). Cropped the file itself
+  (now the canonical asset). Later in the same session, on a literal "remove the image
+  completely" instruction, it came back out of the login page again.
+- Generated `src/app/icon.png` + `apple-icon.png` (Next.js auto-icon convention) from
+  `capy-hero.png` via `sharp`, after Yujin asked for a Gizmo-style branded tab icon.
+  Landed on a solid cream `flatten()` background after a transparent-corners version
+  looked "cropped" on extreme zoom; Yujin said the solid version "does not look good"
+  but then **rejected** a revert-to-transparent attempt with "actually I think this is
+  okay for now" — that is the accepted final state, don't re-litigate without him
+  raising it again. `<title>` simplified `"Crammable — Turn any document into a
+  flashcard deck"` → `"Crammable"`.
+- Fixed a persistent login-page scrollbar — took three escalating attempts (tightening
+  spacing, then `height:100vh + overflow:hidden` on `<main>`, then finally a
+  `useEffect` directly forcing `document.documentElement`/`body` `overflow:hidden` on
+  mount with cleanup on unmount) before Yujin confirmed "Good now."
+- **Merged `/login` + `/signup` into one `src/components/auth/AuthCard.tsx`.** Yujin
+  compared the app against a competitor (Gizmo) and asked to replicate its single-card
+  format: logo, header, an in-place Sign up/Sign in pill toggle, form, divider, and
+  alt-options all live inside one floating card with no separate nav bar (kept our own
+  theme colors, not Gizmo's literal white). The toggle swaps form fields via local
+  state + `history.replaceState` rather than navigating — no remount, feels like one
+  card morphing, not two pages. Added disabled Apple/Google + phone-number (`+63`
+  selector) placeholders, explicitly flagged in code comments as needing a backend
+  session. Added a show/hide eye-icon toggle to all three password fields (login,
+  signup password, signup confirm).
+- **Trimmed signup to email/password/confirm/consent.** Full name, course, and referral
+  code moved to a new one-question-at-a-time wizard (`/onboarding/name` →
+  `/onboarding/course` → `/onboarding/referral`) that runs after email confirmation —
+  the dashboard checks a `cm_pending_onboarding` localStorage flag + incomplete profile
+  and redirects there instead of rendering. Before building this, confirmed the
+  existing `claim-profile-complete` and `referral/claim` endpoints already supported
+  exactly this (full_name/course already optional/nullable, no schema change needed) —
+  **zero backend changes**. Yujin double-checked the referral reward direction
+  ("isn't it the opposite?") — confirmed current behavior (referrer-only, not the
+  person entering the code) is correct as designed, no change made.
+- Added a profile-completion nudge on the dashboard for **any** account (not just fresh
+  signups) that never finished the name/course steps — iterated 3 times off Yujin's
+  feedback: small nav pill → "close but not what I envisioned" (he circled a spot on
+  the right edge of the viewport) → a vertical rotated-text tab → "I want it lengthwise
+  … like how a to-do list works" → final version: a horizontal-reading floating card
+  fixed to the right edge with a real checklist (☐/✓ Full name, ☐/✓ Course/Program,
+  struck through once filled in) and a "Finish now →" button that seeds localStorage so
+  it routes straight to whichever step is actually missing.
+- `App.version` bumped `v.10` → `v.11`. Typecheck clean, full 72-test suite green
+  throughout. Committed (`42b8dc8`, 27 files) and pushed to `origin/FrontEnd`.
+
+### Pending (as of 2026-06-22)
+- **Backend session needed:** Apple/Google OAuth (provider registration + Supabase
+  Auth config + a new `/auth/callback`-style route) and phone-number auth (Supabase
+  phone provider + a paid SMS gateway like Twilio) — both are disabled UI placeholders
+  on `/login`/`/signup` right now, styling-only.
+- Remaining concept sections (generating screen, flashcard study, quiz, results ring,
+  avatar showcase, floating style-picker) still explicitly out of scope.
+- App-wide chrome gap — unchanged, still open, carried from prior sessions.
+
+---
+
+**Previous session: 2026-06-21 [Personal PC] — Capy Calm concept UI: Dashboard + Upload**
 
 ### What happened
 - Added `CardCountOptions` (10/20/30) to `contracts.ts` + `GenerateRequest.maxCards`,
@@ -542,7 +632,7 @@ changes everywhere automatically.
 
 ---
 
-**Previous session: 2026-06-18 → 2026-06-20 ~10:10PM [Personal PC] — ~2-day session**
+**Last session (historical): 2026-06-18 → 2026-06-20 ~10:10PM [Personal PC] — ~2-day session**
 
 ### What happened
 - Added a "Preferred style" section to `/settings` — dark mode, font-size adjuster,
