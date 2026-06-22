@@ -215,7 +215,6 @@ export default function UpgradePage() {
             <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
           </a>
           <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
-          <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
           <span
             style={{
               fontFamily: "var(--font-display, serif)",

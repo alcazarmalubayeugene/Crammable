@@ -93,7 +93,7 @@ const baskerville = Libre_Baskerville({
 });
 
 export const metadata: Metadata = {
-  title: "Crammable — Turn any document into a flashcard deck",
+  title: "Crammable",
   description:
     "Upload your PDF reviewer and AI instantly generates flashcards and quizzes — even from scanned, photocopied handouts. Built for Filipino university students.",
 };

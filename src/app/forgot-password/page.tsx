@@ -79,9 +79,8 @@ export default function ForgotPasswordPage() {
 
       {/* ── NAVBAR ── */}
       <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)" }}>
-        <div style={{ maxWidth: 1024, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Link href={Routes.home} style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
             <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
               Crammable
             </span>
@@ -109,7 +108,6 @@ export default function ForgotPasswordPage() {
           {submitted ? (
             // ── Success state — form is hidden, enumeration-safe confirmation ──
             <div style={{ textAlign: "center" }}>
-              <img src="/capy/capy-idle.svg" alt="" width={59} height={48} style={{ height: "calc(48px * var(--font-scale))", width: "auto", marginBottom: 12 }} />
               <h1 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(26px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>
                 Check your inbox
               </h1>
@@ -142,7 +140,6 @@ export default function ForgotPasswordPage() {
             // ── Form state ──
             <>
               <div style={{ textAlign: "center", marginBottom: 32 }}>
-                <img src="/capy/capy-idle.svg" alt="" width={59} height={48} style={{ height: "calc(48px * var(--font-scale))", width: "auto", marginBottom: 12 }} />
                 <h1 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(26px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
                   Forgot your password?
                 </h1>

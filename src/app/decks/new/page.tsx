@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { PdfUploadFlow } from "@/components/upload/PdfUploadFlow";
 import { AvatarPicker } from "@/components/nav/AvatarPicker";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
@@ -44,33 +45,45 @@ export default function NewDeckPage() {
 
       {/* ── NAVBAR ── */}
       <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <a href={Routes.dashboard} className="nav-link" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
-              <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
+        <div style={{ maxWidth: "100%", margin: "0 auto", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <a href={Routes.dashboard} className="nav-link" style={{ display: "flex", alignItems: "center", textDecoration: "none" }}>
+              <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
             </a>
-            <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
-            <Image src="/capy/capy-hero.png" alt="" width={29} height={29} style={{ height: "calc(28px * var(--font-scale))", width: "auto", borderRadius: 6 }} />
-            <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
+            <span style={{ color: "var(--nav-border)" }}>|</span>
+            <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 600, fontSize: "calc(16px * var(--font-scale))", color: "var(--nav-text)" }}>
               {App.name}
             </span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-            <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--primary)", fontWeight: 700 }}>New Deck</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: "calc(13.6px * var(--font-scale))" }}>
             <div
               title="Capycoins remaining"
-              style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--nav-bg)", border: "1px solid rgba(196,122,46,0.3)", borderRadius: 20, padding: "5px 14px" }}
+              style={{ display: "flex", alignItems: "center", gap: 5, background: "var(--nav-bg)", border: "1.5px solid rgba(196,122,46,0.3)", borderRadius: 999, padding: "4px 12px" }}
             >
-              <Image src="/capy/capycoin.png" alt="" width={20} height={20} style={{ borderRadius: "50%" }} />
-              <span style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--primary-soft)" }}>
+              <Image src="/capy/capycoin.png" alt="" width={18} height={18} style={{ borderRadius: "50%" }} />
+              <span style={{ fontWeight: 600, color: "var(--primary-soft)" }}>
                 {profile?.token_balance ?? 0} Capycoins
               </span>
             </div>
-            {isPro && (
-              <span style={{ background: "var(--primary)", color: "var(--on-primary)", borderRadius: 999, padding: "4px 10px", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600 }}>
+            {isPro ? (
+              <span style={{ background: "var(--primary)", color: "var(--on-primary)", borderRadius: 999, padding: "4px 10px", fontSize: "calc(12.5px * var(--font-scale))", fontWeight: 600 }}>
                 Pro ✦
               </span>
+            ) : (
+              <Link
+                href={Routes.upgrade}
+                className="hover-lift"
+                style={{ background: "var(--primary)", color: "var(--on-primary)", borderRadius: 999, padding: "4px 10px", fontSize: "calc(12.5px * var(--font-scale))", fontWeight: 600, textDecoration: "none" }}
+              >
+                Upgrade ✦
+              </Link>
             )}
+            <Link href={Routes.rewards} className="nav-link" style={{ color: "var(--text-faint)", textDecoration: "none" }}>
+              Rewards
+            </Link>
+            <Link href={Routes.settings} className="nav-link" style={{ color: "var(--text-faint)", textDecoration: "none" }}>
+              Settings
+            </Link>
             <AvatarPicker />
           </div>
         </div>
@@ -82,18 +95,15 @@ export default function NewDeckPage() {
         {/* Page header */}
         <div style={{ marginBottom: 32 }}>
           <h1 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(28px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>
-            Create a new deck
+            New deck
           </h1>
           <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))", lineHeight: 1.6 }}>
-            Upload a PDF reviewer and Capy will turn it into flashcards in seconds.
-            Max {MAX_UPLOAD_SIZE_MB} MB per file.
+            <em style={{ color: "var(--primary)", fontStyle: "italic", marginRight: 4 }}>Capy</em> will turn your
+            notes into flashcards ✦ &nbsp;Max {MAX_UPLOAD_SIZE_MB} MB per file.
           </p>
         </div>
 
-        {/* Upload card */}
-        <div style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 20, padding: "32px" }}>
-          <PdfUploadFlow />
-        </div>
+        <PdfUploadFlow />
 
         {/* Disclaimer */}
         <p style={{ marginTop: 20, fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", textAlign: "center", lineHeight: 1.6 }}>

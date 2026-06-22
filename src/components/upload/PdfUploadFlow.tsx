@@ -374,12 +374,29 @@ export function PdfUploadFlow() {
   // ── consent gate — show before anything else ─────────────────────────────────
   if (!consentChecked) {
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+      <div style={{ margin: "0 auto", display: "flex", width: "100%", maxWidth: 768, flexDirection: "column", gap: 24 }}>
         <div
-          className="rounded-lg px-4 py-3 text-sm"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text-muted)" }}
+          className="anim-fade-up"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            border: "1.5px solid var(--border)",
+            background: "var(--bg-card)",
+            borderRadius: 16,
+            padding: "20px 24px",
+            fontFamily: "var(--font-body, sans-serif)",
+          }}
         >
-          Checking account…
+          <span className="spinner" />
+          <span style={{ fontSize: "calc(15px * var(--font-scale))", color: "var(--text-muted)" }}>
+            Checking account
+            <span aria-hidden="true">
+              <span className="ellipsis-dot">.</span>
+              <span className="ellipsis-dot">.</span>
+              <span className="ellipsis-dot">.</span>
+            </span>
+          </span>
         </div>
       </div>
     );
@@ -387,10 +404,10 @@ export function PdfUploadFlow() {
 
   if (!hasConsented) {
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+      <div style={{ margin: "0 auto", display: "flex", width: "100%", maxWidth: 768, flexDirection: "column", gap: 24 }}>
         <header>
-          <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>Upload PDF</h2>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>One quick step before you continue.</p>
+          <h2 style={{ fontSize: "calc(18px * var(--font-scale))", fontWeight: 600, color: "var(--text)", margin: 0 }}>Upload PDF</h2>
+          <p style={{ marginTop: 4, fontSize: "calc(14px * var(--font-scale))", color: "var(--text-muted)" }}>One quick step before you continue.</p>
         </header>
         <div style={{ background: "var(--bg-subtle)", border: "1.5px solid var(--border)", borderRadius: 12, padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
           <p style={{ fontSize: "calc(15px * var(--font-scale))", fontWeight: 700, color: "var(--text)", margin: 0 }}>AI processing consent required</p>
@@ -437,37 +454,96 @@ export function PdfUploadFlow() {
   }
 
   return (
-    <div className="anim-fade-up mx-auto flex w-full max-w-3xl flex-col gap-6">
-      <header>
-        <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
-          Upload PDF
-        </h2>
-        <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-          {PDF_EXTRACTION_TEST_MODE ? (
-            <>
-              <span className="font-medium" style={{ color: "var(--primary)" }}>
-                Extraction test mode
-              </span>
-              {" — "}
-              DeepSeek generate is off. Set PDF_EXTRACTION_TEST_MODE to false in{" "}
-              <code className="text-xs">src/lib/dev/pdf-test-mode.ts</code>.
-            </>
-          ) : (
-            <>
-              Upload a handout (max {MAX_UPLOAD_SIZE_MB} MB). {App.name} extracts text, then
-              sends it to DeepSeek to build flashcards. One Capycoin is used only after cards
-              are generated successfully.
-            </>
-          )}
-        </p>
-      </header>
+    <div className="anim-fade-up" style={{ margin: "0 auto", display: "flex", width: "100%", maxWidth: 768, flexDirection: "column", gap: 24 }}>
+      {PDF_EXTRACTION_TEST_MODE && (
+        <header>
+          <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-muted)" }}>
+            <span style={{ fontWeight: 600, color: "var(--primary)" }}>
+              Extraction test mode
+            </span>
+            {" — "}
+            DeepSeek generate is off. Set PDF_EXTRACTION_TEST_MODE to false in{" "}
+            <code style={{ fontSize: "calc(12px * var(--font-scale))" }}>src/lib/dev/pdf-test-mode.ts</code>.
+          </p>
+        </header>
+      )}
 
       {phase === "idle" && (
         <>
-          <div className="mb-4 flex flex-col gap-2">
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: 8, background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 20, padding: 24 }}
+          >
+            <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)", margin: "0 0 6px" }}>
+              <em style={{ color: "var(--primary)", fontStyle: "italic" }}>Capy</em> extracts the
+              text and sends it to DeepSeek — one Capycoin is used only after cards are
+              generated successfully.
+            </p>
+          <label
+            style={{
+              display: "flex",
+              cursor: "pointer",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 8,
+              borderRadius: 16,
+              border: "2px dashed var(--border)",
+              background: "var(--bg-subtle)",
+              padding: "48px 24px",
+              marginTop: 8,
+              textAlign: "center",
+            }}
+          >
+            <span style={{ fontSize: "calc(32px * var(--font-scale))", lineHeight: 1 }}>📄</span>
+            {selectedFile ? (
+              <>
+                <span style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
+                  {selectedFile.name}
+                </span>
+                <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)" }}>
+                  {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB selected — click to change
+                </span>
+              </>
+            ) : (
+              <>
+                <span style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
+                  Drop your PDF here
+                </span>
+                <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)" }}>
+                  or click to browse — max {MAX_UPLOAD_SIZE_MB} MB
+                </span>
+              </>
+            )}
+            <span
+              className="btn-solid"
+              style={{
+                marginTop: 8,
+                background: "var(--primary)",
+                color: "var(--on-primary)",
+                borderRadius: 999,
+                padding: "10px 24px",
+                fontSize: "calc(13px * var(--font-scale))",
+                fontWeight: 600,
+                fontFamily: "var(--font-body, sans-serif)",
+              }}
+            >
+              Choose file
+            </span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={onFileSelected}
+              style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0,0,0,0)", border: 0 }}
+            />
+          </label>
+          </div>
+
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: 12, border: "1.5px solid var(--border)", background: "var(--bg-card)", borderRadius: 20, padding: 24 }}
+          >
             <p
-              className="px-1 text-xs font-semibold uppercase"
-              style={{ color: "var(--text-faint)", letterSpacing: "0.06em" }}
+              style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-faint)", margin: 0 }}
             >
               Generation mode
             </p>
@@ -595,58 +671,17 @@ export function PdfUploadFlow() {
             })()}
           </div>
 
-          <label
-            className="upload-dropzone mb-4 flex cursor-pointer flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed px-6 py-12"
-            style={{ borderColor: "var(--border)", background: "var(--bg-subtle)" }}
-          >
-            <span style={{ fontSize: "calc(32px * var(--font-scale))", lineHeight: 1 }}>📄</span>
-            {selectedFile ? (
-              <>
-                <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                  {selectedFile.name}
-                </span>
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB selected — click to change
-                </span>
-              </>
-            ) : (
-              <>
-                <span className="text-sm font-semibold" style={{ color: "var(--text)" }}>
-                  Drop your PDF here
-                </span>
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>
-                  or click to browse — max {MAX_UPLOAD_SIZE_MB} MB
-                </span>
-              </>
-            )}
-            <span
-              className="btn-outline mt-1 rounded-lg px-4 py-1.5 text-xs font-medium"
-              style={{ border: "1.5px solid var(--border)", color: "var(--text)" }}
-            >
-              Choose file
-            </span>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/pdf,.pdf"
-              className="sr-only"
-              onChange={onFileSelected}
-            />
-          </label>
-
           <div
-            className="mb-4 flex flex-col gap-3 rounded-xl p-4"
-            style={{ border: "1.5px solid var(--border)", background: "var(--bg-card)" }}
+            style={{ display: "flex", flexDirection: "column", gap: 16, border: "1.5px solid var(--border)", background: "var(--bg-card)", borderRadius: 20, padding: 24 }}
           >
             <p
-              className="px-1 text-xs font-semibold uppercase"
-              style={{ color: "var(--text-faint)", letterSpacing: "0.06em" }}
+              style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-faint)", margin: 0 }}
             >
               Deck settings
             </p>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-xs font-medium" style={{ color: "var(--text-muted)", minWidth: 90 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 500, color: "var(--text-muted)", minWidth: 110 }}>
                 Deck name
               </span>
               <input
@@ -655,25 +690,23 @@ export function PdfUploadFlow() {
                 onChange={(e) => setDeckName(e.target.value)}
                 maxLength={Validation.deck.titleMaxLength}
                 placeholder="e.g. Ecology Midterms"
-                className="flex-1 rounded-lg px-3 py-2 text-sm outline-none"
-                style={{ border: "1px solid var(--border)", background: "var(--bg-subtle)", color: "var(--text)", minWidth: 180 }}
+                style={{ flex: 1, minWidth: 180, borderRadius: 10, padding: "10px 14px", fontSize: "calc(14px * var(--font-scale))", outline: "none", border: "1px solid var(--border)", background: "var(--bg-subtle)", color: "var(--text)", fontFamily: "var(--font-body, sans-serif)" }}
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="text-xs font-medium" style={{ color: "var(--text-muted)", minWidth: 90 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 500, color: "var(--text-muted)", minWidth: 110 }}>
                 Cards to generate
               </span>
-              <div className="flex flex-wrap items-center gap-2">
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
                 {CardCountOptions.map((count) => {
                   const locked = count > tierMaxCards;
                   return (
                     <button
                       key={count}
                       type="button"
-                      disabled={locked}
-                      onClick={() => setCardCount(count)}
-                      title={locked ? "Upgrade to Pro for more cards per deck" : undefined}
+                      onClick={() => (locked ? router.push(Routes.upgrade) : setCardCount(count))}
+                      title={locked ? "You'll need Pro for this — tap to upgrade" : undefined}
                       className={`chip${cardCount === count ? " chip-active" : ""}`}
                       style={{
                         border: cardCount === count ? "1.5px solid var(--primary)" : "1.5px solid var(--border)",
@@ -683,8 +716,8 @@ export function PdfUploadFlow() {
                         padding: "6px 14px",
                         fontSize: "calc(13px * var(--font-scale))",
                         fontWeight: 600,
-                        cursor: locked ? "not-allowed" : "pointer",
-                        opacity: locked ? 0.5 : 1,
+                        cursor: "pointer",
+                        opacity: locked ? 0.6 : 1,
                         fontFamily: "var(--font-body, sans-serif)",
                       }}
                     >
@@ -696,12 +729,12 @@ export function PdfUploadFlow() {
             </div>
           </div>
 
-          <div className="flex justify-end gap-3">
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
             <button
               type="button"
               onClick={handleCancel}
-              className="btn-outline rounded-lg px-5 py-2 text-sm font-medium"
-              style={{ border: "1.5px solid var(--border)", color: "var(--text)", background: "none" }}
+              className="btn-outline"
+              style={{ border: "1.5px solid var(--border)", color: "var(--text)", background: "none", borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, fontFamily: "var(--font-body, sans-serif)", cursor: "pointer" }}
             >
               Cancel
             </button>
@@ -709,8 +742,8 @@ export function PdfUploadFlow() {
               type="button"
               disabled={!selectedFile}
               onClick={handleGenerateClick}
-              className="btn-solid rounded-lg px-5 py-2 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ background: "var(--primary)", color: "var(--on-primary)" }}
+              className="btn-solid"
+              style={{ background: "var(--primary)", color: "var(--on-primary)", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, fontFamily: "var(--font-body, sans-serif)", cursor: selectedFile ? "pointer" : "not-allowed", opacity: selectedFile ? 1 : 0.5 }}
             >
               Generate flashcards
             </button>
@@ -720,36 +753,37 @@ export function PdfUploadFlow() {
 
       {(phase === "uploading" || phase === "generating") && (
         <div
-          className="rounded-lg px-4 py-3 text-sm"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text)" }}
+          className="anim-fade-up"
+          style={{ display: "flex", alignItems: "center", gap: 12, borderRadius: 16, padding: "20px 24px", border: "1.5px solid var(--border)", background: "var(--bg-card)", fontSize: "calc(14px * var(--font-scale))", color: "var(--text)", fontFamily: "var(--font-body, sans-serif)" }}
           role="status"
         >
+          <span className="spinner" />
           {statusLine || "Working…"}
         </div>
       )}
 
       {phase === "ocr_confirm" && pdfFile && (
         <div
-          className="flex flex-col gap-4 rounded-xl p-5"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-subtle)" }}
+          className="anim-fade-up"
+          style={{ display: "flex", flexDirection: "column", gap: 16, borderRadius: 20, padding: 24, border: "1.5px solid var(--border)", background: "var(--bg-card)", fontFamily: "var(--font-body, sans-serif)" }}
         >
-          <p className="text-sm" style={{ color: "var(--text)" }}>{ocrMessage}</p>
+          <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text)", margin: 0 }}>{ocrMessage}</p>
           {layer1Payload != null ? (
-            <details className="rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--bg-card)" }}>
-              <summary className="cursor-pointer px-3 py-2 text-xs font-medium" style={{ color: "var(--text)" }}>
+            <details style={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--bg-subtle)" }}>
+              <summary style={{ cursor: "pointer", padding: "10px 14px", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
                 Layer 1 server response (JSON)
               </summary>
-              <pre className="max-h-48 overflow-auto px-3 pb-3 text-xs" style={{ color: "var(--text-muted)" }}>
+              <pre style={{ maxHeight: 192, overflow: "auto", padding: "0 14px 14px", fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)" }}>
                 {JSON.stringify(layer1Payload, null, 2)}
               </pre>
             </details>
           ) : null}
-          <div className="flex flex-wrap gap-3">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
             <button
               type="button"
               onClick={runClientOcr}
-              className="btn-solid rounded-lg px-4 py-2 text-sm font-medium"
-              style={{ background: "var(--primary)", color: "var(--on-primary)" }}
+              className="btn-solid"
+              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, border: "none", cursor: "pointer", background: "var(--primary)", color: "var(--on-primary)", fontFamily: "var(--font-body, sans-serif)" }}
             >
               Continue (Layer 2 OCR)
             </button>
@@ -759,16 +793,16 @@ export function PdfUploadFlow() {
                 setPhase("paste_fallback");
                 setStatusLine("");
               }}
-              className="btn-outline rounded-lg px-4 py-2 text-sm font-medium"
-              style={{ border: "1.5px solid var(--border)", color: "var(--text)", background: "none" }}
+              className="btn-outline"
+              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, cursor: "pointer", border: "1.5px solid var(--border)", color: "var(--text)", background: "none", fontFamily: "var(--font-body, sans-serif)" }}
             >
               Paste text instead
             </button>
             <button
               type="button"
               onClick={resetToIdle}
-              className="nav-link rounded-lg px-4 py-2 text-sm"
-              style={{ color: "var(--text-muted)", background: "none", border: "none" }}
+              className="nav-link"
+              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", cursor: "pointer", color: "var(--text-muted)", background: "none", border: "none", fontFamily: "var(--font-body, sans-serif)" }}
             >
               Start over
             </button>
@@ -778,20 +812,22 @@ export function PdfUploadFlow() {
 
       {phase === "ocr_running" && (
         <div
-          className="rounded-lg px-4 py-3"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-card)" }}
+          className="anim-fade-up"
+          style={{ borderRadius: 16, padding: "20px 24px", border: "1.5px solid var(--border)", background: "var(--bg-card)", fontFamily: "var(--font-body, sans-serif)" }}
           role="status"
           aria-live="polite"
         >
-          <p className="text-sm" style={{ color: "var(--text)" }}>
+          <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text)", margin: 0 }}>
             {pageProgress.total > 0
               ? UIMessages.ocrProgress(pageProgress.current, pageProgress.total)
               : "Preparing OCR…"}
           </p>
-          <div className="mt-3 h-2 overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
+          <div style={{ marginTop: 12, height: 8, overflow: "hidden", borderRadius: 999, background: "var(--border)" }}>
             <div
-              className="h-full transition-all duration-300"
               style={{
+                height: "100%",
+                borderRadius: 999,
+                transition: "width 0.3s ease",
                 background: "var(--primary)",
                 width:
                   pageProgress.total > 0
@@ -805,40 +841,39 @@ export function PdfUploadFlow() {
 
       {phase === "paste_fallback" && (
         <div
-          className="flex flex-col gap-4 rounded-xl p-5"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-card)" }}
+          className="anim-fade-up"
+          style={{ display: "flex", flexDirection: "column", gap: 16, borderRadius: 20, padding: 24, border: "1.5px solid var(--border)", background: "var(--bg-card)", fontFamily: "var(--font-body, sans-serif)" }}
         >
-          <p className="text-sm" style={{ color: "var(--text)" }}>
+          <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text)", margin: 0 }}>
             {UIMessages.ocrFallbackPrompt}
           </p>
           <textarea
             value={pastedText}
             onChange={(e) => setPastedText(e.target.value)}
             rows={12}
-            className="w-full resize-y rounded-lg px-3 py-2 text-sm outline-none"
-            style={{ border: "1px solid var(--border)", background: "var(--bg-subtle)", color: "var(--text)" }}
+            style={{ width: "100%", resize: "vertical", borderRadius: 10, padding: "10px 14px", fontSize: "calc(14px * var(--font-scale))", outline: "none", border: "1px solid var(--border)", background: "var(--bg-subtle)", color: "var(--text)", fontFamily: "var(--font-body, sans-serif)", boxSizing: "border-box" }}
             placeholder="Paste your lecture notes or handout text here…"
           />
           {errorMessage && (
-            <p className="text-sm" style={{ color: "var(--error)" }} role="alert">
+            <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--error)", margin: 0 }} role="alert">
               {errorMessage}
             </p>
           )}
-          <div className="flex flex-wrap gap-3">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
             <button
               type="button"
               disabled={isBusy}
               onClick={submitPaste}
-              className="btn-solid rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-              style={{ background: "var(--primary)", color: "var(--on-primary)" }}
+              className="btn-solid"
+              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, border: "none", cursor: isBusy ? "not-allowed" : "pointer", opacity: isBusy ? 0.5 : 1, background: "var(--primary)", color: "var(--on-primary)", fontFamily: "var(--font-body, sans-serif)" }}
             >
               {PDF_EXTRACTION_TEST_MODE ? "Show paste output" : "Generate flashcards"}
             </button>
             <button
               type="button"
               onClick={resetToIdle}
-              className="nav-link rounded-lg px-4 py-2 text-sm"
-              style={{ color: "var(--text-muted)", background: "none", border: "none" }}
+              className="nav-link"
+              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", cursor: "pointer", color: "var(--text-muted)", background: "none", border: "none", fontFamily: "var(--font-body, sans-serif)" }}
             >
               Start over
             </button>
@@ -848,41 +883,40 @@ export function PdfUploadFlow() {
 
       {phase === "result" && resultView && (
         <div
-          className="flex flex-col gap-4 rounded-xl p-5"
-          style={{ border: "1px solid var(--success)", background: "var(--success-bg)" }}
+          className="anim-fade-up"
+          style={{ display: "flex", flexDirection: "column", gap: 16, borderRadius: 20, padding: 24, border: "1.5px solid var(--success)", background: "var(--success-bg)", fontFamily: "var(--font-body, sans-serif)" }}
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold" style={{ color: "var(--success-dark)" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <h3 style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--success-dark)", margin: 0 }}>
               {resultView.label}
             </h3>
             <button
               type="button"
               onClick={resetToIdle}
-              className="btn-outline rounded-lg px-3 py-1.5 text-xs font-medium"
-              style={{ border: "1.5px solid var(--border)", color: "var(--text)", background: "none" }}
+              className="btn-outline"
+              style={{ borderRadius: 10, padding: "6px 14px", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, cursor: "pointer", border: "1.5px solid var(--border)", color: "var(--text)", background: "none", fontFamily: "var(--font-body, sans-serif)" }}
             >
               Upload another PDF
             </button>
           </div>
 
           {resultView.cards && resultView.cards.length > 0 && (
-            <div className="flex flex-col gap-3">
-              <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-faint)" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <p style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-faint)", margin: 0 }}>
                 Generated flashcards ({resultView.cards.length})
               </p>
-              <ul className="flex max-h-96 flex-col gap-2 overflow-auto">
+              <ul style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 384, overflow: "auto", margin: 0, padding: 0, listStyle: "none" }}>
                 {resultView.cards.map((card, i) => (
                   <li
                     key={i}
-                    className="rounded-lg p-3 text-sm"
-                    style={{ border: "1px solid var(--border)", background: "var(--bg-card)" }}
+                    style={{ borderRadius: 10, padding: 12, fontSize: "calc(14px * var(--font-scale))", border: "1px solid var(--border)", background: "var(--bg-card)" }}
                   >
-                    <p className="font-medium" style={{ color: "var(--text)" }}>
+                    <p style={{ fontWeight: 600, color: "var(--text)", margin: 0 }}>
                       {card.front}
                     </p>
-                    <p className="mt-1" style={{ color: "var(--text-muted)" }}>{card.back}</p>
+                    <p style={{ marginTop: 4, marginBottom: 0, color: "var(--text-muted)" }}>{card.back}</p>
                     {card.tags.length > 0 && (
-                      <p className="mt-2 text-xs" style={{ color: "var(--text-faint)" }}>
+                      <p style={{ marginTop: 8, marginBottom: 0, fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)" }}>
                         {card.tags.join(" · ")}
                       </p>
                     )}
@@ -894,12 +928,11 @@ export function PdfUploadFlow() {
 
           {resultView.extractedText !== undefined && (
             <details>
-              <summary className="cursor-pointer text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-faint)" }}>
+              <summary style={{ cursor: "pointer", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-faint)" }}>
                 Extracted text preview
               </summary>
               <pre
-                className="mt-2 max-h-48 overflow-auto rounded-lg p-3 text-xs whitespace-pre-wrap"
-                style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text-muted)" }}
+                style={{ marginTop: 8, maxHeight: 192, overflow: "auto", borderRadius: 10, padding: 12, fontSize: "calc(12px * var(--font-scale))", whiteSpace: "pre-wrap", border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text-muted)" }}
               >
                 {resultView.extractedText || "(empty)"}
               </pre>
@@ -908,12 +941,11 @@ export function PdfUploadFlow() {
 
           {resultView.debug != null && (
             <details>
-              <summary className="cursor-pointer text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-faint)" }}>
+              <summary style={{ cursor: "pointer", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-faint)" }}>
                 Pipeline debug JSON
               </summary>
               <pre
-                className="mt-2 max-h-48 overflow-auto rounded-lg p-3 text-xs"
-                style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text-muted)" }}
+                style={{ marginTop: 8, maxHeight: 192, overflow: "auto", borderRadius: 10, padding: 12, fontSize: "calc(12px * var(--font-scale))", border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text-muted)" }}
               >
                 {JSON.stringify(resultView.debug, null, 2)}
               </pre>
@@ -924,17 +956,17 @@ export function PdfUploadFlow() {
 
       {phase === "error" && (
         <div
-          className="flex flex-col gap-3 rounded-xl p-5"
-          style={{ border: "1px solid var(--error)", background: "var(--error-bg)" }}
+          className="anim-fade-up"
+          style={{ display: "flex", flexDirection: "column", gap: 12, borderRadius: 20, padding: 24, border: "1.5px solid var(--error)", background: "var(--error-bg)", fontFamily: "var(--font-body, sans-serif)" }}
         >
-          <p className="text-sm" style={{ color: "var(--error-dark)" }} role="alert">
+          <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--error-dark)", margin: 0 }} role="alert">
             {errorMessage}
           </p>
           <button
             type="button"
             onClick={resetToIdle}
-            className="btn-solid self-start rounded-lg px-4 py-2 text-sm font-medium"
-            style={{ background: "var(--primary)", color: "var(--on-primary)" }}
+            className="btn-solid"
+            style={{ alignSelf: "flex-start", borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, border: "none", cursor: "pointer", background: "var(--primary)", color: "var(--on-primary)", fontFamily: "var(--font-body, sans-serif)" }}
           >
             Try again
           </button>
@@ -942,7 +974,7 @@ export function PdfUploadFlow() {
       )}
 
       {!PDF_EXTRACTION_TEST_MODE && phase === "generating" && (
-        <p className="text-xs" style={{ color: "var(--text-faint)" }}>{UIMessages.aiDisclaimer}</p>
+        <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)" }}>{UIMessages.aiDisclaimer}</p>
       )}
     </div>
   );

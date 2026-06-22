@@ -138,6 +138,29 @@ button:not(:disabled):active {
   animation: wave 1.4s ease-in-out 1;
 }
 
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+.spinner {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  border-top-color: var(--primary);
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes ellipsisDot {
+  0%, 80%, 100% { opacity: 0.2; }
+  40% { opacity: 1; }
+}
+.ellipsis-dot {
+  animation: ellipsisDot 1.4s ease-in-out infinite;
+}
+.ellipsis-dot:nth-child(2) { animation-delay: 0.2s; }
+.ellipsis-dot:nth-child(3) { animation-delay: 0.4s; }
+
 .anim-fade-up { animation: fadeUp 0.6s ease both; }
 .anim-fade-up-1 { animation: fadeUp 0.6s ease 0.06s both; }
 .anim-fade-up-2 { animation: fadeUp 0.6s ease 0.12s both; }
@@ -211,8 +234,8 @@ button:not(:disabled):active {
 }
 
 /* ── Nav avatar picker (Dashboard, Upload) — hover the circle to reveal a
-   grid of mood thumbnails, pure CSS for the show/hide; clicking a thumbnail
-   is handled in JS (useAvatarMood). ──────────────────────────────────── */
+   "change profile picture" control, pure CSS for the show/hide; the file
+   picker itself is handled in JS (useCustomAvatar). ───────────────────── */
 .avatar-wrap {
   position: relative;
   display: inline-flex;
@@ -245,24 +268,4 @@ button:not(:disabled):active {
 }
 .avatar-wrap:hover .avatar-tooltip {
   display: flex;
-}
-.avatar-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-}
-.avatar-grid img {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: transform 0.18s ease, border-color 0.18s ease;
-}
-.avatar-grid img:hover {
-  transform: scale(1.15);
-}
-.avatar-grid img.selected {
-  border-color: var(--primary-soft, var(--primary));
 }

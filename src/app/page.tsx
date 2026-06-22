@@ -4,9 +4,8 @@ export default function Home() {
 
       {/* ── NAVBAR ── */}
       <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: 1024, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <img src="/capy/capy-idle.svg" alt="" width={32} height={26} style={{ height: "calc(26px * var(--font-scale))", width: "auto" }} />
             <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(20px * var(--font-scale))", color: "var(--nav-text)", letterSpacing: "-0.3px" }}>
               Crammable
             </span>
@@ -66,7 +65,6 @@ export default function Home() {
       {/* ── CAPY MASCOT ── */}
       <section style={{ display: "flex", justifyContent: "center", paddingBottom: 64, padding: "0 24px 64px" }}>
         <div style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 20, padding: 32, textAlign: "center", maxWidth: 320 }}>
-          <img src="/capy/capy-idle.svg" alt="Capy the capybara" width={88} height={72} style={{ height: "calc(72px * var(--font-scale))", width: "auto", marginBottom: 16 }} />
           <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))", fontStyle: "italic", margin: 0 }}>
             &quot;Upload a document and I&apos;ll make your first deck.&quot;
           </p>
@@ -191,7 +189,6 @@ export default function Home() {
       {/* ── FOOTER ── */}
       <footer style={{ padding: "40px 24px", textAlign: "center" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 }}>
-          <img src="/capy/capy-idle.svg" alt="" width={27} height={22} style={{ height: "calc(22px * var(--font-scale))", width: "auto" }} />
           <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, color: "var(--primary)", fontSize: "calc(17px * var(--font-scale))" }}>Crammable</span>
         </div>
         <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-muted)" }}>

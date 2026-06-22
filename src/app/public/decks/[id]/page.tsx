@@ -103,7 +103,6 @@ export default function PublicDeckPage() {
           fontFamily: "var(--font-body, sans-serif)",
         }}
       >
-        <img src="/capy/capy-idle.svg" alt="" width={59} height={48} style={{ height: "calc(48px * var(--font-scale))", width: "auto" }} />
         <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>{error || "Deck not found."}</p>
         <a
           href={Routes.home}
@@ -149,7 +148,6 @@ export default function PublicDeckPage() {
             className="nav-link"
             style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
           >
-            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
             <span
               style={{
                 fontFamily: "var(--font-display, serif)",
