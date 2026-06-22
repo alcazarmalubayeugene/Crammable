@@ -454,7 +454,7 @@ export function PdfUploadFlow() {
   }
 
   return (
-    <div className="anim-fade-up" style={{ margin: "0 auto", display: "flex", width: "100%", maxWidth: 768, flexDirection: "column", gap: 24 }}>
+    <div className="anim-fade-up" style={{ margin: "0 auto", display: "flex", width: "100%", maxWidth: 768, flexDirection: "column", gap: 14 }}>
       {PDF_EXTRACTION_TEST_MODE && (
         <header>
           <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-muted)" }}>
@@ -471,9 +471,9 @@ export function PdfUploadFlow() {
       {phase === "idle" && (
         <>
           <div
-            style={{ display: "flex", flexDirection: "column", gap: 8, background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 20, padding: 24 }}
+            style={{ display: "flex", flexDirection: "column", gap: 6, background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 20, padding: 18 }}
           >
-            <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)", margin: "0 0 6px" }}>
+            <p style={{ fontSize: "calc(12.5px * var(--font-scale))", color: "var(--text-muted)", margin: "0 0 4px" }}>
               <em style={{ color: "var(--primary)", fontStyle: "italic" }}>Capy</em> extracts the
               text and sends it to DeepSeek — one Capycoin is used only after cards are
               generated successfully.
@@ -485,16 +485,16 @@ export function PdfUploadFlow() {
               flexDirection: "column",
               alignItems: "center",
               justifyContent: "center",
-              gap: 8,
+              gap: 6,
               borderRadius: 16,
               border: "2px dashed var(--border)",
               background: "var(--bg-subtle)",
-              padding: "48px 24px",
-              marginTop: 8,
+              padding: "22px 24px",
+              marginTop: 4,
               textAlign: "center",
             }}
           >
-            <span style={{ fontSize: "calc(32px * var(--font-scale))", lineHeight: 1 }}>📄</span>
+            <span style={{ fontSize: "calc(26px * var(--font-scale))", lineHeight: 1 }}>📄</span>
             {selectedFile ? (
               <>
                 <span style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
@@ -517,11 +517,11 @@ export function PdfUploadFlow() {
             <span
               className="btn-solid"
               style={{
-                marginTop: 8,
+                marginTop: 4,
                 background: "var(--primary)",
                 color: "var(--on-primary)",
                 borderRadius: 999,
-                padding: "10px 24px",
+                padding: "8px 22px",
                 fontSize: "calc(13px * var(--font-scale))",
                 fontWeight: 600,
                 fontFamily: "var(--font-body, sans-serif)",
@@ -540,7 +540,7 @@ export function PdfUploadFlow() {
           </div>
 
           <div
-            style={{ display: "flex", flexDirection: "column", gap: 12, border: "1.5px solid var(--border)", background: "var(--bg-card)", borderRadius: 20, padding: 24 }}
+            style={{ display: "flex", flexDirection: "column", gap: 8, border: "1.5px solid var(--border)", background: "var(--bg-card)", borderRadius: 20, padding: 18 }}
           >
             <p
               style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-faint)", margin: 0 }}
@@ -563,7 +563,7 @@ export function PdfUploadFlow() {
                 background: generationMode === GenerationMode.STANDARD ? "var(--nav-bg)" : "var(--bg-card)",
                 border: generationMode === GenerationMode.STANDARD ? "1.5px solid var(--primary)" : "1.5px solid var(--border)",
                 borderRadius: 14,
-                padding: "14px 18px",
+                padding: "10px 16px",
                 cursor: "pointer",
                 fontFamily: "var(--font-body, sans-serif)",
               }}
@@ -608,7 +608,7 @@ export function PdfUploadFlow() {
                 background: isActive ? "var(--nav-bg)" : "var(--bg-card)",
                 border: isActive ? "1.5px solid var(--primary)" : "1.5px solid var(--border)",
                 borderRadius: 14,
-                padding: "14px 18px",
+                padding: "10px 16px",
                 cursor: "pointer",
                 textDecoration: "none",
                 fontFamily: "var(--font-body, sans-serif)",
@@ -672,7 +672,7 @@ export function PdfUploadFlow() {
           </div>
 
           <div
-            style={{ display: "flex", flexDirection: "column", gap: 16, border: "1.5px solid var(--border)", background: "var(--bg-card)", borderRadius: 20, padding: 24 }}
+            style={{ display: "flex", flexDirection: "column", gap: 10, border: "1.5px solid var(--border)", background: "var(--bg-card)", borderRadius: 20, padding: 18 }}
           >
             <p
               style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-faint)", margin: 0 }}
@@ -690,7 +690,7 @@ export function PdfUploadFlow() {
                 onChange={(e) => setDeckName(e.target.value)}
                 maxLength={Validation.deck.titleMaxLength}
                 placeholder="e.g. Ecology Midterms"
-                style={{ flex: 1, minWidth: 180, borderRadius: 10, padding: "10px 14px", fontSize: "calc(14px * var(--font-scale))", outline: "none", border: "1px solid var(--border)", background: "var(--bg-subtle)", color: "var(--text)", fontFamily: "var(--font-body, sans-serif)" }}
+                style={{ flex: 1, minWidth: 180, borderRadius: 10, padding: "8px 14px", fontSize: "calc(14px * var(--font-scale))", outline: "none", border: "1px solid var(--border)", background: "var(--bg-subtle)", color: "var(--text)", fontFamily: "var(--font-body, sans-serif)" }}
               />
             </div>
 
@@ -713,7 +713,7 @@ export function PdfUploadFlow() {
                         background: cardCount === count ? "var(--primary)" : "var(--bg-subtle)",
                         color: cardCount === count ? "var(--on-primary)" : "var(--text)",
                         borderRadius: 999,
-                        padding: "6px 14px",
+                        padding: "5px 14px",
                         fontSize: "calc(13px * var(--font-scale))",
                         fontWeight: 600,
                         cursor: "pointer",
@@ -734,7 +734,7 @@ export function PdfUploadFlow() {
               type="button"
               onClick={handleCancel}
               className="btn-outline"
-              style={{ border: "1.5px solid var(--border)", color: "var(--text)", background: "none", borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, fontFamily: "var(--font-body, sans-serif)", cursor: "pointer" }}
+              style={{ border: "1.5px solid var(--border)", color: "var(--text)", background: "none", borderRadius: 10, padding: "8px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, fontFamily: "var(--font-body, sans-serif)", cursor: "pointer" }}
             >
               Cancel
             </button>
@@ -743,7 +743,7 @@ export function PdfUploadFlow() {
               disabled={!selectedFile}
               onClick={handleGenerateClick}
               className="btn-solid"
-              style={{ background: "var(--primary)", color: "var(--on-primary)", border: "none", borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, fontFamily: "var(--font-body, sans-serif)", cursor: selectedFile ? "pointer" : "not-allowed", opacity: selectedFile ? 1 : 0.5 }}
+              style={{ background: "var(--primary)", color: "var(--on-primary)", border: "none", borderRadius: 10, padding: "8px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, fontFamily: "var(--font-body, sans-serif)", cursor: selectedFile ? "pointer" : "not-allowed", opacity: selectedFile ? 1 : 0.5 }}
             >
               Generate flashcards
             </button>
@@ -754,11 +754,21 @@ export function PdfUploadFlow() {
       {(phase === "uploading" || phase === "generating") && (
         <div
           className="anim-fade-up"
-          style={{ display: "flex", alignItems: "center", gap: 12, borderRadius: 16, padding: "20px 24px", border: "1.5px solid var(--border)", background: "var(--bg-card)", fontSize: "calc(14px * var(--font-scale))", color: "var(--text)", fontFamily: "var(--font-body, sans-serif)" }}
+          style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10, borderRadius: 20, padding: "24px", border: "1.5px solid var(--border)", background: "var(--bg-card)", textAlign: "center", fontFamily: "var(--font-body, sans-serif)" }}
           role="status"
         >
-          <span className="spinner" />
-          {statusLine || "Working…"}
+          <img
+            src="/capy/capy-reading.png"
+            alt=""
+            width={120}
+            height={120}
+            className="capy-reading-bob"
+            style={{ width: 120, height: "auto" }}
+          />
+          <span style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "calc(14px * var(--font-scale))", color: "var(--text)" }}>
+            <span className="spinner" />
+            {statusLine || "Working…"}
+          </span>
         </div>
       )}
 

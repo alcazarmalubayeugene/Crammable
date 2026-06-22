@@ -90,14 +90,14 @@ export default function NewDeckPage() {
       </nav>
 
       {/* ── CONTENT ── */}
-      <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 24px" }}>
+      <div style={{ maxWidth: 860, margin: "0 auto", padding: "22px 24px" }}>
 
         {/* Page header */}
-        <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(28px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 8 }}>
+        <div style={{ marginBottom: 18 }}>
+          <h1 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(24px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
             New deck
           </h1>
-          <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))", lineHeight: 1.6 }}>
+          <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))", lineHeight: 1.5 }}>
             <em style={{ color: "var(--primary)", fontStyle: "italic", marginRight: 4 }}>Capy</em> will turn your
             notes into flashcards ✦ &nbsp;Max {MAX_UPLOAD_SIZE_MB} MB per file.
           </p>
@@ -106,7 +106,7 @@ export default function NewDeckPage() {
         <PdfUploadFlow />
 
         {/* Disclaimer */}
-        <p style={{ marginTop: 20, fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", textAlign: "center", lineHeight: 1.6 }}>
+        <p style={{ marginTop: 14, fontSize: "calc(11px * var(--font-scale))", color: "var(--text-muted)", textAlign: "center", lineHeight: 1.5 }}>
           {App.tagline} AI-generated content may contain errors — always verify against your official course materials.
         </p>
 

@@ -372,7 +372,7 @@ export default function QuizPage() {
       </nav>
 
       {/* ── CONTENT ── */}
-      <div style={{ maxWidth: 680, margin: "0 auto", padding: "40px 24px" }}>
+      <div style={{ maxWidth: phase === "quizzing" ? 940 : 680, margin: "0 auto", padding: "40px 24px" }}>
 
         {/* ── SETUP PHASE ── */}
         {phase === "setup" && (
@@ -544,7 +544,8 @@ export default function QuizPage() {
 
         {/* ── QUIZZING PHASE ── */}
         {phase === "quizzing" && q && (
-          <>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 24, alignItems: "flex-start" }}>
+          <div style={{ flex: "1 1 420px", minWidth: 280, maxWidth: 680 }}>
             {/* Progress bar */}
             <div
               style={{
@@ -729,39 +730,27 @@ export default function QuizPage() {
               </div>
             )}
 
-            {/* Feedback banner — the right/wrong call is already made by the option
-                highlighting above; this banner stays neutral so it reads as Capy's
-                tip, not a second red alarm stacked on top of the wrong-answer box. */}
-            {hasAnswered && (
+            {/* Correct-answer feedback — the right/wrong call is already made by the
+                option highlighting above; this just confirms it. The wrong-answer
+                case moves to the sidebar bubble instead (see below), so it isn't
+                a second alarm stacked on top of the already-red wrong-answer box. */}
+            {hasAnswered && isCorrect && (
               <div
                 style={{
-                  background:   isCorrect ? "var(--success-bg)" : "var(--bg-subtle)",
-                  border:       `1.5px solid ${isCorrect ? "var(--success)" : "var(--border)"}`,
+                  background:   "var(--success-bg)",
+                  border:       "1.5px solid var(--success)",
                   borderRadius: 12,
                   padding:      "14px 18px",
                   marginBottom: 20,
                   display:      "flex",
-                  alignItems:   "flex-start",
+                  alignItems:   "center",
                   gap:          12,
                 }}
               >
-                {isCorrect ? (
-                  <span style={{ fontSize: "calc(18px * var(--font-scale))" }}>✅</span>
-                ) : (
-                  <Image src="/capy/teaching-capy.png" alt="" width={48} height={48} style={{ borderRadius: "50%", flexShrink: 0, objectFit: "cover" }} />
-                )}
-                <div>
-                  <p
-                    style={{
-                      fontSize: "calc(14px * var(--font-scale))",
-                      fontWeight: 600,
-                      color:      isCorrect ? "var(--success-dark)" : "var(--text-muted)",
-                      margin:     0,
-                    }}
-                  >
-                    {isCorrect ? "Correct!" : "Not quite — Capy's got you. Here's the right answer:"}
-                  </p>
-                </div>
+                <span style={{ fontSize: "calc(18px * var(--font-scale))" }}>✅</span>
+                <p style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--success-dark)", margin: 0 }}>
+                  Correct!
+                </p>
               </div>
             )}
 
@@ -821,7 +810,42 @@ export default function QuizPage() {
                 </button>
               )}
             </div>
-          </>
+          </div>
+
+          {/* Sidebar — wrong-answer feedback. A real CSS speech bubble (tail
+              via the .speech-bubble class) pointing down at teaching-capy.png,
+              not a baked-in speech-bubble graphic, so the text stays normal HTML. */}
+          {hasAnswered && !isCorrect && (
+            <div className="anim-fade-up" style={{ flex: "0 0 220px", display: "flex", flexDirection: "column" }}>
+              <div className="speech-bubble" style={{ marginLeft: 12, marginBottom: 22 }}>
+                <p style={{ margin: 0, fontSize: "calc(13.5px * var(--font-scale))", color: "var(--text)", lineHeight: 1.5 }}>
+                  Not quite — Capy&apos;s got you. Here&apos;s the right answer.
+                </p>
+              </div>
+              <div
+                style={{
+                  width: 96,
+                  height: 96,
+                  borderRadius: 14,
+                  border: "1.5px solid var(--border)",
+                  background: "var(--bg-card)",
+                  padding: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Image
+                  src="/capy/teaching-capy.png"
+                  alt=""
+                  width={80}
+                  height={80}
+                  style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                />
+              </div>
+            </div>
+          )}
+          </div>
         )}
       </div>
     </main>

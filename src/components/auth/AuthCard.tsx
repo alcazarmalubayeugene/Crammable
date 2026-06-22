@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { ApiPaths, App, Routes } from "@/lib/contracts";
 
@@ -69,22 +69,6 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
       window.history.replaceState(null, "", next === "login" ? Routes.login : Routes.signup);
     }
   }
-
-  // Login's card is short enough to never need a real scrollbar — force it off
-  // at the document level. Signup's longer form is left free to scroll normally.
-  useEffect(() => {
-    const html = document.documentElement;
-    const prevHtmlOverflow = html.style.overflow;
-    const prevBodyOverflow = document.body.style.overflow;
-    if (mode === "login") {
-      html.style.overflow = "hidden";
-      document.body.style.overflow = "hidden";
-    }
-    return () => {
-      html.style.overflow = prevHtmlOverflow;
-      document.body.style.overflow = prevBodyOverflow;
-    };
-  }, [mode]);
 
   async function handleResend() {
     if (mode === "login") {
@@ -278,29 +262,29 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
   const isLogin = mode === "login";
 
   return (
-    <main
-      style={
-        isLogin
-          ? { height: "100vh", overflow: "hidden", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }
-          : { minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }
-      }
-    >
+    <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
 
       {/* ── AUTH CARD — logo, header, toggle, form, and alt options all live in
-          one floating card with no surrounding nav, matching Gizmo's format ── */}
-      <div style={{ display: "flex", alignItems: isLogin ? "center" : "flex-start", justifyContent: "center", padding: isLogin ? "24px 24px" : "48px 24px" }}>
+          one floating card with no surrounding nav, matching Gizmo's format.
+          Always top-aligned with the same padding in both modes — switching
+          login/signup used to also flip center↔top alignment, which made the
+          card jump on every toggle instead of just growing/shrinking in place. ── */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "center", padding: "40px 24px" }}>
         <div style={{ width: "100%", maxWidth: 440 }}>
 
-          <div style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 24, padding: 32, boxShadow: "0 10px 28px rgba(0,0,0,0.12)" }}>
+          {/* key={mode} remounts this box on every toggle so the fadeUp
+              entrance animation replays — a quick, smooth crossfade instead
+              of an instant content swap. */}
+          <div key={mode} className="anim-fade-up" style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 24, padding: 28, boxShadow: "0 10px 28px rgba(0,0,0,0.12)" }}>
 
-            <Link href="/" style={{ display: "block", textAlign: "center", textDecoration: "none", marginBottom: 16 }}>
+            <Link href="/" style={{ display: "block", textAlign: "center", textDecoration: "none", marginBottom: 14 }}>
               <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(19px * var(--font-scale))", color: "var(--text)" }}>
                 {App.name}
               </span>
             </Link>
 
-            <div style={{ textAlign: "center", marginBottom: 18 }}>
-              <h1 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(23px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 4 }}>
+            <div style={{ textAlign: "center", marginBottom: 14 }}>
+              <h1 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(22px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 3 }}>
                 {isLogin ? "Welcome back" : "Create your account"}
               </h1>
               <p style={{ color: "var(--text-muted)", fontSize: "calc(13px * var(--font-scale))" }}>
@@ -308,7 +292,7 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
               </p>
             </div>
 
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 22 }}>
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 18 }}>
               <div style={{ display: "inline-flex", background: "var(--bg-subtle)", borderRadius: 999, padding: 4, gap: 4 }}>
                 <button
                   type="button"
@@ -374,7 +358,7 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
             {isLogin ? (
               <form onSubmit={handleLoginSubmit}>
 
-                <div style={{ marginBottom: 14 }}>
+                <div style={{ marginBottom: 11 }}>
                   <label style={labelStyle}>Email address</label>
                   <input
                     type="email"
@@ -417,12 +401,12 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
             ) : (
               <form onSubmit={handleSignupSubmit}>
 
-                <div style={{ marginBottom: 14 }}>
+                <div style={{ marginBottom: 11 }}>
                   <label style={labelStyle}>Email address <span style={{ color: "var(--primary)" }}>*</span></label>
                   <input type="email" placeholder="you@university.edu.ph" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
                 </div>
 
-                <div style={{ marginBottom: 14 }}>
+                <div style={{ marginBottom: 11 }}>
                   <label style={labelStyle}>Password <span style={{ color: "var(--primary)" }}>*</span></label>
                   <div style={{ position: "relative" }}>
                     <input
@@ -436,7 +420,7 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
                   </div>
                 </div>
 
-                <div style={{ marginBottom: 14 }}>
+                <div style={{ marginBottom: 11 }}>
                   <label style={labelStyle}>Confirm password <span style={{ color: "var(--primary)" }}>*</span></label>
                   <div style={{ position: "relative" }}>
                     <input
@@ -450,10 +434,10 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
                   </div>
                 </div>
 
-                <div style={{ background: "var(--bg-subtle)", border: "1.5px solid var(--border)", borderRadius: 12, padding: 16, marginBottom: 16 }}>
-                  <label style={{ display: "flex", alignItems: "flex-start", gap: 12, cursor: "pointer" }}>
+                <div style={{ background: "var(--bg-subtle)", border: "1.5px solid var(--border)", borderRadius: 12, padding: 13, marginBottom: 13 }}>
+                  <label style={{ display: "flex", alignItems: "flex-start", gap: 10, cursor: "pointer" }}>
                     <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} style={{ marginTop: 2, width: 16, height: 16, accentColor: "var(--primary)", flexShrink: 0 }} />
-                    <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text)", lineHeight: 1.6 }}>
+                    <span style={{ fontSize: "calc(12.5px * var(--font-scale))", color: "var(--text)", lineHeight: 1.5 }}>
                       <strong>I understand and agree</strong> that my uploaded documents will be processed by DeepSeek AI to generate flashcards. I will not upload sensitive or confidential information.{" "}
                       <span style={{ color: "var(--primary)" }}>*</span>
                     </span>
@@ -471,7 +455,7 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
               </form>
             )}
 
-            <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "16px 0" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, margin: "13px 0" }}>
               <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
               <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)" }}>or</span>
               <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
@@ -481,12 +465,12 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
                 paid SMS gateway (Twilio), Apple/Google need OAuth provider registration
                 + Supabase Auth config + a callback route, none of which exist yet.
                 Styling-only for now; see backend task to wire these up for real. */}
-            <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
               <div style={{ display: "flex", gap: 8 }}>
                 <select
                   disabled
                   title="Coming soon"
-                  style={{ width: 72, padding: "10px 6px", borderRadius: 10, border: "1.5px solid var(--border)", background: "var(--bg)", color: "var(--text-faint)", fontSize: "calc(13px * var(--font-scale))", fontFamily: "var(--font-body, sans-serif)", cursor: "not-allowed" }}
+                  style={{ width: 72, padding: "9px 6px", borderRadius: 10, border: "1.5px solid var(--border)", background: "var(--bg)", color: "var(--text-faint)", fontSize: "calc(13px * var(--font-scale))", fontFamily: "var(--font-body, sans-serif)", cursor: "not-allowed" }}
                 >
                   <option>+63</option>
                 </select>
@@ -494,14 +478,14 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
                   disabled
                   placeholder="Phone number"
                   title="Coming soon"
-                  style={{ flex: 1, padding: "10px 14px", borderRadius: 10, border: "1.5px solid var(--border)", background: "var(--bg)", color: "var(--text-faint)", fontSize: "calc(13px * var(--font-scale))", fontFamily: "var(--font-body, sans-serif)", cursor: "not-allowed", boxSizing: "border-box" }}
+                  style={{ flex: 1, padding: "9px 14px", borderRadius: 10, border: "1.5px solid var(--border)", background: "var(--bg)", color: "var(--text-faint)", fontSize: "calc(13px * var(--font-scale))", fontFamily: "var(--font-body, sans-serif)", cursor: "not-allowed", boxSizing: "border-box" }}
                 />
               </div>
               <button
                 type="button"
                 disabled
                 title="Coming soon"
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "10px 0", borderRadius: 10, border: "1.5px solid var(--border)", background: "var(--bg)", color: "var(--text-faint)", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, cursor: "not-allowed", fontFamily: "var(--font-body, sans-serif)" }}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "9px 0", borderRadius: 10, border: "1.5px solid var(--border)", background: "var(--bg)", color: "var(--text-faint)", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, cursor: "not-allowed", fontFamily: "var(--font-body, sans-serif)" }}
               >
                 <span aria-hidden="true"></span> {isLogin ? "Sign in with Apple" : "Sign up with Apple"}
               </button>
@@ -509,7 +493,7 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
                 type="button"
                 disabled
                 title="Coming soon"
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "10px 0", borderRadius: 10, border: "1.5px solid var(--border)", background: "var(--bg)", color: "var(--text-faint)", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, cursor: "not-allowed", fontFamily: "var(--font-body, sans-serif)" }}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "9px 0", borderRadius: 10, border: "1.5px solid var(--border)", background: "var(--bg)", color: "var(--text-faint)", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, cursor: "not-allowed", fontFamily: "var(--font-body, sans-serif)" }}
               >
                 <span aria-hidden="true">G</span> {isLogin ? "Sign in with Google" : "Sign up with Google"}
               </button>
@@ -517,7 +501,7 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
 
             <p style={{ textAlign: "center", fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
               {isLogin ? "Don't have an account? " : "Already have an account? "}
-              <button type="button" onClick={() => switchMode(isLogin ? "signup" : "login")} style={{ ...linkButtonStyle, color: "var(--primary)", fontWeight: 600, fontSize: "calc(13px * var(--font-scale))" }}>
+              <button type="button" onClick={() => switchMode(isLogin ? "signup" : "login")} className="text-link" style={{ ...linkButtonStyle, color: "var(--primary)", fontWeight: 600, fontSize: "calc(13px * var(--font-scale))" }}>
                 {isLogin ? "Sign up free" : "Log in"}
               </button>
             </p>

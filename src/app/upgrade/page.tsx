@@ -305,7 +305,7 @@ export default function UpgradePage() {
       <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
         {Navbar}
         <div style={{ maxWidth: 520, margin: "80px auto", padding: "0 24px", textAlign: "center" }}>
-          <div style={{ fontSize: "calc(56px * var(--font-scale))", marginBottom: 16 }}>⏳</div>
+          <div className="hourglass-flip" style={{ fontSize: "calc(56px * var(--font-scale))", marginBottom: 16 }}>⏳</div>
           <h1
             style={{
               fontFamily: "var(--font-display, serif)",

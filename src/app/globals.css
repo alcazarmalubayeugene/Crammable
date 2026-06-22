@@ -123,6 +123,18 @@ button:not(:disabled):active {
   to { opacity: 1; margin-top: 0; }
 }
 
+/* Hourglass (upgrade page, payment-pending state) — holds still like sand
+   settling, then flips end-over-end, same as a real hourglass. */
+@keyframes hourglassFlip {
+  0%, 40%  { transform: rotate(0deg); }
+  50%, 90% { transform: rotate(180deg); }
+  100%     { transform: rotate(360deg); }
+}
+.hourglass-flip {
+  display: inline-block;
+  animation: hourglassFlip 3s ease-in-out infinite;
+}
+
 /* Waving hand — sits still until hovered; one slow, gentle tilt each side while hovered. */
 @keyframes wave {
   0%, 100% { transform: rotate(0deg); }
@@ -149,6 +161,16 @@ button:not(:disabled):active {
   border-top-color: var(--primary);
   animation: spin 0.7s linear infinite;
   flex-shrink: 0;
+}
+
+/* Capy-reading mascot (upload "generating" state) — a slow, gentle bob so it
+   reads as "studying" rather than sitting completely static. */
+@keyframes capyReadBob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.capy-reading-bob {
+  animation: capyReadBob 2.4s ease-in-out infinite;
 }
 
 @keyframes ellipsisDot {
@@ -202,6 +224,18 @@ button:not(:disabled):active {
   color: var(--primary) !important;
 }
 
+/* ── Plain-text link buttons (AuthCard's "Sign up free" / "Log in" mode
+   toggle) — already primary-colored, so hovering shifts to --primary-hover
+   (a distinct, brighter/darker token per theme) plus an underline, since
+   there's no border/background here for a brightness filter to act on. ── */
+.text-link {
+  transition: color 0.15s ease;
+}
+.text-link:hover {
+  color: var(--primary-hover) !important;
+  text-decoration: underline;
+}
+
 /* ── Solid-background buttons (Save changes, Save preferences, Delete my
    account) — a brightness shift on hover, no movement. Filter works on any
    background color without needing a hover token per color. ──────────── */
@@ -231,6 +265,29 @@ button:not(:disabled):active {
 }
 .chip-card:hover:not(:disabled):not(.chip-card-active) {
   border-color: var(--primary) !important;
+}
+
+/* ── Quiz wrong-answer speech bubble (sidebar, next to teaching-capy.png) —
+   a real CSS bubble + tail, not a baked-in speech-bubble graphic, so the
+   text inside stays normal selectable HTML. ───────────────────────────── */
+.speech-bubble {
+  position: relative;
+  background: var(--bg-card);
+  border: 1.5px solid var(--border);
+  border-radius: 16px;
+  padding: 14px 16px;
+}
+.speech-bubble::after {
+  content: "";
+  position: absolute;
+  bottom: -9px;
+  left: 28px;
+  width: 16px;
+  height: 16px;
+  background: var(--bg-card);
+  border-right: 1.5px solid var(--border);
+  border-bottom: 1.5px solid var(--border);
+  transform: rotate(45deg);
 }
 
 /* ── Nav avatar picker (Dashboard, Upload) — hover the circle to reveal a

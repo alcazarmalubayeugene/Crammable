@@ -9,7 +9,7 @@ import {
   Plus_Jakarta_Sans,
   Libre_Baskerville,
 } from "next/font/google";
-import { App } from "@/lib/contracts";
+import { App, Routes } from "@/lib/contracts";
 import PaymentNotifications from "./PaymentNotifications";
 import {
   ThemeProvider,
@@ -23,12 +23,15 @@ import "./globals.css";
 
 // Runs before paint so a returning dark-mode/font-scale/font-pair user never
 // sees a flash of the defaults. Reads from the same localStorage keys
-// ThemeProvider uses.
+// ThemeProvider uses. Public/pre-login pages always stay light — see
+// PUBLIC_ROUTES in ThemeProvider.tsx for why.
+const PUBLIC_ROUTES_FOR_SCRIPT = [Routes.home, Routes.login, Routes.signup, Routes.forgotPassword];
 const ANTI_FLASH_SCRIPT = `
 (function() {
   try {
+    var isPublicRoute = ${JSON.stringify(PUBLIC_ROUTES_FOR_SCRIPT)}.indexOf(location.pathname) !== -1;
     var theme = localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});
-    if (theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
+    if (theme === "dark" && !isPublicRoute) document.documentElement.setAttribute("data-theme", "dark");
     var fontSize = localStorage.getItem(${JSON.stringify(FONT_SIZE_STORAGE_KEY)});
     var scales = ${JSON.stringify(FONT_SCALES)};
     if (fontSize && scales[fontSize]) {
