@@ -11,6 +11,7 @@ import {
   type Flashcard,
 } from "@/lib/contracts";
 import { PageLoading } from "@/components/ui/PageLoading";
+import { Navbar } from "@/components/nav/Navbar";
 
 /**
  * Read-only public deck viewer (B5) — no auth required. Fetches via
@@ -110,46 +111,7 @@ export default function PublicDeckPage() {
       }}
     >
       {/* ── NAVBAR ── */}
-      <nav
-        style={{
-          background: "var(--nav-bg)",
-          borderBottom: "1px solid var(--nav-border)",
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-        }}
-      >
-        <div
-          className="nav-row"
-          style={{
-            maxWidth: "100%",
-            margin: "0 auto",
-            padding: "0 24px",
-            minHeight: 64,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <a
-            href={Routes.home}
-            className="nav-link"
-            style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
-          >
-            <span
-              style={{
-                fontFamily: "var(--font-display, serif)",
-                fontWeight: 700,
-                fontSize: "calc(18px * var(--font-scale))",
-                color: "var(--nav-text)",
-              }}
-            >
-              {App.name}
-            </span>
-          </a>
-          <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--primary)", fontWeight: 700 }}>Shared deck</span>
-        </div>
-      </nav>
+      <Navbar wordmarkHref={Routes.home} sectionLabel="Shared deck" />
 
       {/* ── CONTENT ── */}
       <div style={{ maxWidth: 860, margin: "0 auto", padding: "40px 24px" }}>

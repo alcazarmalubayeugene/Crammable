@@ -68,6 +68,8 @@ export {
   getQuizSession,
   markLivingDeckRefreshTriggered,
   listQuizSessionsForUser,
+  setQuizSessionPublic,
+  getPublicQuizResult,
   type NewQuizSessionInput,
 } from "@/lib/db/quiz";
 

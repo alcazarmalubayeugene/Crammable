@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
 
     // Fetch the profile for the session response.
     const PROFILE_COLUMNS =
-      "subscription_tier, is_admin, token_balance, consent_deepseek, full_name";
+      "subscription_tier, is_admin, token_balance, consent_deepseek, full_name, theme_preference, font_size_preference, font_pair_preference";
     let { data: profileData } = await supabase
       .from(TableNames.profiles)
       .select(PROFILE_COLUMNS)

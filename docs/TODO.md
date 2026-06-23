@@ -8,9 +8,13 @@ Frontend page status is in `FRONTEND.md`. Unimplemented backend routes are track
 > **#8 (Living Deck)**. This file is kept only as a historical record of the
 > original backend roadmap. The broader advertised-feature set (Pro features,
 > reward methods, card/deck editing, admin tooling, account export/delete) is also
-> implemented — see **`docs/MISSING_FEATURES.md`** for that status. The one
-> remaining product gap is **deck-delete UI** (endpoint exists, no button) —
-> tracked in `docs/MISSING_FEATURES.md` A1 and `docs/BASIC_UI.md`.
+> implemented — see **`docs/MISSING_FEATURES.md`** for that status.
+>
+> **Update (v.17, 2026-06-24):** the last remaining product gap — **deck-delete UI** —
+> now ships on the deck-detail page. v.17 also delivered shareable quiz results,
+> theme/font sync to the profile, global `error`/`not-found`/`loading` boundaries, and
+> a shared `<Navbar>`/`<Footer>`. Only OAuth/phone auth (external setup) and
+> `/api/quiz/explain` legacy-card latency remain open.
 
 ---
 

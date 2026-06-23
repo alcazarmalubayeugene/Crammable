@@ -4,10 +4,11 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { usePathname } from "next/navigation";
 import { Routes } from "@/lib/contracts";
 
-// Dark mode is a localStorage device preference with nowhere to "log out" of —
-// without this, one person enabling it in Settings leaks it onto the public
-// marketing/auth pages for the next, possibly-unrelated visitor on that
-// browser. These are exactly the routes contracts.ts tags "// Public".
+// Logged-out / public pages render a FIXED dark + Baskerville look, independent
+// of any per-user theme/font saved in localStorage — so the marketing/auth
+// experience is consistent for every visitor (and one person's Settings choice
+// can't leak onto the next visitor on a shared browser). These are exactly the
+// routes contracts.ts tags "// Public".
 const PUBLIC_ROUTES: ReadonlySet<string> = new Set([
   Routes.home,
   Routes.login,
@@ -94,7 +95,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", isPublicRoute ? "light" : theme);
+    document.documentElement.setAttribute("data-theme", isPublicRoute ? "dark" : theme);
   }, [theme, isPublicRoute]);
 
   useEffect(() => {
@@ -102,10 +103,12 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, [fontSize]);
 
   useEffect(() => {
-    const pair = FONT_PAIRS[fontPair];
+    // Public pages are pinned to Baskerville for a consistent look, regardless
+    // of any stored per-user font pair.
+    const pair = isPublicRoute ? FONT_PAIRS.baskerville : FONT_PAIRS[fontPair];
     document.documentElement.style.setProperty("--font-display", resolveFontVar(pair.display));
     document.documentElement.style.setProperty("--font-body", resolveFontVar(pair.body));
-  }, [fontPair]);
+  }, [fontPair, isPublicRoute]);
 
   function setTheme(next: ThemeMode) {
     setThemeState(next);

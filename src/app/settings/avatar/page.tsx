@@ -1,22 +1,9 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { App, Routes, UIMessages } from "@/lib/contracts";
+import { Routes } from "@/lib/contracts";
+import { Navbar } from "@/components/nav/Navbar";
 import { DEFAULT_AVATAR_SRC, readImageAsSquareDataUrl, useCustomAvatar } from "@/lib/theme/customAvatar";
-
-const tapeStyle = (rotate: number): React.CSSProperties => ({
-  position: "absolute",
-  left: "50%",
-  top: "50%",
-  width: "150%",
-  height: 30,
-  background: "rgba(235, 211, 165, 0.92)",
-  boxShadow: "0 2px 8px rgba(46,26,12,0.18)",
-  transform: `translate(-50%, -50%) rotate(${rotate}deg)`,
-  display: "flex",
-  alignItems: "center",
-  justifyContent: "center",
-});
 
 export default function AvatarSettingsPage() {
   const [avatarSrc, setAvatarSrc, resetAvatar] = useCustomAvatar();
@@ -70,20 +57,7 @@ export default function AvatarSettingsPage() {
   return (
     <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
       {/* ── NAVBAR ── */}
-      <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)", position: "sticky", top: 0, zIndex: 50 }}>
-        <div className="nav-row" style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", minHeight: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <a href={Routes.settings} className="nav-link" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
-              <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
-            </a>
-            <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
-            <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
-              {App.name}
-            </span>
-          </div>
-          <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--primary)", fontWeight: 700 }}>Avatar</span>
-        </div>
-      </nav>
+      <Navbar backHref={Routes.settings} sectionLabel="Avatar" />
 
       {/* ── CONTENT ── */}
       <div style={{ maxWidth: 760, margin: "0 auto", padding: "40px 24px 64px" }}>
@@ -91,60 +65,10 @@ export default function AvatarSettingsPage() {
           Your Profile
         </h1>
         <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))", marginBottom: 28 }}>
-          Pick a photo for your profile picture. Premade styles are on the way.
+          Pick a photo for your profile picture.
         </p>
 
-        <div style={{ display: "grid", gridTemplateColumns: "1.1fr 1fr", gap: 20 }}>
-          {/* ── Avatar styles — taped shut, coming soon ── */}
-          <div
-            className="anim-fade-up"
-            style={{
-              background: "var(--bg-card)",
-              border: "1.5px solid var(--border)",
-              borderRadius: 16,
-              padding: "20px 22px",
-            }}
-          >
-            <p style={{ fontSize: "calc(11px * var(--font-scale))", fontWeight: 700, letterSpacing: "0.08em", color: "var(--text-faint)", textTransform: "uppercase", marginBottom: 14 }}>
-              Avatar styles
-            </p>
-
-            <span className="tooltip-wrap" style={{ display: "block", width: 260, margin: "0 auto" }} title={UIMessages.avatarStylesUnavailable}>
-              <div style={{ position: "relative", borderRadius: 12, overflow: "hidden", border: "1px solid var(--border)", cursor: "not-allowed" }}>
-                <img
-                  src="/capy/avatar-styles-grid.png"
-                  alt="Planned avatar style set — AI-generated capybara stickers"
-                  width={640}
-                  height={960}
-                  style={{ width: 260, height: "auto", display: "block", filter: "grayscale(0.25)", opacity: 0.7 }}
-                />
-
-                {/* Tape X — purely decorative, signals "not ready yet" without
-                    needing a real disabled-state per thumbnail. */}
-                <div style={tapeStyle(45)} />
-                <div style={tapeStyle(-45)}>
-                  <span
-                    style={{
-                      fontFamily: "var(--font-display, serif)",
-                      fontWeight: 700,
-                      fontSize: "calc(11px * var(--font-scale))",
-                      letterSpacing: "0.1em",
-                      color: "var(--text)",
-                      textTransform: "uppercase",
-                    }}
-                  >
-                    Coming soon
-                  </span>
-                </div>
-              </div>
-              <span className="tooltip-bubble">{UIMessages.avatarStylesUnavailable}</span>
-            </span>
-
-            <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)", marginTop: 14, lineHeight: 1.6 }}>
-              Planned: 9+ AI-generated Capy styles, unlockable with Capycoins, seasonal drops, and Pro-only variants.
-            </p>
-          </div>
-
+        <div style={{ maxWidth: 420, margin: "0 auto" }}>
           {/* ── Your current Capy — real upload ── */}
           <div
             className="anim-fade-up-1"

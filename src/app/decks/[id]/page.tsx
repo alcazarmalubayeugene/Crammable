@@ -1,17 +1,15 @@
 "use client";
 
 import { useEffect, useState, type CSSProperties } from "react";
-import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
 import { PageLoading } from "@/components/ui/PageLoading";
 import { readPausedQuiz, clearPausedQuiz } from "@/lib/quiz/pauseState";
 import { readDefaultQuizType, saveDefaultQuizType } from "@/lib/quiz/defaultQuizType";
-import { AvatarPicker } from "@/components/nav/AvatarPicker";
+import { Navbar } from "@/components/nav/Navbar";
 import {
   ApiPaths,
-  App,
   GenerationMode,
   QuizType,
   ReferralCaps,
@@ -544,76 +542,12 @@ export default function DeckDetailPage() {
       }}
     >
       {/* ── NAVBAR ── */}
-      <nav
-        style={{
-          background: "var(--nav-bg)",
-          borderBottom: "1px solid var(--nav-border)",
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-        }}
-      >
-        <div
-          className="nav-row"
-          style={{
-            maxWidth: "100%",
-            margin: "0 auto",
-            padding: "0 24px",
-            minHeight: 64,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <a
-              href={Routes.dashboard}
-              className="nav-link"
-              style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
-            >
-              <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
-            </a>
-            <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
-            <span
-              style={{
-                fontFamily: "var(--font-display, serif)",
-                fontWeight: 700,
-                fontSize: "calc(18px * var(--font-scale))",
-                color: "var(--nav-text)",
-              }}
-            >
-              {App.name}
-            </span>
-          </div>
-
-          {profile && (
-            <div className="nav-cluster" style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  background: "var(--nav-bg)",
-                  border: "1px solid rgba(196,122,46,0.3)",
-                  borderRadius: 20,
-                  padding: "5px 14px",
-                }}
-              >
-                <Image src="/capy/capycoin.png" alt="" width={32} height={32} style={{ borderRadius: "50%" }} />
-                <span style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--primary-soft)" }}>
-                  {profile.token_balance}<span className="nav-collapse"> Capycoins</span>
-                </span>
-              </div>
-              {profile.full_name && (
-                <span className="nav-collapse" style={{ fontSize: "calc(15px * var(--font-scale))", fontWeight: 600, color: "var(--nav-text)" }}>
-                  {profile.full_name.split(" ")[0]}
-                </span>
-              )}
-              <AvatarPicker />
-            </div>
-          )}
-        </div>
-      </nav>
+      <Navbar
+        backHref={Routes.dashboard}
+        coinBalance={profile?.token_balance}
+        userName={profile?.full_name ? profile.full_name.split(" ")[0] : undefined}
+        showAvatarMenu={!!profile}
+      />
 
       {/* ── CONTENT ── */}
       <div className="page-content" style={{ maxWidth: 860, margin: "0 auto" }}>

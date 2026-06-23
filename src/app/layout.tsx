@@ -28,20 +28,21 @@ import "./globals.css";
 // request that's what most users actually prefer — instead of flashing the
 // old light/Lora CSS defaults for one frame before ThemeProvider mounts.
 // Reads from the same localStorage keys ThemeProvider uses. Public/pre-login
-// pages always stay light — see PUBLIC_ROUTES in ThemeProvider.tsx for why.
+// pages render a FIXED dark + Baskerville look (independent of stored prefs) —
+// see PUBLIC_ROUTES in ThemeProvider.tsx for why.
 const PUBLIC_ROUTES_FOR_SCRIPT = [Routes.home, Routes.login, Routes.signup, Routes.forgotPassword];
 const ANTI_FLASH_SCRIPT = `
 (function() {
   try {
     var isPublicRoute = ${JSON.stringify(PUBLIC_ROUTES_FOR_SCRIPT)}.indexOf(location.pathname) !== -1;
-    var theme = localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)}) || "dark";
-    if (theme === "dark" && !isPublicRoute) document.documentElement.setAttribute("data-theme", "dark");
+    var theme = isPublicRoute ? "dark" : (localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)}) || "dark");
+    if (theme === "dark") document.documentElement.setAttribute("data-theme", "dark");
     var fontSize = localStorage.getItem(${JSON.stringify(FONT_SIZE_STORAGE_KEY)});
     var scales = ${JSON.stringify(FONT_SCALES)};
     if (fontSize && scales[fontSize]) {
       document.documentElement.style.setProperty("--font-scale", String(scales[fontSize]));
     }
-    var fontPair = localStorage.getItem(${JSON.stringify(FONT_PAIR_STORAGE_KEY)}) || "baskerville";
+    var fontPair = isPublicRoute ? "baskerville" : (localStorage.getItem(${JSON.stringify(FONT_PAIR_STORAGE_KEY)}) || "baskerville");
     var pairs = ${JSON.stringify(FONT_PAIRS)};
     if (pairs[fontPair]) {
       document.documentElement.style.setProperty("--font-display", pairs[fontPair].display);
@@ -111,7 +112,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    // The anti-flash script below mutates <html>'s data-theme / font CSS vars
+    // before hydration, so the client <html> attributes intentionally differ
+    // from the server-rendered ones — suppress the expected hydration warning
+    // (one level deep, on <html> only).
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* next/script + beforeInteractive (not a raw <script> tag) — injected
             into the initial server-rendered HTML and runs before hydration,

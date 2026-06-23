@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { App, Routes } from "@/lib/contracts";
+import { Navbar } from "@/components/nav/Navbar";
 import { QUIZ_RESULT_KEY, type QuizResultData } from "@/app/quiz/[deckId]/page";
 import { useCustomAvatar } from "@/lib/theme/customAvatar";
 
@@ -351,39 +352,7 @@ export default function QuizResultPage() {
       }}
     >
       {/* ── NAVBAR ── */}
-      <nav
-        style={{
-          background: "var(--nav-bg)",
-          borderBottom: "1px solid var(--nav-border)",
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-        }}
-      >
-        <div
-          className="nav-row"
-          style={{
-            maxWidth: "100%",
-            margin: "0 auto",
-            padding: "0 24px",
-            minHeight: 64,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <a
-              href={Routes.deck(deckId)}
-              className="nav-link"
-              style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
-            >
-              <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
-            </a>
-          </div>
-          <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--primary)", fontWeight: 700 }}>Quiz Results</span>
-        </div>
-      </nav>
+      <Navbar backHref={Routes.deck(deckId)} showWordmark={false} sectionLabel="Quiz Results" />
 
       {/* ── CONTENT ── */}
       <div style={{ maxWidth: 680, margin: "0 auto", padding: "40px 24px" }}>

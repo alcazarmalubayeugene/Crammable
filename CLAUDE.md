@@ -57,7 +57,9 @@ The error codes already cover the real cases: `UNAUTHORIZED`, `FORBIDDEN`, `CONS
 
 ## 2. Database — do privileged work through RPCs, never by hand
 
-The schema has 9 tables (`profiles`, `decks`, `flashcards`, `quiz_sessions`, `quiz_answers`, `payment_submissions`, `referral_events`, `rate_limit_log`, `admin_action_log`) and 7 functions. **Use the functions — do not re-implement their logic in TypeScript.**
+The schema has 10 tables (`profiles`, `decks`, `flashcards`, `quiz_sessions`, `quiz_answers`, `payment_submissions`, `referral_events`, `app_reviews`, `rate_limit_log`, `admin_action_log`) and ~20 functions. **Use the functions — do not re-implement their logic in TypeScript.** (`schema.sql` is the canonical, authoritative list — count is approximate here and grows over time.)
+
+Recent additions (v.17): `quiz_sessions.is_public` + the `get_public_quiz_result()` SECURITY DEFINER RPC (shareable quiz results — narrow public projection, anon-callable), and `profiles.theme_preference` / `font_size_preference` / `font_pair_preference` (theme/font sync; freely user-updatable, not guarded by `protect_immutable_profile_fields()`).
 
 - **Credits — always `deduct_credit()`.** It is atomic and raises `INSUFFICIENT_CREDITS` when the balance is too low. Never read the balance, subtract in JS, and write it back — that races and lets users double-spend. Catch the raised error and return `ApiErrorCode.INSUFFICIENT_CREDITS`.
 - **Rate limiting — always `check_rate_limit()`** (SECURITY DEFINER RPC) at the top of every AI-facing handler. It both checks *and* logs the request, so `rate_limit_log` writes happen inside it — clients have no direct access to that table. Limits live in `RateLimits` (`/api/upload` 5/hr, `/api/generate` 2/hr, `/api/payment/submit` 2/24h, `/api/referral/claim` 5/24h, etc.). If it returns `allowed: false`, return `RATE_LIMITED`.

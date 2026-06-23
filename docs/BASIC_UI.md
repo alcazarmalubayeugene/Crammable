@@ -14,6 +14,14 @@ wired affordance (button/form/`fetch`), not just that the endpoint exists.
 > (the endpoint is orphaned), there are **no error/404/loading boundary pages**,
 > **no admin entry point** in the nav, and **no shared nav/footer component**.
 
+> **✅ UPDATE (v.17, 2026-06-24).** The four chrome gaps in the TL;DR are now closed,
+> except the admin entry point (kept URL-only on purpose). **Delete-deck UI** added to
+> `/decks/[id]`; **`error.tsx` / `not-found.tsx` / `loading.tsx`** added at the app root;
+> a shared **`<Navbar>`** (`src/components/nav/Navbar.tsx`) **+ `<Footer>`** now replaces
+> the per-page inline nav across all ~15 pages. The **admin nav link is intentionally
+> omitted** (security-by-obscurity, by request). Also shipped this version: shareable quiz
+> results and theme/font sync to the profile.
+
 Severity: **[P1]** advertised/expected feature with no UI · **[P2]** UX/robustness gap.
 
 ---

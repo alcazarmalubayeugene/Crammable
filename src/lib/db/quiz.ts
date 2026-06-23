@@ -1,6 +1,7 @@
 import { createSessionClient } from "@/lib/supabase/server";
 import {
   TableNames,
+  type PublicQuizResult,
   type QuizHistoryRow,
   type QuizSession,
   type QuizType,
@@ -137,4 +138,55 @@ export async function listQuizSessionsForUser(
       deckTitle: decks?.title ?? "",
     })
   );
+}
+
+/**
+ * Toggle a quiz session's is_public flag (shareable results). Plain session-client
+ * update — quiz_sessions RLS confines the write to the owner (auth.uid() = user_id).
+ * Returns the updated session, or null if it doesn't exist / isn't owned by the
+ * caller. Mirrors setDeckPublic() in db/decks.ts.
+ */
+export async function setQuizSessionPublic(
+  sessionId: string,
+  isPublic: boolean
+): Promise<QuizSession | null> {
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase
+    .from(TableNames.quizSessions)
+    .update({ is_public: isPublic })
+    .eq("id", sessionId)
+    .select("*")
+    .maybeSingle();
+  if (error) throw toDbError(error, "Failed to update result visibility.");
+  return (data as QuizSession) ?? null;
+}
+
+/**
+ * A public quiz result for the read-only /results/[id] viewer. Goes through the
+ * get_public_quiz_result() SECURITY DEFINER RPC (schema §4.16): it returns the
+ * narrow display projection only for is_public = true completed sessions, even
+ * when the underlying deck is private — so nothing else (user_id, per-question
+ * answers, deck internals) is exposed. Returns null when the session isn't public
+ * or doesn't exist. Reachable by anon — no auth required.
+ */
+export async function getPublicQuizResult(
+  sessionId: string
+): Promise<PublicQuizResult | null> {
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase.rpc("get_public_quiz_result", {
+    p_session_id: sessionId,
+  });
+  if (error) throw toDbError(error, "Failed to load this result.");
+
+  // RETURNS TABLE(...) → PostgREST yields an array of rows (0 or 1 here).
+  const row = Array.isArray(data) ? data[0] : data;
+  if (!row) return null;
+
+  return {
+    deckTitle:      row.deck_title ?? "",
+    scorePercent:   Number(row.score_percent ?? 0),
+    correctCount:   Number(row.correct_count ?? 0),
+    totalQuestions: Number(row.total_questions ?? 0),
+    completedAt:    row.completed_at ?? "",
+  };
 }

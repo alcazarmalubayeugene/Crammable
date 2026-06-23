@@ -3,6 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ApiPaths, App, Routes } from "@/lib/contracts";
+import {
+  THEME_STORAGE_KEY,
+  FONT_SIZE_STORAGE_KEY,
+  FONT_PAIR_STORAGE_KEY,
+} from "@/lib/theme/ThemeProvider";
 
 type Mode = "login" | "signup";
 
@@ -133,6 +138,16 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
     if (!data.success) {
       setError(data.error?.message ?? "Invalid email or password.");
       return;
+    }
+
+    // Hydrate the user's synced theme/font prefs into localStorage so the
+    // anti-flash script + ThemeProvider apply them on the dashboard load — this
+    // is what makes prefs follow the user onto a fresh device after login.
+    const prof = data.profile;
+    if (prof) {
+      if (prof.theme_preference) localStorage.setItem(THEME_STORAGE_KEY, prof.theme_preference);
+      if (prof.font_size_preference) localStorage.setItem(FONT_SIZE_STORAGE_KEY, prof.font_size_preference);
+      if (prof.font_pair_preference) localStorage.setItem(FONT_PAIR_STORAGE_KEY, prof.font_pair_preference);
     }
 
     // replace() prevents the login page from appearing in browser back-history

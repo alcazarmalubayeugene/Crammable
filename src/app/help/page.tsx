@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { App, Routes, UIMessages } from "@/lib/contracts";
+import { Navbar } from "@/components/nav/Navbar";
 
 const cardStyle = {
   background: "var(--bg-card)",
@@ -46,31 +47,7 @@ export default function HelpPage() {
   return (
     <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
       {/* ── NAVBAR ── */}
-      <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)", position: "sticky", top: 0, zIndex: 50 }}>
-        <div className="nav-row" style={{ position: "relative", maxWidth: "100%", margin: "0 auto", padding: "0 24px", minHeight: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <a href={Routes.dashboard} className="nav-link" style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}>
-              <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
-            </a>
-          </div>
-          <span
-            style={{
-              position: "absolute",
-              left: "50%",
-              top: "50%",
-              transform: "translate(-50%, -50%)",
-              fontFamily: "var(--font-display, serif)",
-              fontWeight: 700,
-              fontSize: "calc(18px * var(--font-scale))",
-              color: "var(--nav-text)",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {App.name}
-          </span>
-          <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--primary)", fontWeight: 700 }}>Help</span>
-        </div>
-      </nav>
+      <Navbar backHref={Routes.dashboard} centerWordmark sectionLabel="Help" />
 
       {/* ── CONTENT ── */}
       <div style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px 64px" }}>

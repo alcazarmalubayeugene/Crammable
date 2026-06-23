@@ -5,6 +5,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { PdfUploadFlow } from "@/components/upload/PdfUploadFlow";
 import { AvatarPicker } from "@/components/nav/AvatarPicker";
+import { Navbar } from "@/components/nav/Navbar";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { App, MAX_UPLOAD_SIZE_MB, Routes, SubscriptionTier, TableNames } from "@/lib/contracts";
 
@@ -44,21 +45,18 @@ export default function NewDeckPage() {
     <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
 
       {/* ── NAVBAR ── */}
-      <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)", position: "sticky", top: 0, zIndex: 50 }}>
-        <div className="nav-row" style={{ maxWidth: "100%", margin: "0 auto", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <a href={Routes.dashboard} className="nav-link" style={{ display: "flex", alignItems: "center", textDecoration: "none" }}>
-              <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
-            </a>
-          </div>
-          <div className="nav-cluster" style={{ display: "flex", alignItems: "center", gap: 12, fontSize: "calc(13.6px * var(--font-scale))" }}>
+      <Navbar
+        backHref={Routes.dashboard}
+        showWordmark={false}
+        rightContent={
+          <>
             <div
               title="Capycoins remaining"
               className="nav-coin-pill"
               style={{ display: "flex", alignItems: "center", gap: 5, background: "var(--nav-bg)", border: "1.5px solid rgba(196,122,46,0.3)", borderRadius: 999, padding: "4px 12px" }}
             >
               <Image src="/capy/capycoin.png" alt="" width={18} height={18} style={{ borderRadius: "50%" }} />
-              <span style={{ fontWeight: 600, color: "var(--primary-soft)" }}>
+              <span style={{ fontWeight: 600, color: "var(--primary-soft)", fontSize: "calc(13.6px * var(--font-scale))" }}>
                 {profile?.token_balance ?? 0}<span className="nav-collapse"> Capycoins</span>
               </span>
             </div>
@@ -75,13 +73,13 @@ export default function NewDeckPage() {
                 Upgrade ✦
               </Link>
             )}
-            <Link href={Routes.rewards} className="nav-link" style={{ color: "var(--text-faint)", textDecoration: "none" }}>
+            <Link href={Routes.rewards} className="nav-link" style={{ color: "var(--text-faint)", textDecoration: "none", fontSize: "calc(13.6px * var(--font-scale))" }}>
               Rewards
             </Link>
             <AvatarPicker />
-          </div>
-        </div>
-      </nav>
+          </>
+        }
+      />
 
       {/* ── CONTENT ── */}
       <div style={{ maxWidth: 860, margin: "0 auto", padding: "22px 24px" }}>

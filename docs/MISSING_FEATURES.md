@@ -16,14 +16,17 @@ core feature · **[P2]** nice-to-have / compliance.
 
 ---
 
-> ## ✅ STATUS UPDATE — 2026-06-11
+> ## ✅ STATUS UPDATE — 2026-06-24 (v.17)
 >
-> **Almost every gap below has since been implemented** (on the `backend` branch +
-> audit fixes). Current status of each item:
+> **Every gap below is now implemented.** `A1` (the last one still open as of the
+> 2026-06-11 update) shipped in v.17, along with shareable quiz results, theme/font
+> sync to the profile, global `error`/`not-found`/`loading` boundaries, and a shared
+> `<Navbar>`/`<Footer>`. The only remaining product gaps are OAuth/phone auth (needs
+> external provider config) and `/api/quiz/explain` latency on legacy cards.
 >
 > | Item | Status | Item | Status |
 > |---|---|---|---|
-> | **A1** Delete-deck UI | ❌ **STILL OPEN** (endpoint exists, no button) | **D1** Flashcard editing | ✅ Done |
+> | **A1** Delete-deck UI | ✅ **Done (v.17)** | **D1** Flashcard editing | ✅ Done |
 > | **B1** Living Decks | ✅ Done | **D2** Deck rename | ✅ Done |
 > | **B2** Deep Dive | ✅ Done | **D3** Quiz history | ✅ Done |
 > | **B3** PDF export | ✅ Done | **D4** Study-weak-cards mode | ✅ Done |

@@ -1,28 +1,27 @@
+import { Routes } from "@/lib/contracts";
+import { Navbar } from "@/components/nav/Navbar";
+import { Footer } from "@/components/nav/Footer";
+
 export default function Home() {
   return (
     <main className="min-h-screen" style={{ background: "var(--bg)", color: "var(--text)", fontFamily: "var(--font-body, sans-serif)" }}>
 
       {/* ── NAVBAR ── */}
-      <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)", position: "sticky", top: 0, zIndex: 50 }}>
-        <div className="nav-row" style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", minHeight: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(20px * var(--font-scale))", color: "var(--nav-text)", letterSpacing: "-0.3px" }}>
-              Crammable
-            </span>
-          </div>
-          <div className="nav-cluster" style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <a href="/login" className="nav-link" style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)", textDecoration: "none" }}>
+      <Navbar
+        rightContent={
+          <>
+            <a href={Routes.login} className="nav-link" style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)", textDecoration: "none" }}>
               Log in
             </a>
             <a
-              href="/signup"
+              href={Routes.signup}
               style={{ fontSize: "calc(14px * var(--font-scale))", background: "var(--primary)", color: "var(--nav-text)", padding: "8px 18px", borderRadius: 9, textDecoration: "none", fontWeight: 600 }}
             >
               Get Started Free
             </a>
-          </div>
-        </div>
-      </nav>
+          </>
+        }
+      />
 
       {/* ── HERO ── */}
       <section style={{ maxWidth: 1024, margin: "0 auto", padding: "80px 24px 60px", textAlign: "center" }}>
@@ -187,23 +186,7 @@ export default function Home() {
       </section>
 
       {/* ── FOOTER ── */}
-      <footer style={{ padding: "40px 24px", textAlign: "center" }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 10 }}>
-          <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, color: "var(--primary)", fontSize: "calc(17px * var(--font-scale))" }}>Crammable</span>
-        </div>
-        <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-muted)" }}>
-          Turn any document into a flashcard deck — in seconds.
-        </p>
-        <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginTop: 14 }}>
-          © 2026 Crammable · Built for Filipino students ·{" "}
-          <a href="mailto:support@crammable.ph" style={{ color: "var(--primary)" }}>
-            support@crammable.ph
-          </a>
-        </p>
-        <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginTop: 8, maxWidth: 480, margin: "8px auto 0" }}>
-          AI-generated content may contain errors. Always verify against your official course materials and textbooks.
-        </p>
-      </footer>
+      <Footer />
 
     </main>
   );

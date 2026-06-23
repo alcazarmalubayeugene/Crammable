@@ -62,7 +62,9 @@ and the roadmap. (Deferred work is tracked separately in `docs/TODO.md`.)
   `account_deleted` actions); `referral_events` gained `deck_id` (deck_share attribution).
   `flashcards` gained `explanation TEXT` (nullable) — Capy's "why" lesson shown on a wrong
   quiz answer; NULL on cards generated before the column existed (live `/api/quiz/explain`
-  fallback covers those).
+  fallback covers those). **(v.17)** `quiz_sessions` gained `is_public BOOLEAN` (B5 shareable
+  quiz results); `profiles` gained `theme_preference` / `font_size_preference` /
+  `font_pair_preference` (nullable — theme/font cross-device sync, freely user-updatable).
 - **RLS** enabled on every table with per-user and admin policies, plus additive
   "anyone read public" SELECT policies on `decks` / `flashcards` (B5 public sharing).
 - **Triggers:** auto-create profile on signup (`handle_new_user`), `updated_at` maintenance,
@@ -74,7 +76,9 @@ and the roadmap. (Deferred work is tracked separately in `docs/TODO.md`.)
   newer **`insert_reinforcement_cards_and_charge`** (Living Deck, atomic),
   **`claim_self_referral_event`** (profile-complete / deck-share earns),
   **`verify_app_review`** (admin review verification), **`admin_grant_credits`**,
-  **`prepare_account_deletion`** (E5), and **`downgrade_expired_pro`** (Pro-expiry cron).
+  **`prepare_account_deletion`** (E5), **`downgrade_expired_pro`** (Pro-expiry cron), and
+  **(v.17) `get_public_quiz_result`** (shareable quiz results — narrow public projection,
+  anon-callable `SECURITY DEFINER`; exposes deck title + score only, never owner internals).
 - **pg_cron jobs:** clean old rate-limit logs, `pro_monthly_credit_refresh`,
   **`crammable-pro-expiry-downgrade`** (daily — flips lapsed Pro → free).
 - **Realtime:** `payment_submissions` added to the `supabase_realtime` publication so the
@@ -107,6 +111,9 @@ and the roadmap. (Deferred work is tracked separately in `docs/TODO.md`.)
 | `GET /api/decks/[id]/export` | `…/export/route.tsx` | ✅ PDF export (B3), Pro-gated, `@react-pdf/renderer` |
 | `GET /api/public/decks/[id]` | `src/app/api/public/decks/[id]/route.ts` | ✅ unauthenticated read-only public deck (B5); projection trimmed (no owner PII) |
 | `GET /api/quiz/history` | `src/app/api/quiz/history/route.ts` | ✅ per-deck/user completed-quiz history (D3) |
+| `POST·DELETE /api/quiz/[id]/share` | `…/quiz/[id]/share/route.ts` | ✅ (v.17) share / unshare a quiz result (B5); toggles `quiz_sessions.is_public`; owner-only, rate-limited |
+| `GET /api/public/results/[sessionId]` | `…/public/results/[sessionId]/route.ts` | ✅ (v.17) unauthenticated public quiz-result read via `get_public_quiz_result()` RPC |
+| `POST /api/account/preferences` | `…/account/preferences/route.ts` | ✅ (v.17) theme/font sync to the `profiles` row; Zod-validated against the contracts domain arrays |
 | `POST /api/rewards/submit-review` | `…/submit-review/route.ts` | ✅ submit in-app review (B4); admin verifies |
 | `POST /api/rewards/claim-profile-complete` | `…/claim-profile-complete/route.ts` | ✅ profile-complete earn (B4) |
 | `GET /api/admin/reviews` (+ `/verify`) | `src/app/api/admin/reviews/**` | ✅ list + atomic `verify_app_review` (E4) |
@@ -118,8 +125,13 @@ and the roadmap. (Deferred work is tracked separately in `docs/TODO.md`.)
 > **Feature set is now essentially complete.** The advertised gaps formerly tracked in
 > `docs/MISSING_FEATURES.md` (Living Decks, Deep Dive, PDF export, all reward methods,
 > deck/card editing, quiz history, admin tooling, account export/delete) are **all built** —
-> see the 2026-06-11 status banner in that file. The one remaining product gap is a
-> **delete-deck UI** (endpoint exists, no button); UI gaps are catalogued in `docs/BASIC_UI.md`.
+> see the 2026-06-11 status banner in that file. **(v.17)** the prior remaining gaps are
+> also closed: the **delete-deck UI** now exists on the deck-detail page, **shareable quiz
+> results** shipped end-to-end (column + RPC + two routes), **theme/font sync to the
+> profile** is live, and the app-wide chrome gaps (global `error`/`not-found`/`loading`
+> boundaries + a shared `<Navbar>`/`<Footer>`) are filled. UI gaps are catalogued in
+> `docs/BASIC_UI.md`. Still open: OAuth/phone auth (external provider config) and
+> `/api/quiz/explain` latency on legacy cards.
 
 ### Configuration & dependencies
 

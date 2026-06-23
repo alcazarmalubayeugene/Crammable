@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
 import { PageLoading } from "@/components/ui/PageLoading";
+import { Navbar } from "@/components/nav/Navbar";
 import {
   App,
   ApiPaths,
@@ -242,58 +242,11 @@ export default function RewardsPage() {
       }}
     >
       {/* ── NAVBAR ── */}
-      <nav
-        style={{
-          background: "var(--nav-bg)",
-          borderBottom: "1px solid var(--nav-border)",
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-        }}
-      >
-        <div
-          className="nav-row"
-          style={{
-            maxWidth: "100%",
-            margin: "0 auto",
-            padding: "0 24px",
-            minHeight: 64,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <a
-              href={Routes.dashboard}
-              className="nav-link"
-              style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
-            >
-              <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
-            </a>
-          </div>
-
-          {profile && (
-            <div
-              className="nav-cluster"
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 6,
-                background: "var(--nav-bg)",
-                border: "1px solid rgba(196,122,46,0.3)",
-                borderRadius: 20,
-                padding: "5px 14px",
-              }}
-            >
-              <Image src="/capy/capycoin.png" alt="" width={32} height={32} style={{ borderRadius: "50%" }} />
-              <span style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--primary-soft)" }}>
-                {profile.token_balance}<span className="nav-collapse"> Capycoins</span>
-              </span>
-            </div>
-          )}
-        </div>
-      </nav>
+      <Navbar
+        backHref={Routes.dashboard}
+        showWordmark={false}
+        coinBalance={profile?.token_balance}
+      />
 
       {/* ── CONTENT ── */}
       <div style={{ maxWidth: 760, margin: "0 auto", padding: "40px 24px 64px" }}>

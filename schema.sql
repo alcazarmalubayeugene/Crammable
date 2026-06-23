@@ -103,6 +103,13 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   referred_by             UUID         REFERENCES public.profiles(id) ON DELETE SET NULL,
   consent_deepseek        BOOLEAN      NOT NULL DEFAULT false,
   credits_granted_at      TIMESTAMPTZ,                          -- last Pro monthly top-up; NULL = never granted
+  -- Theme/font preferences synced across devices (NULL = use client default).
+  -- Free-form TEXT, validated app-side against the ThemeProvider domains, so
+  -- adding/renaming a font pair never needs a DB migration. Freely user-updatable:
+  -- not guarded by protect_immutable_profile_fields().
+  theme_preference        TEXT,                                 -- 'light' | 'dark'
+  font_size_preference    TEXT,                                 -- 'small' | 'default' | 'large' | 'xlarge'
+  font_pair_preference    TEXT,                                 -- FONT_PAIRS key, e.g. 'baskerville'
   created_at              TIMESTAMPTZ  NOT NULL DEFAULT now(),
   updated_at              TIMESTAMPTZ  NOT NULL DEFAULT now(),
 
@@ -167,6 +174,11 @@ CREATE TABLE IF NOT EXISTS public.quiz_sessions (
                                             CHECK (correct_count >= 0),
   score_percent                 FLOAT                CHECK (score_percent >= 0 AND score_percent <= 100),
   living_deck_refresh_triggered BOOLEAN     NOT NULL DEFAULT false,
+  -- Shareable quiz results: when true the score is exposed read-only at
+  -- /results/[id] via get_public_quiz_result() (§4.16). Mirrors decks.is_public,
+  -- but a session can be public while its deck stays private — so the public read
+  -- goes through a SECURITY DEFINER function, not an anon RLS SELECT + deck join.
+  is_public                     BOOLEAN     NOT NULL DEFAULT false,
   completed_at                  TIMESTAMPTZ,
   created_at                    TIMESTAMPTZ NOT NULL DEFAULT now(),
 
@@ -1609,6 +1621,49 @@ GRANT EXECUTE ON FUNCTION public.prepare_account_deletion(uuid)                 
 REVOKE EXECUTE ON FUNCTION public.submit_quiz_result(uuid, jsonb)                                          FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.create_deck_with_cards_and_charge(uuid, text, text, text, text, jsonb)   FROM PUBLIC, anon;
 REVOKE EXECUTE ON FUNCTION public.insert_reinforcement_cards_and_charge(uuid, uuid, jsonb)                 FROM PUBLIC, anon;
+
+
+-- ---------------------------------------------------------------------------
+-- 4.16 get_public_quiz_result(p_session_id)
+-- Shareable quiz results: the read behind GET /api/public/results/[sessionId].
+--
+-- SECURITY DEFINER (not INVOKER): a quiz session can be marked public while its
+-- deck stays private, so an anon SELECT joining decks would be blocked by the
+-- deck owner-only RLS. Running as owner lets the join through — but the WHERE
+-- clause hard-gates it to is_public = true AND completed sessions, and the
+-- RETURNS TABLE projects only the five display fields. Nothing else (user_id,
+-- per-question answers, source_filename, card internals) is reachable — same
+-- "never expose owner internals" rule as getPublicDeckWithCards(). A private,
+-- missing, or unfinished session returns zero rows (no existence leak).
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.get_public_quiz_result(p_session_id UUID)
+RETURNS TABLE (
+  deck_title      TEXT,
+  score_percent   FLOAT,
+  correct_count   INTEGER,
+  total_questions INTEGER,
+  completed_at    TIMESTAMPTZ
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT d.title,
+         qs.score_percent,
+         qs.correct_count,
+         qs.total_questions,
+         qs.completed_at
+  FROM   public.quiz_sessions qs
+  JOIN   public.decks d ON d.id = qs.deck_id
+  WHERE  qs.id        = p_session_id
+    AND  qs.is_public = true
+    AND  qs.completed_at IS NOT NULL;
+$$;
+
+-- Read-only public projection — safe for both anon and authenticated callers
+-- (the session client uses whichever role the visitor has).
+REVOKE ALL    ON FUNCTION public.get_public_quiz_result(uuid) FROM PUBLIC;
+GRANT  EXECUTE ON FUNCTION public.get_public_quiz_result(uuid) TO anon, authenticated;
 
 
 -- =============================================================================

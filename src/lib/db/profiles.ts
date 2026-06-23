@@ -20,7 +20,15 @@ import { ensureMaxLength } from "@/lib/db/validate";
 
 /** Fields a user is allowed to change on their own profile. */
 export type EditableProfileFields = Partial<
-  Pick<Profile, "full_name" | "course" | "consent_deepseek">
+  Pick<
+    Profile,
+    | "full_name"
+    | "course"
+    | "consent_deepseek"
+    | "theme_preference"
+    | "font_size_preference"
+    | "font_pair_preference"
+  >
 >;
 
 /** Update the caller's own profile (editable columns only). Returns the new row. */
@@ -38,6 +46,9 @@ export async function updateOwnProfile(
   if (fields.full_name !== undefined) payload.full_name = fields.full_name;
   if (fields.course !== undefined) payload.course = fields.course;
   if (fields.consent_deepseek !== undefined) payload.consent_deepseek = fields.consent_deepseek;
+  if (fields.theme_preference !== undefined) payload.theme_preference = fields.theme_preference;
+  if (fields.font_size_preference !== undefined) payload.font_size_preference = fields.font_size_preference;
+  if (fields.font_pair_preference !== undefined) payload.font_pair_preference = fields.font_pair_preference;
 
   const supabase = await createSessionClient();
   const { data, error } = await supabase

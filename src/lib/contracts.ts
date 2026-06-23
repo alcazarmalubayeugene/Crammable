@@ -29,7 +29,7 @@
 
 export const App = {
   name:         "Crammable",
-  version:      "v.16",                  // bump by 0.1 on every meaningful frontend update
+  version:      "v.17",                  // bump by 0.1 on every meaningful frontend update
   tagline:      "Turn any document into a flashcard deck — in seconds.",
   supportEmail: "crammablesupport@gmail.com", // not created yet — co-devs to set up
   gcashName:    "Crammable",             // name displayed in GCash payment screen
@@ -189,6 +189,7 @@ export const ApiPaths = {
   adminGrantCredits:     "/api/admin/users/grant-credits",
   adminAuditLog:         "/api/admin/audit-log",
   accountDelete:         "/api/account/delete",
+  updatePreferences:     "/api/account/preferences",
   authSignup:             "/api/auth/signup",
   authLogin:              "/api/auth/login",
   authResendConfirmation: "/api/auth/resend-confirmation",
@@ -326,6 +327,7 @@ export const RateLimits: Record<string, RateLimitRule> = {
   [ApiPaths.adminPayments]:    { windowMinutes: 60,   maxRequests: 200 },
   [ApiPaths.authLogin]:        { windowMinutes: 15,   maxRequests: 10  },
   "/api/decks/[id]/share":      { windowMinutes: 1440, maxRequests: 5   }, // 24-hour window
+  "/api/quiz/[id]/share":       { windowMinutes: 1440, maxRequests: 5  }, // 24-hour window
   "/api/decks/[id]/export":     { windowMinutes: 60,   maxRequests: 10  },
   [ApiPaths.claimProfileComplete]: { windowMinutes: 1440, maxRequests: 5 }, // 24-hour window
   [ApiPaths.submitAppReview]:      { windowMinutes: 1440, maxRequests: 2 }, // 24-hour window
@@ -338,6 +340,7 @@ export const RateLimits: Record<string, RateLimitRule> = {
   [ApiPaths.adminGrantCredits]: { windowMinutes: 60,   maxRequests: 60  },
   [ApiPaths.adminAuditLog]:     { windowMinutes: 60,   maxRequests: 200 },
   [ApiPaths.accountDelete]:     { windowMinutes: 1440, maxRequests: 3   }, // 24-hour window
+  [ApiPaths.updatePreferences]: { windowMinutes: 60,   maxRequests: 60  }, // theme/font saves — generous
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -468,10 +471,6 @@ export const UIMessages = {
   // has nothing real to sort by before that.
   studyWeakCardsLocked: "Try every card at least once first — weak cards aren't meaningful until then.",
 
-  // Avatar styles gallery (/settings/avatar) — premade Capy styles are a
-  // concept idea only, no real per-style art exists yet.
-  avatarStylesUnavailable: "This is unavailable for now.",
-
   // Referral
   referralCredited:  (name: string, credits: number) => `+${credits} Capycoins — ${name} signed up with your link!`,
   // Shown to the person ENTERING a code: the referrer (not the claimer) is credited.
@@ -514,6 +513,9 @@ export interface Profile {
   referred_by:             string | null;     // uuid FK → profiles.id
   consent_deepseek:        boolean;           // MUST be true before any PDF processing
   credits_granted_at:      string | null;     // ISO 8601 timestamptz; last Pro monthly top-up, null = never
+  theme_preference:        string | null;     // 'light' | 'dark' — synced across devices, null = client default
+  font_size_preference:    string | null;     // FontSizeKey, null = client default
+  font_pair_preference:    string | null;     // FontPairKey, null = client default
   created_at:              string;
   updated_at:              string;
 }
@@ -557,6 +559,7 @@ export interface QuizSession {
   correct_count:                 number;
   score_percent:                 number | null; // null until session is submitted
   living_deck_refresh_triggered: boolean;
+  is_public:                     boolean;       // shareable quiz results — exposes the score at /results/[id]
   completed_at:                  string | null; // null until submitted
   created_at:                    string;
 }
@@ -903,16 +906,14 @@ export interface ShareDeckResult {
 }
 
 // ── POST /api/quiz/[sessionId]/share ──────────────────────────────────────────
-// NOT YET IMPLEMENTED on the backend (no quiz_sessions.is_public column, no
-// route) — see FRONTEND.md "Backend work needed: shareable quiz results".
 export interface ShareQuizResultResult {
   isPublic: boolean;
 }
 
 // ── GET /api/public/results/[sessionId] ──────────────────────────────────────
-// NOT YET IMPLEMENTED on the backend. Deliberately narrow — mirrors
-// getPublicDeckWithCards()'s "never expose owner internals" rule: no user_id,
-// no per-question answers, just enough to render a public score showcase.
+// Deliberately narrow — mirrors getPublicDeckWithCards()'s "never expose owner
+// internals" rule: no user_id, no per-question answers, just enough to render a
+// public score showcase. Served by the get_public_quiz_result() RPC (schema §4.16).
 export interface PublicQuizResult {
   deckTitle:      string;
   scorePercent:   number;
@@ -989,6 +990,20 @@ export interface AdminAuditLogResult {
 
 // ── POST /api/account/delete (E5) ───────────────────────────────────────────────
 // (No success payload — { success: true } is sufficient)
+
+// ── POST /api/account/preferences ────────────────────────────────────────────────
+// Theme/font sync. The domain arrays are the single source of truth the route
+// validates against (and mirror the union types in ThemeProvider.tsx). Success
+// returns { success: true } only.
+export const ThemeModes = ["light", "dark"] as const;
+export const FontSizeKeys = ["small", "default", "large", "xlarge"] as const;
+export const FontPairKeys = ["lora", "playfair", "fraunces", "garamond", "baskerville"] as const;
+
+export interface UpdatePreferencesRequest {
+  theme:    (typeof ThemeModes)[number];
+  fontSize: (typeof FontSizeKeys)[number];
+  fontPair: (typeof FontPairKeys)[number];
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 16 — SHARED UTILITY TYPES

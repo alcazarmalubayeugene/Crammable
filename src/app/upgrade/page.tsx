@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { Navbar } from "@/components/nav/Navbar";
 import { authHeaders } from "@/lib/api/auth-headers";
 import { PageLoading } from "@/components/ui/PageLoading";
 import {
@@ -172,79 +172,13 @@ export default function UpgradePage() {
 
   // ── shared navbar ─────────────────────────────────────────────────────────────
 
-  const Navbar = (
-    <nav
-      style={{
-        background: "var(--nav-bg)",
-        borderBottom: "1px solid var(--nav-border)",
-        position: "sticky",
-        top: 0,
-        zIndex: 50,
-      }}
-    >
-      <div
-        className="nav-row"
-        style={{
-          position: "relative",
-          maxWidth: "100%",
-          margin: "0 auto",
-          padding: "0 24px",
-          minHeight: 64,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <a
-            href={Routes.dashboard}
-            className="nav-link"
-            style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
-          >
-            <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
-          </a>
-        </div>
-
-        {/* Absolutely centered regardless of how wide the back link / coin
-            pill on either side are — a plain flex child would only look
-            centered when both sides happen to be equal width. */}
-        <span
-          style={{
-            position: "absolute",
-            left: "50%",
-            top: "50%",
-            transform: "translate(-50%, -50%)",
-            fontFamily: "var(--font-display, serif)",
-            fontWeight: 700,
-            fontSize: "calc(18px * var(--font-scale))",
-            color: "var(--nav-text)",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {App.name}
-        </span>
-
-        {profile && (
-          <div
-            className="nav-cluster"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              background: "var(--nav-bg)",
-              border: "1px solid rgba(196,122,46,0.3)",
-              borderRadius: 20,
-              padding: "5px 14px",
-            }}
-          >
-            <Image src="/capy/capycoin.png" alt="" width={32} height={32} style={{ borderRadius: "50%" }} />
-            <span style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--primary-soft)" }}>
-              {profile.token_balance}<span className="nav-collapse"> Capycoins</span>
-            </span>
-          </div>
-        )}
-      </div>
-    </nav>
+  const topNav = (
+    <Navbar
+      backHref={Routes.dashboard}
+      centerWordmark
+      wordmarkHref={Routes.dashboard}
+      coinBalance={profile?.token_balance}
+    />
   );
 
   // ── already pro ───────────────────────────────────────────────────────────────
@@ -252,7 +186,7 @@ export default function UpgradePage() {
   if (phase === "already_pro") {
     return (
       <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
-        {Navbar}
+        {topNav}
         <div
           style={{
             maxWidth: 520,
@@ -301,7 +235,7 @@ export default function UpgradePage() {
   if (phase === "pending") {
     return (
       <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
-        {Navbar}
+        {topNav}
         <div style={{ maxWidth: 520, margin: "80px auto", padding: "0 24px", textAlign: "center" }}>
           <div className="hourglass-flip" style={{ fontSize: "calc(56px * var(--font-scale))", marginBottom: 16 }}>⏳</div>
           <h1
@@ -347,7 +281,7 @@ export default function UpgradePage() {
   if (phase === "submitted") {
     return (
       <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
-        {Navbar}
+        {topNav}
         <div style={{ maxWidth: 520, margin: "80px auto", padding: "0 24px", textAlign: "center" }}>
           <div style={{ fontSize: "calc(56px * var(--font-scale))", marginBottom: 16 }}>✅</div>
           <h1
@@ -399,7 +333,7 @@ export default function UpgradePage() {
         fontFamily: "var(--font-body, sans-serif)",
       }}
     >
-      {Navbar}
+      {topNav}
 
       <div style={{ maxWidth: 760, margin: "0 auto", padding: "40px 24px 64px" }}>
 
@@ -417,9 +351,8 @@ export default function UpgradePage() {
             Upgrade to Pro
           </h1>
           <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>
-            One-time payment of{" "}
             <span style={{ fontWeight: 700, color: "var(--primary)" }}>
-              ₱{Pricing.pro.amountPhp}
+              ₱{Pricing.pro.amountPhp}/month
             </span>{" "}
             via GCash. Verified by our team within{" "}
             {AdminConfig.slaHours} hours.
@@ -517,7 +450,7 @@ export default function UpgradePage() {
                   fontWeight: 600,
                 }}
               >
-                ₱{Pricing.pro.amountPhp}
+                ₱{Pricing.pro.amountPhp}/mo
               </span>
             </div>
             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: 8 }}>

@@ -12,6 +12,7 @@ import {
   type QuizQuestion,
   type SubmitQuizAnswer,
 } from "@/lib/contracts";
+import { Navbar } from "@/components/nav/Navbar";
 import { PageLoading } from "@/components/ui/PageLoading";
 import { readPausedQuiz, savePausedQuiz, clearPausedQuiz } from "@/lib/quiz/pauseState";
 import { readDefaultQuizType } from "@/lib/quiz/defaultQuizType";
@@ -454,49 +455,24 @@ export default function QuizPage() {
       }}
     >
       {/* ── NAVBAR ── */}
-      <nav
-        style={{
-          background: "var(--nav-bg)",
-          borderBottom: "1px solid var(--nav-border)",
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-        }}
-      >
-        <div
-          className="nav-row"
-          style={{
-            maxWidth: "100%",
-            margin: "0 auto",
-            padding: "0 24px",
-            minHeight: 64,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <a
-              href={Routes.deck(deckId)}
-              className="nav-link"
-              style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
-            >
-              <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
-            </a>
-          </div>
-
-          {phase === "quizzing" && (
-            <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>
-              {currentIdx + 1} / {total}
-            </span>
-          )}
-          {phase === "setup" && (
-            <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>
-              Topic: {deck?.title}
-            </span>
-          )}
-        </div>
-      </nav>
+      <Navbar
+        backHref={Routes.deck(deckId)}
+        showWordmark={false}
+        rightContent={
+          <>
+            {phase === "quizzing" && (
+              <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>
+                {currentIdx + 1} / {total}
+              </span>
+            )}
+            {phase === "setup" && (
+              <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>
+                Topic: {deck?.title}
+              </span>
+            )}
+          </>
+        }
+      />
 
       {/* ── CONTENT ── */}
       {/* Constant width regardless of phase/answer state — widening this

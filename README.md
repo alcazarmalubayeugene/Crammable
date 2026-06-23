@@ -5,15 +5,16 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 - [`WORK_SUMMARY_2026-06-10.md`](./WORK_SUMMARY_2026-06-10.md) — session log: audit fixes, the referral/quiz DB migration, and the env-config fix.
 - [`CODE_AUDIT.txt`](./CODE_AUDIT.txt) — code audit (correctness, redundancy, optimization).
 - [`SECURITY_AUDIT.txt`](./SECURITY_AUDIT.txt) — security audit (auth, RLS, CSRF, fraud, privacy).
-- [`docs/MISSING_FEATURES.md`](./docs/MISSING_FEATURES.md) — feature gap analysis (most items now ✅ as of 2026-06-11; see the status banner).
-- [`docs/BASIC_UI.md`](./docs/BASIC_UI.md) — UI inventory & gap list (the one open product gap: delete-deck UI).
+- [`FRONTEND.md`](./FRONTEND.md) — frontend pages/routes status + per-session Version History (latest: **v.17**).
+- [`docs/MISSING_FEATURES.md`](./docs/MISSING_FEATURES.md) — feature gap analysis (all items ✅ as of v.17; see the status banner).
+- [`docs/BASIC_UI.md`](./docs/BASIC_UI.md) — UI inventory & gap list (chrome gaps closed in v.17; admin link intentionally URL-only).
 - [`CLAUDE.md`](./CLAUDE.md) / [`AGENTS.md`](./AGENTS.md) — backend rules and conventions.
 - [`docs/PROJECT-DOCUMENTATION.md`](./docs/PROJECT-DOCUMENTATION.md) · [`docs/TODO.md`](./docs/TODO.md)
 
 ## Testing
 
 ```bash
-npm test          # 75 unit tests (Vitest, Supabase mocked, offline)
+npm test          # 72 unit tests (Vitest, Supabase mocked, offline)
 npm run test:int  # 10 integration tests against the live Supabase project
 npm run typecheck # tsc --noEmit
 npm run lint      # eslint

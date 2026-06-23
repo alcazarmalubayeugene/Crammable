@@ -10,7 +10,6 @@ import { PageLoading } from "@/components/ui/PageLoading";
 import {
   ApiErrorCode,
   ApiPaths,
-  App,
   Routes,
   SubscriptionTier,
   TableNames,
@@ -19,6 +18,7 @@ import {
   type ApiResponse,
   type ClaimProfileCompleteResult,
 } from "@/lib/contracts";
+import { Navbar } from "@/components/nav/Navbar";
 
 interface MinProfile {
   email: string;
@@ -72,6 +72,16 @@ function SettingsContent() {
     setFontPair(draftFontPair);
     setStyleSaved(true);
     setTimeout(() => setStyleSaved(false), 3000);
+
+    // Sync to the profile so prefs follow the user across devices. Fire-and-forget:
+    // localStorage (set above) is the local source of truth, so a failed sync
+    // never blocks the save or shows an error — it just won't propagate to other
+    // devices until the next successful save.
+    fetch(ApiPaths.updatePreferences, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: draftTheme, fontSize: draftFontSize, fontPair: draftFontPair }),
+    }).catch(() => {});
   }
 
   const [profile, setProfile] = useState<MinProfile | null>(null);
@@ -276,13 +286,7 @@ function SettingsContent() {
     return (
       <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
         {/* ── NAVBAR ── */}
-        <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)" }}>
-          <div className="nav-row" style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", minHeight: 64, display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
-              {App.name}
-            </span>
-          </div>
-        </nav>
+        <Navbar />
 
         {/* ── RESET CARD ── */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 64px)", padding: "40px 24px" }}>
@@ -381,50 +385,7 @@ function SettingsContent() {
       }}
     >
       {/* ── NAVBAR ── */}
-      <nav
-        style={{
-          background: "var(--nav-bg)",
-          borderBottom: "1px solid var(--nav-border)",
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-        }}
-      >
-        <div
-          className="nav-row"
-          style={{
-            maxWidth: "100%",
-            margin: "0 auto",
-            padding: "0 24px",
-            minHeight: 64,
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <a
-              href={Routes.dashboard}
-              className="nav-link"
-              style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
-            >
-              <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
-            </a>
-            <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
-            <span
-              style={{
-                fontFamily: "var(--font-display, serif)",
-                fontWeight: 700,
-                fontSize: "calc(18px * var(--font-scale))",
-                color: "var(--nav-text)",
-              }}
-            >
-              {App.name}
-            </span>
-          </div>
-          <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--primary)", fontWeight: 700 }}>Settings</span>
-        </div>
-      </nav>
+      <Navbar backHref={Routes.dashboard} sectionLabel="Settings" />
 
       {/* ── CONTENT ── */}
       <div style={{ maxWidth: 580, margin: "0 auto", padding: "40px 24px 64px" }}>

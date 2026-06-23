@@ -4,9 +4,9 @@ import { useEffect, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
 import { PageLoading } from "@/components/ui/PageLoading";
+import { Navbar } from "@/components/nav/Navbar";
 import {
   AdminConfig,
-  App,
   ApiPaths,
   PaymentStatus,
   Pricing,
@@ -337,21 +337,14 @@ export default function AdminPage() {
     <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
 
       {/* ── NAVBAR ── */}
-      <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)", position: "sticky", top: 0, zIndex: 50 }}>
-        <div className="nav-row" style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", minHeight: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
-              {App.name}
-            </span>
-            <span style={{ fontSize: "calc(12px * var(--font-scale))", background: "var(--primary)", color: "var(--nav-text)", borderRadius: 20, padding: "2px 10px", fontWeight: 700, marginLeft: 4 }}>
-              Admin
-            </span>
-          </div>
+      <Navbar
+        adminBadge
+        rightContent={
           <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>
             {profile?.full_name ?? "Admin"}
           </span>
-        </div>
-      </nav>
+        }
+      />
 
       {/* ── CONTENT ── */}
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 64px" }}>

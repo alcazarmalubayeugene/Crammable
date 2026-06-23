@@ -5,8 +5,8 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { ApiPaths, App, Routes, SubscriptionTier, TableNames } from "@/lib/contracts";
-import { AvatarPicker } from "@/components/nav/AvatarPicker";
+import { ApiPaths, Routes, SubscriptionTier, TableNames } from "@/lib/contracts";
+import { Navbar } from "@/components/nav/Navbar";
 import { PageLoading } from "@/components/ui/PageLoading";
 import { readPausedQuiz } from "@/lib/quiz/pauseState";
 
@@ -131,41 +131,15 @@ export default function DashboardPage() {
     <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
 
       {/* ── NAVBAR ── */}
-      <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)", position: "sticky", top: 0, zIndex: 50 }}>
-        <div className="nav-row" style={{ maxWidth: "100%", margin: "0 auto", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span className="nav-wordmark" style={{ fontFamily: "var(--font-display, serif)", fontWeight: 600, fontSize: "calc(16px * var(--font-scale))", color: "var(--nav-text)" }}>
-              {App.name}
-            </span>
-          </div>
-          <div className="nav-cluster" style={{ display: "flex", alignItems: "center", gap: 12, fontSize: "calc(13.6px * var(--font-scale))" }}>
-            {/* Capycoin balance — status display only (the doc's "remaining"); the
-                "earn-more link" is the Rewards item beside it + the Capycoins card. */}
-            <div
-              title="Capycoins remaining"
-              className="nav-coin-pill"
-              style={{ display: "flex", alignItems: "center", gap: 5, background: "var(--nav-bg)", border: "1.5px solid rgba(196,122,46,0.3)", borderRadius: 999, padding: "4px 12px" }}
-            >
-              <Image src="/capy/capycoin.png" alt="" width={18} height={18} style={{ borderRadius: "50%" }} />
-              <span style={{ fontWeight: 600, color: "var(--primary-soft)" }}>
-                {profile?.token_balance ?? 0}<span className="nav-collapse"> Capycoins</span>
-              </span>
-            </div>
-            {isPro && (
-              <span style={{ background: "var(--primary)", color: "var(--on-primary)", borderRadius: 999, padding: "4px 10px", fontSize: "calc(12.5px * var(--font-scale))", fontWeight: 600 }}>
-                Pro ✦
-              </span>
-            )}
-            <Link href={Routes.rewards} className="nav-link" style={{ color: "var(--text-faint)", textDecoration: "none" }}>
-              Rewards
-            </Link>
-            <Link href={Routes.help} className="nav-link" style={{ color: "var(--text-faint)", textDecoration: "none" }}>
-              Help
-            </Link>
-            <AvatarPicker />
-          </div>
-        </div>
-      </nav>
+      <Navbar
+        coinBalance={profile?.token_balance ?? 0}
+        isPro={isPro}
+        links={[
+          { label: "Rewards", href: Routes.rewards },
+          { label: "Help", href: Routes.help },
+        ]}
+        showAvatarMenu
+      />
 
       {/* Floating to-do checklist — fixed to the right edge of the viewport,
           listing exactly which profile fields are still missing. */}

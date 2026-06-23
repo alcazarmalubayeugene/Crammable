@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ApiPaths, Routes } from "@/lib/contracts";
+import { Navbar } from "@/components/nav/Navbar";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 
 export default function ForgotPasswordPage() {
@@ -78,18 +79,14 @@ export default function ForgotPasswordPage() {
     <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
 
       {/* ── NAVBAR ── */}
-      <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)" }}>
-        <div className="nav-row" style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", minHeight: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <Link href={Routes.home} style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
-            <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
-              Crammable
-            </span>
-          </Link>
+      <Navbar
+        wordmarkHref={Routes.home}
+        rightContent={
           <Link href={Routes.login} style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--primary)", fontWeight: 600, textDecoration: "none" }}>
             ← Back to login
           </Link>
-        </div>
-      </nav>
+        }
+      />
 
       {/* ── CARD ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: "calc(100vh - 64px)", padding: "40px 24px" }}>
