@@ -1,6 +1,19 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { Routes } from "@/lib/contracts";
+
+// Dark mode is a localStorage device preference with nowhere to "log out" of —
+// without this, one person enabling it in Settings leaks it onto the public
+// marketing/auth pages for the next, possibly-unrelated visitor on that
+// browser. These are exactly the routes contracts.ts tags "// Public".
+const PUBLIC_ROUTES: ReadonlySet<string> = new Set([
+  Routes.home,
+  Routes.login,
+  Routes.signup,
+  Routes.forgotPassword,
+]);
 
 export type ThemeMode = "light" | "dark";
 export type FontSizeKey = "small" | "default" | "large" | "xlarge";
@@ -63,9 +76,11 @@ function resolveFontVar(token: string): string {
 }
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setThemeState] = useState<ThemeMode>("light");
+  const pathname = usePathname();
+  const isPublicRoute = PUBLIC_ROUTES.has(pathname);
+  const [theme, setThemeState] = useState<ThemeMode>("dark");
   const [fontSize, setFontSizeState] = useState<FontSizeKey>("default");
-  const [fontPair, setFontPairState] = useState<FontPairKey>("lora");
+  const [fontPair, setFontPairState] = useState<FontPairKey>("baskerville");
 
   // Pick up whatever the anti-flash inline script (in layout.tsx) already
   // applied to <html>, so React state matches the DOM on first render.
@@ -79,8 +94,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-  }, [theme]);
+    document.documentElement.setAttribute("data-theme", isPublicRoute ? "light" : theme);
+  }, [theme, isPublicRoute]);
 
   useEffect(() => {
     document.documentElement.style.setProperty("--font-scale", String(FONT_SCALES[fontSize]));

@@ -10,6 +10,7 @@ import {
   type Deck,
   type Flashcard,
 } from "@/lib/contracts";
+import { PageLoading } from "@/components/ui/PageLoading";
 
 /**
  * Read-only public deck viewer (B5) — no auth required. Fetches via
@@ -72,21 +73,7 @@ export default function PublicDeckPage() {
   const total = cards.length;
 
   if (loading) {
-    return (
-      <main
-        style={{
-          minHeight: "100vh",
-          background: "var(--bg)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>
-          Loading…
-        </p>
-      </main>
-    );
+    return <PageLoading />;
   }
 
   if (error || !deck) {
@@ -103,7 +90,6 @@ export default function PublicDeckPage() {
           fontFamily: "var(--font-body, sans-serif)",
         }}
       >
-        <img src="/capy/capy-idle.svg" alt="" width={59} height={48} style={{ height: "calc(48px * var(--font-scale))", width: "auto" }} />
         <p style={{ color: "var(--text-muted)", fontSize: "calc(15px * var(--font-scale))" }}>{error || "Deck not found."}</p>
         <a
           href={Routes.home}
@@ -134,11 +120,12 @@ export default function PublicDeckPage() {
         }}
       >
         <div
+          className="nav-row"
           style={{
             maxWidth: "100%",
             margin: "0 auto",
             padding: "0 24px",
-            height: 64,
+            minHeight: 64,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -149,7 +136,6 @@ export default function PublicDeckPage() {
             className="nav-link"
             style={{ display: "flex", alignItems: "center", gap: 8, textDecoration: "none" }}
           >
-            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
             <span
               style={{
                 fontFamily: "var(--font-display, serif)",

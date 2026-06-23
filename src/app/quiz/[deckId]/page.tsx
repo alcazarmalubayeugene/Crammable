@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import {
-  App,
   ApiPaths,
   QuizType,
   Routes,
@@ -14,12 +12,16 @@ import {
   type QuizQuestion,
   type SubmitQuizAnswer,
 } from "@/lib/contracts";
+import { PageLoading } from "@/components/ui/PageLoading";
+import { readPausedQuiz, savePausedQuiz, clearPausedQuiz } from "@/lib/quiz/pauseState";
+import { readDefaultQuizType } from "@/lib/quiz/defaultQuizType";
 
 // ── local types ───────────────────────────────────────────────────────────────
 
 // Stored in sessionStorage so result/page.tsx can display the review.
 export interface QuizResultData {
   deckId:         string;
+  sessionId:      string;
   deckTitle:      string;
   scorePercent:   number;
   correctCount:   number;
@@ -36,6 +38,36 @@ export interface QuizResultData {
 }
 
 export const QUIZ_RESULT_KEY = "crammable_quiz_result";
+
+// Live /api/quiz/explain calls (old cards without a baked-in explanation) take
+// 10-30s — a real DeepSeek round trip. Caching per flashcardId in sessionStorage
+// means a card only ever pays that cost once per tab session, even if the
+// student re-quizzes the same deck or hits "study weak cards" again.
+const EXPLANATION_CACHE_KEY = "crammable_explanation_cache";
+
+function readExplanationCache(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    return JSON.parse(sessionStorage.getItem(EXPLANATION_CACHE_KEY) ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+function getCachedExplanation(flashcardId: string): string | null {
+  return readExplanationCache()[flashcardId] ?? null;
+}
+
+function setCachedExplanation(flashcardId: string, explanation: string) {
+  if (typeof window === "undefined") return;
+  const cache = readExplanationCache();
+  cache[flashcardId] = explanation;
+  try {
+    sessionStorage.setItem(EXPLANATION_CACHE_KEY, JSON.stringify(cache));
+  } catch {
+    // sessionStorage full/unavailable — cache is a nice-to-have, never block on it
+  }
+}
 
 // Tracks a single answered question locally until the session is submitted.
 interface LocalAnswer {
@@ -69,7 +101,11 @@ export default function QuizPage() {
   const [loadError, setLoadError] = useState("");
 
   // ── setup ──
-  const [selectedType, setSelectedType] = useState<QuizType>(QuizType.MULTIPLE_CHOICE);
+  // Pre-selects whatever the deck page's quiz-type picker last saved for this
+  // deck (a default, not a lock — still changeable below before starting).
+  const [selectedType, setSelectedType] = useState<QuizType>(
+    () => readDefaultQuizType(deckId) ?? QuizType.MULTIPLE_CHOICE
+  );
 
   // ── in-quiz ──
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -103,7 +139,25 @@ export default function QuizPage() {
           return;
         }
         setDeck(data.deck);
-        setPhase("setup");
+
+        // Resume a paused session for this deck if one was left mid-quiz.
+        const paused = readPausedQuiz(deckId);
+        if (paused) {
+          setSessionId(paused.sessionId);
+          setQuestions(paused.questions);
+          setCurrentIdx(paused.currentIdx);
+          setAnswers(paused.answers);
+          setSelectedType(paused.quizType);
+          setSelectedOption(null);
+          setTypedAnswer("");
+          setHasAnswered(false);
+          setIsCorrect(false);
+          setExplanation(null);
+          setExplanationLoading(false);
+          setPhase("quizzing");
+        } else {
+          setPhase("setup");
+        }
       } catch {
         setLoadError("Failed to load deck. Check your connection and try again.");
         setPhase("error");
@@ -158,7 +212,7 @@ export default function QuizPage() {
 
   // Live fallback for cards that predate the baked-in explanation. Best-effort:
   // a free bonus, so errors are swallowed and never block the student.
-  async function fetchExplanation(questionText: string, correctAnswer: string) {
+  async function fetchExplanation(flashcardId: string, questionText: string, correctAnswer: string) {
     setExplanationLoading(true);
     try {
       const res = await fetch(ApiPaths.explainAnswer, {
@@ -167,7 +221,10 @@ export default function QuizPage() {
         body: JSON.stringify({ questionText, correctAnswer }),
       });
       const data = (await res.json()) as { success: boolean } & Partial<ExplainAnswerResult>;
-      if (data.success && data.explanation) setExplanation(data.explanation);
+      if (data.success && data.explanation) {
+        setExplanation(data.explanation);
+        setCachedExplanation(flashcardId, data.explanation);
+      }
     } catch {
       // silent — never something the student waits on or sees an error for
     } finally {
@@ -206,33 +263,25 @@ export default function QuizPage() {
     setHasAnswered(true);
 
     if (!correct) {
+      const cached = getCachedExplanation(q.flashcardId);
       if (q.correctExplanation) {
-        setExplanation(q.correctExplanation);                 // instant, baked-in
+        setExplanation(q.correctExplanation);                  // instant, baked-in
+      } else if (cached) {
+        setExplanation(cached);                                // instant, seen this card before this session
       } else {
-        void fetchExplanation(q.questionText, q.correctAnswer); // old card, live fallback
+        void fetchExplanation(q.flashcardId, q.questionText, q.correctAnswer); // old card, live fallback
       }
     }
   }
 
-  async function nextQuestion(currentAnswers: LocalAnswer[]) {
-    const isLast = currentIdx === questions.length - 1;
-
-    if (!isLast) {
-      setCurrentIdx((i) => i + 1);
-      setSelectedOption(null);
-      setTypedAnswer("");
-      setHasAnswered(false);
-      setIsCorrect(false);
-      setExplanation(null);
-      setExplanationLoading(false);
-      return;
-    }
-
-    // Last question — submit to the API.
+  // Shared by the natural last-question submit and "End quiz" — posts whatever
+  // final answer set it's given, clears any saved pause state for this deck
+  // (the session is finished, nothing left to resume), and routes to results.
+  async function submitFinalResult(finalAnswers: LocalAnswer[]) {
     if (!sessionId) return;
     setPhase("submitting");
 
-    const submitPayload: SubmitQuizAnswer[] = currentAnswers.map((a) => ({
+    const submitPayload: SubmitQuizAnswer[] = finalAnswers.map((a) => ({
       flashcardId: a.flashcardId,
       userAnswer:  a.userAnswer,
       isCorrect:   a.isCorrect,
@@ -263,14 +312,15 @@ export default function QuizPage() {
 
       const result: QuizResultData = {
         deckId,
+        sessionId,
         deckTitle:      deck?.title ?? "",
         scorePercent:   data.scorePercent ?? 0,
         correctCount:   data.correctCount ?? 0,
-        totalQuestions: data.totalQuestions ?? currentAnswers.length,
+        totalQuestions: data.totalQuestions ?? finalAnswers.length,
         livingDeckRefreshTriggered: data.livingDeckRefreshTriggered ?? false,
         reinforcedCardCount: data.reinforcedCardCount,
         upsellMessage: data.upsellMessage,
-        answers:        currentAnswers.map((a) => ({
+        answers:        finalAnswers.map((a) => ({
           front:      a.front,
           back:       a.back,
           userAnswer: a.userAnswer,
@@ -278,12 +328,77 @@ export default function QuizPage() {
         })),
       };
 
+      clearPausedQuiz(deckId);
       sessionStorage.setItem(QUIZ_RESULT_KEY, JSON.stringify(result));
       router.push(Routes.quizResult(deckId));
     } catch {
       setLoadError("Failed to save quiz results. Check your connection and try again.");
       setPhase("error");
     }
+  }
+
+  async function nextQuestion(currentAnswers: LocalAnswer[]) {
+    const isLast = currentIdx === questions.length - 1;
+
+    if (!isLast) {
+      setCurrentIdx((i) => i + 1);
+      setSelectedOption(null);
+      setTypedAnswer("");
+      setHasAnswered(false);
+      setIsCorrect(false);
+      setExplanation(null);
+      setExplanationLoading(false);
+      return;
+    }
+
+    await submitFinalResult(currentAnswers);
+  }
+
+  // Leaving mid-quiz without giving up — saves enough to resume exactly where
+  // they left off the next time they open this deck's quiz. Resume index is
+  // derived from answers.length (questions are answered strictly in order),
+  // never the raw currentIdx — pausing right after answering but before
+  // clicking "Next" would otherwise resume back onto the same question and
+  // let it be answered a second time, pushing a duplicate entry for that card.
+  function pauseQuiz() {
+    if (!sessionId) return;
+    if (answers.length >= questions.length) {
+      // Nothing left to pause — every question is already answered.
+      void submitFinalResult(answers);
+      return;
+    }
+    savePausedQuiz(deckId, {
+      sessionId,
+      questions,
+      currentIdx: answers.length,
+      answers,
+      quizType: selectedType,
+    });
+    router.push(Routes.dashboard);
+  }
+
+  // Ending early is a forfeit, not a pause: every question that hasn't been
+  // answered yet (including the one on screen, if not yet checked) submits as
+  // a wrong/empty answer so the score reflects the full quiz length.
+  function endQuizNow() {
+    if (
+      !window.confirm(
+        "End the quiz now? Any questions you haven't answered yet will be marked wrong.",
+      )
+    ) {
+      return;
+    }
+    const answeredIds = new Set(answers.map((a) => a.flashcardId));
+    const skipped: LocalAnswer[] = questions
+      .filter((qq) => !answeredIds.has(qq.flashcardId))
+      .map((qq) => ({
+        flashcardId: qq.flashcardId,
+        front:       qq.questionText,
+        back:        qq.correctAnswer,
+        userAnswer:  "",
+        isCorrect:   false,
+      }));
+    void submitFinalResult([...answers, ...skipped]);
   }
 
   // ── derived ───────────────────────────────────────────────────────────────
@@ -300,21 +415,7 @@ export default function QuizPage() {
       phase === "starting"   ? "Setting up quiz…" :
       phase === "submitting" ? "Saving your results…" :
       "Loading…";
-    return (
-      <main
-        style={{
-          minHeight: "100vh",
-          background: "var(--bg)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>
-          {msg}
-        </p>
-      </main>
-    );
+    return <PageLoading message={msg} />;
   }
 
   if (phase === "error") {
@@ -363,11 +464,12 @@ export default function QuizPage() {
         }}
       >
         <div
+          className="nav-row"
           style={{
             maxWidth: "100%",
             margin: "0 auto",
             padding: "0 24px",
-            height: 64,
+            minHeight: 64,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -381,18 +483,6 @@ export default function QuizPage() {
             >
               <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
             </a>
-            <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
-            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
-            <span
-              style={{
-                fontFamily: "var(--font-display, serif)",
-                fontWeight: 700,
-                fontSize: "calc(18px * var(--font-scale))",
-                color: "var(--nav-text)",
-              }}
-            >
-              {App.name}
-            </span>
           </div>
 
           {phase === "quizzing" && (
@@ -402,14 +492,19 @@ export default function QuizPage() {
           )}
           {phase === "setup" && (
             <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>
-              {deck?.title}
+              Topic: {deck?.title}
             </span>
           )}
         </div>
       </nav>
 
       {/* ── CONTENT ── */}
-      <div style={{ maxWidth: 680, margin: "0 auto", padding: "40px 24px" }}>
+      {/* Constant width regardless of phase/answer state — widening this
+          conditionally (tried earlier) shifts where the centered box's left
+          edge lands, so the card visibly slides sideways even if its own
+          width doesn't change. The sidebar is positioned outside this box
+          entirely (absolute, see below) so it never affects this at all. */}
+      <div style={{ maxWidth: phase === "quizzing" ? 940 : 680, margin: "0 auto", padding: "40px 24px" }}>
 
         {/* ── SETUP PHASE ── */}
         {phase === "setup" && (
@@ -581,7 +676,78 @@ export default function QuizPage() {
 
         {/* ── QUIZZING PHASE ── */}
         {phase === "quizzing" && q && (
-          <>
+          // position: relative so the sidebar below can anchor to this box's
+          // right edge via position: absolute — fully outside the normal flex
+          // flow, so it can never affect this column's own width or position.
+          <div style={{ position: "relative" }}>
+          <div style={{ width: "100%" }}>
+            {/* Quiz header — title + Pause/End, matching the design concept's
+                quiz screen (it shows the deck title and an End-quiz action). */}
+            <div
+              style={{
+                display:        "flex",
+                justifyContent: "space-between",
+                alignItems:     "flex-start",
+                gap:            12,
+                marginBottom:   16,
+              }}
+            >
+              <div>
+                <h1
+                  style={{
+                    fontFamily: "var(--font-display, serif)",
+                    fontSize:   "calc(20px * var(--font-scale))",
+                    fontWeight: 700,
+                    color:      "var(--text)",
+                    margin:     0,
+                  }}
+                >
+                  {deck?.title} — Quiz
+                </h1>
+                <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)", margin: "4px 0 0" }}>
+                  Question {currentIdx + 1} of {total}
+                </p>
+              </div>
+              <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={pauseQuiz}
+                  className="btn-outline"
+                  style={{
+                    background:   "transparent",
+                    border:       "1.5px solid var(--border)",
+                    color:        "var(--text-muted)",
+                    borderRadius: 999,
+                    padding:      "8px 16px",
+                    fontSize:     "calc(13px * var(--font-scale))",
+                    fontWeight:   600,
+                    cursor:       "pointer",
+                    fontFamily:   "var(--font-body, sans-serif)",
+                  }}
+                >
+                  Pause
+                </button>
+                <button
+                  type="button"
+                  onClick={endQuizNow}
+                  className="btn-outline"
+                  style={{
+                    background:   "transparent",
+                    border:       "1.5px solid var(--border)",
+                    color:        "var(--error-dark)",
+                    borderRadius: 999,
+                    padding:      "8px 16px",
+                    fontSize:     "calc(13px * var(--font-scale))",
+                    fontWeight:   600,
+                    cursor:       "pointer",
+                    fontFamily:   "var(--font-body, sans-serif)",
+                  }}
+                >
+                  End quiz
+                </button>
+              </div>
+            </div>
+
             {/* Progress bar */}
             <div
               style={{
@@ -603,9 +769,15 @@ export default function QuizPage() {
               />
             </div>
 
+            {/* Keyed on currentIdx so the question card + its options/input
+                fade in together each time a new question loads, instead of
+                jump-cutting in place. Re-answering the SAME question (hasAnswered
+                flipping) does not remount this — only advancing does. */}
+            <div key={currentIdx} className="anim-fade-up">
             {/* Question card */}
             <div
               style={{
+                position: "relative",
                 background: "var(--bg-card)",
                 border: "1.5px solid var(--border)",
                 borderRadius: 20,
@@ -613,6 +785,33 @@ export default function QuizPage() {
                 marginBottom: 20,
               }}
             >
+              {/* Correct-answer stamp — overlaid on the card's corner instead
+                  of a full-width banner below the options, so answering
+                  correctly doesn't push the layout down / add a row. */}
+              {hasAnswered && isCorrect && (
+                <div
+                  className="anim-pop"
+                  style={{
+                    position: "absolute",
+                    top: -14,
+                    right: -14,
+                    background: "var(--success-bg)",
+                    border: "2px solid var(--success)",
+                    borderRadius: 10,
+                    padding: "6px 14px",
+                    transform: "rotate(-8deg)",
+                    fontWeight: 700,
+                    fontSize: "calc(13px * var(--font-scale))",
+                    color: "var(--success-dark)",
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                    boxShadow: "0 4px 10px rgba(0,0,0,0.2)",
+                    pointerEvents: "none",
+                  }}
+                >
+                  ✓ Correct!
+                </div>
+              )}
               <div
                 style={{
                   fontSize: "calc(11px * var(--font-scale))",
@@ -666,6 +865,7 @@ export default function QuizPage() {
                       type="button"
                       disabled={hasAnswered}
                       onClick={() => !hasAnswered && setSelectedOption(option)}
+                      className={hasAnswered && option === q.correctAnswer ? "anim-pop" : undefined}
                       style={{
                         display:    "flex",
                         alignItems: "center",
@@ -730,6 +930,7 @@ export default function QuizPage() {
 
                 {hasAnswered && (
                   <div
+                    className={isCorrect ? "anim-pop" : undefined}
                     style={{
                       marginTop:    12,
                       background:   isCorrect ? "var(--success-bg)" : "var(--bg-card)",
@@ -765,55 +966,7 @@ export default function QuizPage() {
                 )}
               </div>
             )}
-
-            {/* Feedback banner — the right/wrong call is already made by the option
-                highlighting above; this banner stays neutral so it reads as Capy's
-                tip, not a second red alarm stacked on top of the wrong-answer box. */}
-            {hasAnswered && (
-              <div
-                style={{
-                  background:   isCorrect ? "var(--success-bg)" : "var(--bg-subtle)",
-                  border:       `1.5px solid ${isCorrect ? "var(--success)" : "var(--border)"}`,
-                  borderRadius: 12,
-                  padding:      "14px 18px",
-                  marginBottom: 20,
-                  display:      "flex",
-                  alignItems:   "flex-start",
-                  gap:          12,
-                }}
-              >
-                {isCorrect ? (
-                  <span style={{ fontSize: "calc(18px * var(--font-scale))" }}>✅</span>
-                ) : (
-                  <Image src="/capy/teaching-capy.png" alt="" width={48} height={48} style={{ borderRadius: "50%", flexShrink: 0, objectFit: "cover" }} />
-                )}
-                <div>
-                  <p
-                    style={{
-                      fontSize: "calc(14px * var(--font-scale))",
-                      fontWeight: 600,
-                      color:      isCorrect ? "var(--success-dark)" : "var(--text-muted)",
-                      margin:     0,
-                    }}
-                  >
-                    {isCorrect ? "Correct!" : "Not quite — Capy's got you. Here's the right answer:"}
-                  </p>
-                  {!isCorrect && (explanation || explanationLoading) && (
-                    <p
-                      style={{
-                        fontSize:  "calc(13px * var(--font-scale))",
-                        color:     "var(--text-muted)",
-                        lineHeight: 1.5,
-                        margin:    "6px 0 0",
-                        fontStyle: explanationLoading && !explanation ? "italic" : "normal",
-                      }}
-                    >
-                      {explanation ?? "Capy is thinking…"}
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
+            </div>
 
             {/* Action buttons */}
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
@@ -871,7 +1024,70 @@ export default function QuizPage() {
                 </button>
               )}
             </div>
-          </>
+          </div>
+
+          {/* Sidebar — wrong-answer feedback. A real CSS speech bubble (tail
+              via the .speech-bubble class) pointing down at teaching-capy.png,
+              not a baked-in speech-bubble graphic, so the text stays normal HTML. */}
+          {hasAnswered && !isCorrect && (
+            <div
+              className="anim-fade-up"
+              style={{
+                position: "absolute",
+                left: "100%",
+                top: 0,
+                marginLeft: 24,
+                width: 220,
+                display: "flex",
+                flexDirection: "column",
+              }}
+            >
+              <div className="speech-bubble" style={{ marginLeft: 12, marginBottom: 22 }}>
+                <p style={{ margin: 0, fontSize: "calc(13.5px * var(--font-scale))", fontWeight: 600, color: "var(--text)", lineHeight: 1.5 }}>
+                  Not quite — Capy&apos;s got you.
+                </p>
+                {(explanation || explanationLoading) && (
+                  <p
+                    style={{
+                      margin: "6px 0 0",
+                      fontSize: "calc(13px * var(--font-scale))",
+                      color: "var(--text-muted)",
+                      lineHeight: 1.5,
+                      fontStyle: explanationLoading && !explanation ? "italic" : "normal",
+                    }}
+                  >
+                    {explanation ?? "Capy is thinking…"}
+                  </p>
+                )}
+              </div>
+              <div
+                style={{
+                  width: 96,
+                  height: 96,
+                  borderRadius: 14,
+                  border: "1.5px solid var(--border)",
+                  background: "var(--bg-card)",
+                  padding: 8,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {/* Plain <img>, not next/image — Next's optimizer serves this
+                    as lossy WebP to real browsers and silently flattens the
+                    alpha channel onto white. Same root cause as the quiz
+                    result page's congrats-capy fix. */}
+                <img
+                  src="/capy/teaching-capy.png"
+                  alt=""
+                  width={80}
+                  height={80}
+                  style={{ width: "100%", height: "100%", objectFit: "contain" }}
+                />
+              </div>
+            </div>
+          )}
+          </div>
         )}
       </div>
     </main>

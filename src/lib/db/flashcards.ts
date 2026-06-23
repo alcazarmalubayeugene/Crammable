@@ -296,10 +296,23 @@ export async function getWeakCardsForDeck(deckId: string): Promise<Flashcard[]> 
   return (data as Flashcard[]) ?? [];
 }
 
+/** Single card by id, RLS-scoped — null if missing or owned by someone else. */
+export async function getFlashcardById(cardId: string): Promise<Flashcard | null> {
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase
+    .from(TableNames.flashcards)
+    .select("*")
+    .eq("id", cardId)
+    .maybeSingle();
+  if (error) throw toDbError(error, "Failed to load flashcard.");
+  return (data as Flashcard | null) ?? null;
+}
+
 /**
- * Record the outcome of reviewing a card in a quiz: increment the seen/correct
- * counters, stamp last_reviewed_at, and store the recomputed difficulty_score
- * (0–1; the quiz scoring logic computes the new value).
+ * Record the outcome of reviewing a card in study mode ("Got it" / "Review
+ * again" — self-reported by the student, not graded against an answer):
+ * increment the seen/correct counters, stamp last_reviewed_at, and store the
+ * recomputed difficulty_score (0–1; the caller computes the new value).
  *
  * Delegates to the apply_card_review() function (schema §4.12) so the counter
  * increment is a single atomic statement — a read-modify-write here would lose

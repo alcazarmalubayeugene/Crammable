@@ -29,9 +29,9 @@
 
 export const App = {
   name:         "Crammable",
-  version:      "v.09",                  // bump by 0.1 on every meaningful frontend update
+  version:      "v.16",                  // bump by 0.1 on every meaningful frontend update
   tagline:      "Turn any document into a flashcard deck — in seconds.",
-  supportEmail: "support@crammable.ph",  // update once domain is live
+  supportEmail: "crammablesupport@gmail.com", // not created yet — co-devs to set up
   gcashName:    "Crammable",             // name displayed in GCash payment screen
   gcashNumber:  "09691816930",
 } as const;
@@ -166,11 +166,16 @@ export const ApiPaths = {
   deckExport:          (id: string) => `/api/decks/${id}/export`,
   deckFlashcards:      (id: string) => `/api/decks/${id}/flashcards`,
   flashcard:           (id: string) => `/api/flashcards/${id}`,
+  flashcardReview:     (id: string) => `/api/flashcards/${id}/review`,
   publicDeck:          (id: string) => `/api/public/decks/${id}`,
   startQuiz:           (id: string) => `/api/quiz/${id}`,
   submitQuizResult:    "/api/quiz/result",
   explainAnswer:       "/api/quiz/explain",
   quizHistory:         "/api/quiz/history",
+  // NOT YET IMPLEMENTED on the backend — see FRONTEND.md "Backend work needed:
+  // shareable quiz results" for the schema/RLS/route this pair requires.
+  quizResultShare:     (sessionId: string) => `/api/quiz/${sessionId}/share`,
+  publicResult:        (sessionId: string) => `/api/public/results/${sessionId}`,
   claimReferral:       "/api/referral/claim",
   submitPayment:       "/api/payment/submit",
   adminPayments:       "/api/admin/payments",
@@ -197,6 +202,7 @@ export const Routes = {
   signup:         "/signup",
   login:          "/login",
   forgotPassword: "/forgot-password",
+  help:           "/help",
 
   // Authenticated
   dashboard:  "/dashboard",
@@ -207,9 +213,11 @@ export const Routes = {
   upgrade:    "/upgrade",
   rewards:    "/rewards",
   settings:   "/settings",
+  avatar:     "/settings/avatar",
 
   // Public (no auth required)
-  publicDeck: (id: string) => `/public/decks/${id}`,
+  publicDeck:   (id: string) => `/public/decks/${id}`,
+  publicResult: (sessionId: string) => `/results/${sessionId}`,
 
   // Admin
   admin:      "/admin",
@@ -252,6 +260,10 @@ export const TierLimits = {
   /** Trigger the upsell prompt at this many credits remaining — NOT at 0 */
   upsellTriggerAt: 1,
 } as const;
+
+/** Selectable "cards to generate" options on the upload screen. Server clamps
+ *  any client-supplied value to one of these AND to the user's tier max. */
+export const CardCountOptions = [10, 20, 30] as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SECTION 6 — REFERRAL / CREDIT EARNING CAPS
@@ -320,6 +332,7 @@ export const RateLimits: Record<string, RateLimitRule> = {
   "/api/decks/[id]":            { windowMinutes: 60,   maxRequests: 60  }, // rename (PATCH)
   "/api/decks/[id]/flashcards": { windowMinutes: 60,   maxRequests: 60  },
   "/api/flashcards/[id]":       { windowMinutes: 60,   maxRequests: 120 },
+  "/api/flashcards/[id]/review": { windowMinutes: 60,  maxRequests: 200 }, // study-mode Got it/Review again, no AI call
   [ApiPaths.adminVerifyReview]: { windowMinutes: 60,   maxRequests: 120 },
   [ApiPaths.adminUsers]:        { windowMinutes: 60,   maxRequests: 200 },
   [ApiPaths.adminGrantCredits]: { windowMinutes: 60,   maxRequests: 60  },
@@ -449,6 +462,15 @@ export const UIMessages = {
 
   // Pro feature gating
   proFeatureLocked:    "This feature is available on Pro. Upgrade to unlock it.",
+
+  // Study-mode gating — difficulty_score is only meaningful once every card
+  // has been reviewed at least once (study mode or quiz), so "weak cards"
+  // has nothing real to sort by before that.
+  studyWeakCardsLocked: "Try every card at least once first — weak cards aren't meaningful until then.",
+
+  // Avatar styles gallery (/settings/avatar) — premade Capy styles are a
+  // concept idea only, no real per-style art exists yet.
+  avatarStylesUnavailable: "This is unavailable for now.",
 
   // Referral
   referralCredited:  (name: string, credits: number) => `+${credits} Capycoins — ${name} signed up with your link!`,
@@ -663,6 +685,7 @@ export interface GenerateRequest {
   title?:           string;           // optional — AI will infer a title if omitted
   generationMode?:  GenerationMode;
   pdfType:          PdfType;          // for analytics logging in the deck record
+  maxCards?:        number;           // optional — must be a CardCountOptions value; capped server-side at the user's tier max
 }
 
 export interface GeneratedCard {
@@ -728,6 +751,19 @@ export interface UpdateFlashcardResult {
 export interface DeleteFlashcardResult {
   flashcardId: string;
   cardCount:   number;
+}
+
+// ── POST /api/flashcards/[id]/review — study-mode "Got it" / "Review again" ──
+// Self-reported (no programmatic answer to grade against, unlike quiz
+// submission), so the request is just the student's own call on themselves.
+// The server still computes the new difficulty_score itself (same nudge
+// formula submit_quiz_result uses) rather than trusting a client-supplied value.
+export interface ReviewCardRequest {
+  wasCorrect: boolean;
+}
+
+export interface ReviewCardResult {
+  newDifficultyScore: number;
 }
 
 // ── POST /api/quiz/[id] ───────────────────────────────────────────────────────
@@ -864,6 +900,25 @@ export interface ClaimProfileCompleteResult extends ClaimRewardResult {
 export interface ShareDeckResult {
   isPublic:       boolean;
   creditsAwarded: number;
+}
+
+// ── POST /api/quiz/[sessionId]/share ──────────────────────────────────────────
+// NOT YET IMPLEMENTED on the backend (no quiz_sessions.is_public column, no
+// route) — see FRONTEND.md "Backend work needed: shareable quiz results".
+export interface ShareQuizResultResult {
+  isPublic: boolean;
+}
+
+// ── GET /api/public/results/[sessionId] ──────────────────────────────────────
+// NOT YET IMPLEMENTED on the backend. Deliberately narrow — mirrors
+// getPublicDeckWithCards()'s "never expose owner internals" rule: no user_id,
+// no per-question answers, just enough to render a public score showcase.
+export interface PublicQuizResult {
+  deckTitle:      string;
+  scorePercent:   number;
+  correctCount:   number;
+  totalQuestions: number;
+  completedAt:    string;
 }
 
 // ── POST /api/rewards/submit-review ───────────────────────────────────────────

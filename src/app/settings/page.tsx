@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
 import { useTheme, FONT_SIZE_LABELS, FONT_PAIRS, type ThemeMode, type FontSizeKey, type FontPairKey } from "@/lib/theme/ThemeProvider";
+import { PageLoading } from "@/components/ui/PageLoading";
 import {
   ApiErrorCode,
   ApiPaths,
@@ -276,8 +277,7 @@ function SettingsContent() {
       <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
         {/* ── NAVBAR ── */}
         <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)" }}>
-          <div style={{ maxWidth: 1024, margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", gap: 10 }}>
-            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
+          <div className="nav-row" style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", minHeight: 64, display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
               {App.name}
             </span>
@@ -289,7 +289,6 @@ function SettingsContent() {
           <div style={{ width: "100%", maxWidth: 420 }}>
 
             <div style={{ textAlign: "center", marginBottom: 32 }}>
-              <img src="/capy/capy-idle.svg" alt="" width={59} height={48} style={{ height: "calc(48px * var(--font-scale))", width: "auto", marginBottom: 12 }} />
               <h1 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(26px * var(--font-scale))", fontWeight: 700, color: "var(--text)", marginBottom: 6 }}>
                 Set a new password
               </h1>
@@ -368,21 +367,7 @@ function SettingsContent() {
   // ── loading ───────────────────────────────────────────────────────────────────
 
   if (loading) {
-    return (
-      <main
-        style={{
-          minHeight: "100vh",
-          background: "var(--bg)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>
-          Loading…
-        </p>
-      </main>
-    );
+    return <PageLoading />;
   }
 
   const isPro = profile?.subscription_tier === SubscriptionTier.PRO;
@@ -406,11 +391,12 @@ function SettingsContent() {
         }}
       >
         <div
+          className="nav-row"
           style={{
             maxWidth: "100%",
             margin: "0 auto",
             padding: "0 24px",
-            height: 64,
+            minHeight: 64,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -425,7 +411,6 @@ function SettingsContent() {
               <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
             </a>
             <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
-            <img src="/capy/capy-idle.svg" alt="" width={29} height={24} style={{ height: "calc(24px * var(--font-scale))", width: "auto" }} />
             <span
               style={{
                 fontFamily: "var(--font-display, serif)",
@@ -654,7 +639,7 @@ function SettingsContent() {
                     textTransform: "capitalize",
                   }}
                 >
-                  {mode === "light" ? "☀️ Light" : "🌙 Dark"}
+                  {mode === "light" ? "☀️ Light" : "🌙 Dark (default)"}
                 </button>
               ))}
             </div>
@@ -712,7 +697,7 @@ function SettingsContent() {
                     fontFamily: "var(--font-body, sans-serif)",
                   }}
                 >
-                  {FONT_PAIRS[key].label}
+                  {FONT_PAIRS[key].label}{key === "baskerville" ? " (default)" : ""}
                 </button>
               ))}
             </div>
@@ -763,6 +748,7 @@ function SettingsContent() {
             border: "1.5px solid var(--border)",
             borderRadius: 16,
             padding: "20px 22px",
+            marginBottom: 16,
           }}
         >
           <p
@@ -857,13 +843,7 @@ function SettingsContent() {
 // useSearchParams must be wrapped in a Suspense boundary (Next.js requirement).
 export default function SettingsPage() {
   return (
-    <Suspense
-      fallback={
-        <main style={{ minHeight: "100vh", background: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <p style={{ color: "var(--text-muted)", fontFamily: "var(--font-body, sans-serif)" }}>Loading…</p>
-        </main>
-      }
-    >
+    <Suspense fallback={<PageLoading />}>
       <SettingsContent />
     </Suspense>
   );

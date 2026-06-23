@@ -6,6 +6,7 @@ import {
   ApiErrorCode,
   ApiPaths,
   App,
+  CardCountOptions,
   GenerationMode,
   MAX_UPLOAD_SIZE_MB,
   OcrThresholds,
@@ -13,7 +14,9 @@ import {
   Routes,
   SubscriptionTier,
   TableNames,
+  TierLimits,
   UIMessages,
+  Validation,
   type ApiResponse,
   type GeneratedCard,
   type GenerateRequest,
@@ -55,7 +58,6 @@ export function PdfUploadFlow() {
   const [pageProgress, setPageProgress] = useState({ current: 0, total: 0 });
   const [pastedText, setPastedText]           = useState("");
   const [errorMessage, setErrorMessage]       = useState("");
-  const [statusLine, setStatusLine]           = useState("");
   const [layer1Payload, setLayer1Payload]     = useState<unknown>(null);
   const [resultView, setResultView]           = useState<ResultView | null>(null);
   // Populated when the upload returns path: "ocr" — used for selective page rendering.
@@ -73,6 +75,30 @@ export function PdfUploadFlow() {
   const [subscriptionTier, setSubscriptionTier] = useState<(typeof SubscriptionTier)[keyof typeof SubscriptionTier]>(SubscriptionTier.FREE);
   const [generationMode, setGenerationMode] = useState<GenerationMode>(GenerationMode.STANDARD);
   const isPro = subscriptionTier === SubscriptionTier.PRO;
+  // Current balance, read alongside consent/tier below — lets the generating
+  // screen show a real anticipated remaining count instead of a static line.
+  const [tokenBalance, setTokenBalance] = useState<number | null>(null);
+
+  // ── Deck settings (name + card count) ───────────────────────────────────────
+  const [deckName, setDeckName] = useState("");
+  const [cardCount, setCardCount] = useState<(typeof CardCountOptions)[number]>(10);
+  const tierMaxCards = TierLimits[subscriptionTier].maxCardsPerDeck;
+
+  // File is attached on selection but generation only starts when the user
+  // explicitly clicks "Generate flashcards" — lets deck settings be filled in first.
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
+  // Concept #4's "Generating" checklist (Finding key concepts… / Writing your
+  // flashcards) splits the single opaque /api/generate call into two
+  // perceived-progress stages — there's no real sub-progress signal from the
+  // backend (one DeepSeek round trip, no streaming), so this is a timer-based
+  // approximation purely for "no blank spinner" feel, not a measured metric.
+  const [genStage, setGenStage] = useState<1 | 2>(1);
+  useEffect(() => {
+    if (phase !== "generating") return;
+    const t = setTimeout(() => setGenStage(2), 2500);
+    return () => clearTimeout(t);
+  }, [phase]);
 
   useEffect(() => {
     async function checkConsent() {
@@ -81,12 +107,15 @@ export function PdfUploadFlow() {
       if (!user) { setConsentChecked(true); return; }
       const { data } = await supabase
         .from(TableNames.profiles)
-        .select("consent_deepseek, subscription_tier")
+        .select("consent_deepseek, subscription_tier, token_balance")
         .eq("id", user.id)
         .single();
       setHasConsented(data?.consent_deepseek === true);
       if (data?.subscription_tier) {
         setSubscriptionTier(data.subscription_tier as (typeof SubscriptionTier)[keyof typeof SubscriptionTier]);
+      }
+      if (typeof data?.token_balance === "number") {
+        setTokenBalance(data.token_balance);
       }
       setConsentChecked(true);
     }
@@ -111,12 +140,12 @@ export function PdfUploadFlow() {
 
   const resetToIdle = useCallback(() => {
     setPhase("idle");
+    setSelectedFile(null);
     setPdfFile(null);
     setOcrMessage("");
     setPageProgress({ current: 0, total: 0 });
     setPastedText("");
     setErrorMessage("");
-    setStatusLine("");
     setLayer1Payload(null);
     setResultView(null);
     setImagePageNumbers([]);
@@ -128,7 +157,6 @@ export function PdfUploadFlow() {
     (label: string, payload: unknown, extractedText?: string) => {
       setResultView({ label, debug: payload, extractedText });
       setPhase("result");
-      setStatusLine("");
     },
     [],
   );
@@ -140,12 +168,14 @@ export function PdfUploadFlow() {
       debug?: unknown,
     ) => {
       setPhase("generating");
-      setStatusLine("Sending to DeepSeek and generating flashcards…");
+      setGenStage(1);
       setErrorMessage("");
 
       const payload: GenerateRequest = {
         extractedText,
         pdfType,
+        title: deckName.trim() || undefined,
+        maxCards: cardCount,
         ...(generationMode === GenerationMode.DEEP_DIVE ? { generationMode } : {}),
       };
       const headers = await authHeaders({ "Content-Type": "application/json" });
@@ -184,14 +214,12 @@ export function PdfUploadFlow() {
           debug,
         });
         setPhase("result");
-        setStatusLine("");
         return;
       }
 
-      setStatusLine(UIMessages.creditDeducted(data.creditsRemaining));
       router.push(Routes.deck(data.deckId));
     },
-    [router, generationMode],
+    [router, generationMode, deckName, cardCount],
   );
 
   const uploadPdf = useCallback(
@@ -199,7 +227,6 @@ export function PdfUploadFlow() {
       setPhase("uploading");
       setErrorMessage("");
       setResultView(null);
-      setStatusLine("Uploading and analyzing PDF (Layer 1)…");
 
       const formData = new FormData();
       formData.append("file", file);
@@ -248,13 +275,22 @@ export function PdfUploadFlow() {
   );
 
   const onFileSelected = useCallback(
-    async (event: React.ChangeEvent<HTMLInputElement>) => {
+    (event: React.ChangeEvent<HTMLInputElement>) => {
       const file = event.target.files?.[0];
       if (!file) return;
-      await uploadPdf(file);
+      setSelectedFile(file);
     },
-    [uploadPdf],
+    [],
   );
+
+  const handleGenerateClick = useCallback(async () => {
+    if (!selectedFile) return;
+    await uploadPdf(selectedFile);
+  }, [selectedFile, uploadPdf]);
+
+  const handleCancel = useCallback(() => {
+    router.push(Routes.dashboard);
+  }, [router]);
 
   const runClientOcr = useCallback(async () => {
     if (!pdfFile) return;
@@ -272,14 +308,12 @@ export function PdfUploadFlow() {
         pdfFile,
         (current, total) => {
           setPageProgress({ current, total });
-          setStatusLine(UIMessages.ocrProgress(current, total));
         },
         pagesToOcr,
       );
 
       const ocrResult = await runOcrOnPages(rendered, (current, total) => {
         setPageProgress({ current, total });
-        setStatusLine(UIMessages.ocrProgress(current, total));
       });
 
       const debug = {
@@ -350,12 +384,29 @@ export function PdfUploadFlow() {
   // ── consent gate — show before anything else ─────────────────────────────────
   if (!consentChecked) {
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+      <div style={{ margin: "0 auto", display: "flex", width: "100%", maxWidth: 768, flexDirection: "column", gap: 24 }}>
         <div
-          className="rounded-lg px-4 py-3 text-sm"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text-muted)" }}
+          className="anim-fade-up"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 12,
+            border: "1.5px solid var(--border)",
+            background: "var(--bg-card)",
+            borderRadius: 16,
+            padding: "20px 24px",
+            fontFamily: "var(--font-body, sans-serif)",
+          }}
         >
-          Checking account…
+          <span className="spinner" />
+          <span style={{ fontSize: "calc(15px * var(--font-scale))", color: "var(--text-muted)" }}>
+            Checking account
+            <span aria-hidden="true">
+              <span className="ellipsis-dot">.</span>
+              <span className="ellipsis-dot">.</span>
+              <span className="ellipsis-dot">.</span>
+            </span>
+          </span>
         </div>
       </div>
     );
@@ -363,10 +414,10 @@ export function PdfUploadFlow() {
 
   if (!hasConsented) {
     return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+      <div style={{ margin: "0 auto", display: "flex", width: "100%", maxWidth: 768, flexDirection: "column", gap: 24 }}>
         <header>
-          <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>Upload PDF</h2>
-          <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>One quick step before you continue.</p>
+          <h2 style={{ fontSize: "calc(18px * var(--font-scale))", fontWeight: 600, color: "var(--text)", margin: 0 }}>Upload PDF</h2>
+          <p style={{ marginTop: 4, fontSize: "calc(14px * var(--font-scale))", color: "var(--text-muted)" }}>One quick step before you continue.</p>
         </header>
         <div style={{ background: "var(--bg-subtle)", border: "1.5px solid var(--border)", borderRadius: 12, padding: 24, display: "flex", flexDirection: "column", gap: 16 }}>
           <p style={{ fontSize: "calc(15px * var(--font-scale))", fontWeight: 700, color: "var(--text)", margin: 0 }}>AI processing consent required</p>
@@ -413,37 +464,96 @@ export function PdfUploadFlow() {
   }
 
   return (
-    <div className="anim-fade-up mx-auto flex w-full max-w-3xl flex-col gap-6">
-      <header>
-        <h2 className="text-lg font-semibold" style={{ color: "var(--text)" }}>
-          Upload PDF
-        </h2>
-        <p className="mt-1 text-sm" style={{ color: "var(--text-muted)" }}>
-          {PDF_EXTRACTION_TEST_MODE ? (
-            <>
-              <span className="font-medium" style={{ color: "var(--primary)" }}>
-                Extraction test mode
-              </span>
-              {" — "}
-              DeepSeek generate is off. Set PDF_EXTRACTION_TEST_MODE to false in{" "}
-              <code className="text-xs">src/lib/dev/pdf-test-mode.ts</code>.
-            </>
-          ) : (
-            <>
-              Upload a handout (max {MAX_UPLOAD_SIZE_MB} MB). {App.name} extracts text, then
-              sends it to DeepSeek to build flashcards. One Capycoin is used only after cards
-              are generated successfully.
-            </>
-          )}
-        </p>
-      </header>
+    <div className="anim-fade-up" style={{ margin: "0 auto", display: "flex", width: "100%", maxWidth: 768, flexDirection: "column", gap: 14 }}>
+      {PDF_EXTRACTION_TEST_MODE && (
+        <header>
+          <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-muted)" }}>
+            <span style={{ fontWeight: 600, color: "var(--primary)" }}>
+              Extraction test mode
+            </span>
+            {" — "}
+            DeepSeek generate is off. Set PDF_EXTRACTION_TEST_MODE to false in{" "}
+            <code style={{ fontSize: "calc(12px * var(--font-scale))" }}>src/lib/dev/pdf-test-mode.ts</code>.
+          </p>
+        </header>
+      )}
 
       {phase === "idle" && (
         <>
-          <div className="mb-4 flex flex-col gap-2">
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: 6, background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 20, padding: 18 }}
+          >
+            <p style={{ fontSize: "calc(12.5px * var(--font-scale))", color: "var(--text-muted)", margin: "0 0 4px" }}>
+              <em style={{ color: "var(--primary)", fontStyle: "italic" }}>Capy</em> extracts the
+              text and sends it to DeepSeek — one Capycoin is used only after cards are
+              generated successfully.
+            </p>
+          <label
+            style={{
+              display: "flex",
+              cursor: "pointer",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 6,
+              borderRadius: 16,
+              border: "2px dashed var(--border)",
+              background: "var(--bg-subtle)",
+              padding: "22px 24px",
+              marginTop: 4,
+              textAlign: "center",
+            }}
+          >
+            <span style={{ fontSize: "calc(26px * var(--font-scale))", lineHeight: 1 }}>📄</span>
+            {selectedFile ? (
+              <>
+                <span style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
+                  {selectedFile.name}
+                </span>
+                <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)" }}>
+                  {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB selected — click to change
+                </span>
+              </>
+            ) : (
+              <>
+                <span style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
+                  Drop your PDF here
+                </span>
+                <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)" }}>
+                  or click to browse — max {MAX_UPLOAD_SIZE_MB} MB
+                </span>
+              </>
+            )}
+            <span
+              className="btn-solid"
+              style={{
+                marginTop: 4,
+                background: "var(--primary)",
+                color: "var(--on-primary)",
+                borderRadius: 999,
+                padding: "8px 22px",
+                fontSize: "calc(13px * var(--font-scale))",
+                fontWeight: 600,
+                fontFamily: "var(--font-body, sans-serif)",
+              }}
+            >
+              Choose file
+            </span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              onChange={onFileSelected}
+              style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0,0,0,0)", border: 0 }}
+            />
+          </label>
+          </div>
+
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: 8, border: "1.5px solid var(--border)", background: "var(--bg-card)", borderRadius: 20, padding: 18 }}
+          >
             <p
-              className="px-1 text-xs font-semibold uppercase"
-              style={{ color: "var(--text-faint)", letterSpacing: "0.06em" }}
+              style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-faint)", margin: 0 }}
             >
               Generation mode
             </p>
@@ -463,7 +573,7 @@ export function PdfUploadFlow() {
                 background: generationMode === GenerationMode.STANDARD ? "var(--nav-bg)" : "var(--bg-card)",
                 border: generationMode === GenerationMode.STANDARD ? "1.5px solid var(--primary)" : "1.5px solid var(--border)",
                 borderRadius: 14,
-                padding: "14px 18px",
+                padding: "10px 16px",
                 cursor: "pointer",
                 fontFamily: "var(--font-body, sans-serif)",
               }}
@@ -508,7 +618,7 @@ export function PdfUploadFlow() {
                 background: isActive ? "var(--nav-bg)" : "var(--bg-card)",
                 border: isActive ? "1.5px solid var(--primary)" : "1.5px solid var(--border)",
                 borderRadius: 14,
-                padding: "14px 18px",
+                padding: "10px 16px",
                 cursor: "pointer",
                 textDecoration: "none",
                 fontFamily: "var(--font-body, sans-serif)",
@@ -571,75 +681,202 @@ export function PdfUploadFlow() {
             })()}
           </div>
 
-          <label
-            className="upload-dropzone flex cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed px-6 py-12"
-            style={{ borderColor: "var(--border)", background: "var(--bg-subtle)" }}
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: 10, border: "1.5px solid var(--border)", background: "var(--bg-card)", borderRadius: 20, padding: 18 }}
           >
-            <span className="text-sm font-medium" style={{ color: "var(--text)" }}>
-              Choose a PDF file
-            </span>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="application/pdf,.pdf"
-              className="sr-only"
-              onChange={onFileSelected}
-            />
-          </label>
+            <p
+              style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-faint)", margin: 0 }}
+            >
+              Deck settings
+            </p>
+
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 500, color: "var(--text-muted)", minWidth: 110 }}>
+                Deck name
+              </span>
+              <input
+                type="text"
+                value={deckName}
+                onChange={(e) => setDeckName(e.target.value)}
+                maxLength={Validation.deck.titleMaxLength}
+                placeholder="e.g. Ecology Midterms"
+                style={{ flex: 1, minWidth: 180, borderRadius: 10, padding: "8px 14px", fontSize: "calc(14px * var(--font-scale))", outline: "none", border: "1px solid var(--border)", background: "var(--bg-subtle)", color: "var(--text)", fontFamily: "var(--font-body, sans-serif)" }}
+              />
+            </div>
+
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 500, color: "var(--text-muted)", minWidth: 110 }}>
+                Cards to generate
+              </span>
+              <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+                {CardCountOptions.map((count) => {
+                  const locked = count > tierMaxCards;
+                  return (
+                    <button
+                      key={count}
+                      type="button"
+                      onClick={() => (locked ? router.push(Routes.upgrade) : setCardCount(count))}
+                      title={locked ? "You'll need Pro for this — tap to upgrade" : undefined}
+                      className={`chip${cardCount === count ? " chip-active" : ""}`}
+                      style={{
+                        border: cardCount === count ? "1.5px solid var(--primary)" : "1.5px solid var(--border)",
+                        background: cardCount === count ? "var(--primary)" : "var(--bg-subtle)",
+                        color: cardCount === count ? "var(--on-primary)" : "var(--text)",
+                        borderRadius: 999,
+                        padding: "5px 14px",
+                        fontSize: "calc(13px * var(--font-scale))",
+                        fontWeight: 600,
+                        cursor: "pointer",
+                        opacity: locked ? 0.6 : 1,
+                        fontFamily: "var(--font-body, sans-serif)",
+                      }}
+                    >
+                      {count}{locked ? " 🔒" : ""}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: 12 }}>
+            <button
+              type="button"
+              onClick={handleCancel}
+              className="btn-outline"
+              style={{ border: "1.5px solid var(--border)", color: "var(--text)", background: "none", borderRadius: 10, padding: "8px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, fontFamily: "var(--font-body, sans-serif)", cursor: "pointer" }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!selectedFile}
+              onClick={handleGenerateClick}
+              className="btn-solid"
+              style={{ background: "var(--primary)", color: "var(--on-primary)", border: "none", borderRadius: 10, padding: "8px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, fontFamily: "var(--font-body, sans-serif)", cursor: selectedFile ? "pointer" : "not-allowed", opacity: selectedFile ? 1 : 0.5 }}
+            >
+              Generate flashcards
+            </button>
+          </div>
         </>
       )}
 
-      {(phase === "uploading" || phase === "generating") && (
-        <div
-          className="rounded-lg px-4 py-3 text-sm"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text)" }}
-          role="status"
-        >
-          {statusLine || "Working…"}
-        </div>
-      )}
+      {(phase === "uploading" || phase === "generating") && (() => {
+        const extracting = phase === "uploading";
+        const rows: Array<{ label: string; state: "done" | "active" | "pending" }> = [
+          {
+            label: pageProgress.total > 0 ? `Extracted text from ${pageProgress.total} pages` : "Extracted your text",
+            state: extracting ? "active" : "done",
+          },
+          { label: "Finding key concepts…", state: extracting ? "pending" : genStage === 1 ? "active" : "done" },
+          { label: "Writing your flashcards", state: extracting || genStage === 1 ? "pending" : "active" },
+        ];
+        const progressPercent = extracting ? 20 : genStage === 1 ? 55 : 85;
+
+        return (
+          <div
+            className="anim-fade-up"
+            style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16, borderRadius: 20, padding: "32px 24px", border: "1.5px solid var(--border)", background: "var(--bg-card)", textAlign: "center", fontFamily: "var(--font-body, sans-serif)" }}
+            role="status"
+            aria-live="polite"
+          >
+            <img
+              src="/capy/capy-reading.png"
+              alt=""
+              width={120}
+              height={120}
+              className="capy-reading-bob"
+              style={{ width: 120, height: "auto" }}
+            />
+            <div>
+              <p style={{ margin: 0, fontFamily: "var(--font-display, serif)", fontSize: "calc(18px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
+                Reading your PDF, hang tight…
+              </p>
+              <p style={{ margin: "4px 0 0", fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)" }}>
+                {deckName.trim() || "Your deck"} · generating {cardCount} cards
+              </p>
+            </div>
+
+            <div style={{ width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", gap: 6 }}>
+              {rows.map((row) => (
+                <div
+                  key={row.label}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "9px 14px",
+                    borderRadius: 10,
+                    background: row.state === "active" ? "var(--bg-subtle)" : "transparent",
+                    fontSize: "calc(13px * var(--font-scale))",
+                    color: row.state === "pending" ? "var(--text-faint)" : "var(--text)",
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 14,
+                      textAlign: "center",
+                      color: row.state === "done" ? "var(--success)" : row.state === "active" ? "var(--primary)" : "var(--text-faint)",
+                    }}
+                  >
+                    {row.state === "done" ? "✓" : row.state === "active" ? "●" : "○"}
+                  </span>
+                  {row.label}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ width: "100%", maxWidth: 360, height: 6, borderRadius: 999, overflow: "hidden", background: "var(--border)" }}>
+              <div style={{ height: "100%", width: `${progressPercent}%`, borderRadius: 999, background: "var(--primary)", transition: "width 0.4s ease" }} />
+            </div>
+
+            <p style={{ margin: 0, fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)" }}>
+              {tokenBalance !== null
+                ? `Capy will use 1 Capycoin · ${Math.max(0, tokenBalance - 1)} remaining`
+                : "Capy will use 1 Capycoin for this."}
+            </p>
+          </div>
+        );
+      })()}
 
       {phase === "ocr_confirm" && pdfFile && (
         <div
-          className="flex flex-col gap-4 rounded-xl p-5"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-subtle)" }}
+          className="anim-fade-up"
+          style={{ display: "flex", flexDirection: "column", gap: 16, borderRadius: 20, padding: 24, border: "1.5px solid var(--border)", background: "var(--bg-card)", fontFamily: "var(--font-body, sans-serif)" }}
         >
-          <p className="text-sm" style={{ color: "var(--text)" }}>{ocrMessage}</p>
+          <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text)", margin: 0 }}>{ocrMessage}</p>
           {layer1Payload != null ? (
-            <details className="rounded-lg" style={{ border: "1px solid var(--border)", background: "var(--bg-card)" }}>
-              <summary className="cursor-pointer px-3 py-2 text-xs font-medium" style={{ color: "var(--text)" }}>
+            <details style={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--bg-subtle)" }}>
+              <summary style={{ cursor: "pointer", padding: "10px 14px", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
                 Layer 1 server response (JSON)
               </summary>
-              <pre className="max-h-48 overflow-auto px-3 pb-3 text-xs" style={{ color: "var(--text-muted)" }}>
+              <pre style={{ maxHeight: 192, overflow: "auto", padding: "0 14px 14px", fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)" }}>
                 {JSON.stringify(layer1Payload, null, 2)}
               </pre>
             </details>
           ) : null}
-          <div className="flex flex-wrap gap-3">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
             <button
               type="button"
               onClick={runClientOcr}
-              className="btn-solid rounded-lg px-4 py-2 text-sm font-medium"
-              style={{ background: "var(--primary)", color: "var(--on-primary)" }}
+              className="btn-solid"
+              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, border: "none", cursor: "pointer", background: "var(--primary)", color: "var(--on-primary)", fontFamily: "var(--font-body, sans-serif)" }}
             >
               Continue (Layer 2 OCR)
             </button>
             <button
               type="button"
-              onClick={() => {
-                setPhase("paste_fallback");
-                setStatusLine("");
-              }}
-              className="btn-outline rounded-lg px-4 py-2 text-sm font-medium"
-              style={{ border: "1.5px solid var(--border)", color: "var(--text)", background: "none" }}
+              onClick={() => setPhase("paste_fallback")}
+              className="btn-outline"
+              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, cursor: "pointer", border: "1.5px solid var(--border)", color: "var(--text)", background: "none", fontFamily: "var(--font-body, sans-serif)" }}
             >
               Paste text instead
             </button>
             <button
               type="button"
               onClick={resetToIdle}
-              className="nav-link rounded-lg px-4 py-2 text-sm"
-              style={{ color: "var(--text-muted)", background: "none", border: "none" }}
+              className="nav-link"
+              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", cursor: "pointer", color: "var(--text-muted)", background: "none", border: "none", fontFamily: "var(--font-body, sans-serif)" }}
             >
               Start over
             </button>
@@ -649,20 +886,22 @@ export function PdfUploadFlow() {
 
       {phase === "ocr_running" && (
         <div
-          className="rounded-lg px-4 py-3"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-card)" }}
+          className="anim-fade-up"
+          style={{ borderRadius: 16, padding: "20px 24px", border: "1.5px solid var(--border)", background: "var(--bg-card)", fontFamily: "var(--font-body, sans-serif)" }}
           role="status"
           aria-live="polite"
         >
-          <p className="text-sm" style={{ color: "var(--text)" }}>
+          <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text)", margin: 0 }}>
             {pageProgress.total > 0
               ? UIMessages.ocrProgress(pageProgress.current, pageProgress.total)
               : "Preparing OCR…"}
           </p>
-          <div className="mt-3 h-2 overflow-hidden rounded-full" style={{ background: "var(--border)" }}>
+          <div style={{ marginTop: 12, height: 8, overflow: "hidden", borderRadius: 999, background: "var(--border)" }}>
             <div
-              className="h-full transition-all duration-300"
               style={{
+                height: "100%",
+                borderRadius: 999,
+                transition: "width 0.3s ease",
                 background: "var(--primary)",
                 width:
                   pageProgress.total > 0
@@ -676,40 +915,39 @@ export function PdfUploadFlow() {
 
       {phase === "paste_fallback" && (
         <div
-          className="flex flex-col gap-4 rounded-xl p-5"
-          style={{ border: "1px solid var(--border)", background: "var(--bg-card)" }}
+          className="anim-fade-up"
+          style={{ display: "flex", flexDirection: "column", gap: 16, borderRadius: 20, padding: 24, border: "1.5px solid var(--border)", background: "var(--bg-card)", fontFamily: "var(--font-body, sans-serif)" }}
         >
-          <p className="text-sm" style={{ color: "var(--text)" }}>
+          <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text)", margin: 0 }}>
             {UIMessages.ocrFallbackPrompt}
           </p>
           <textarea
             value={pastedText}
             onChange={(e) => setPastedText(e.target.value)}
             rows={12}
-            className="w-full resize-y rounded-lg px-3 py-2 text-sm outline-none"
-            style={{ border: "1px solid var(--border)", background: "var(--bg-subtle)", color: "var(--text)" }}
+            style={{ width: "100%", resize: "vertical", borderRadius: 10, padding: "10px 14px", fontSize: "calc(14px * var(--font-scale))", outline: "none", border: "1px solid var(--border)", background: "var(--bg-subtle)", color: "var(--text)", fontFamily: "var(--font-body, sans-serif)", boxSizing: "border-box" }}
             placeholder="Paste your lecture notes or handout text here…"
           />
           {errorMessage && (
-            <p className="text-sm" style={{ color: "var(--error)" }} role="alert">
+            <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--error)", margin: 0 }} role="alert">
               {errorMessage}
             </p>
           )}
-          <div className="flex flex-wrap gap-3">
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
             <button
               type="button"
               disabled={isBusy}
               onClick={submitPaste}
-              className="btn-solid rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50"
-              style={{ background: "var(--primary)", color: "var(--on-primary)" }}
+              className="btn-solid"
+              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, border: "none", cursor: isBusy ? "not-allowed" : "pointer", opacity: isBusy ? 0.5 : 1, background: "var(--primary)", color: "var(--on-primary)", fontFamily: "var(--font-body, sans-serif)" }}
             >
               {PDF_EXTRACTION_TEST_MODE ? "Show paste output" : "Generate flashcards"}
             </button>
             <button
               type="button"
               onClick={resetToIdle}
-              className="nav-link rounded-lg px-4 py-2 text-sm"
-              style={{ color: "var(--text-muted)", background: "none", border: "none" }}
+              className="nav-link"
+              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", cursor: "pointer", color: "var(--text-muted)", background: "none", border: "none", fontFamily: "var(--font-body, sans-serif)" }}
             >
               Start over
             </button>
@@ -719,41 +957,40 @@ export function PdfUploadFlow() {
 
       {phase === "result" && resultView && (
         <div
-          className="flex flex-col gap-4 rounded-xl p-5"
-          style={{ border: "1px solid var(--success)", background: "var(--success-bg)" }}
+          className="anim-fade-up"
+          style={{ display: "flex", flexDirection: "column", gap: 16, borderRadius: 20, padding: 24, border: "1.5px solid var(--success)", background: "var(--success-bg)", fontFamily: "var(--font-body, sans-serif)" }}
         >
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-semibold" style={{ color: "var(--success-dark)" }}>
+          <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+            <h3 style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--success-dark)", margin: 0 }}>
               {resultView.label}
             </h3>
             <button
               type="button"
               onClick={resetToIdle}
-              className="btn-outline rounded-lg px-3 py-1.5 text-xs font-medium"
-              style={{ border: "1.5px solid var(--border)", color: "var(--text)", background: "none" }}
+              className="btn-outline"
+              style={{ borderRadius: 10, padding: "6px 14px", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, cursor: "pointer", border: "1.5px solid var(--border)", color: "var(--text)", background: "none", fontFamily: "var(--font-body, sans-serif)" }}
             >
               Upload another PDF
             </button>
           </div>
 
           {resultView.cards && resultView.cards.length > 0 && (
-            <div className="flex flex-col gap-3">
-              <p className="text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-faint)" }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <p style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-faint)", margin: 0 }}>
                 Generated flashcards ({resultView.cards.length})
               </p>
-              <ul className="flex max-h-96 flex-col gap-2 overflow-auto">
+              <ul style={{ display: "flex", flexDirection: "column", gap: 8, maxHeight: 384, overflow: "auto", margin: 0, padding: 0, listStyle: "none" }}>
                 {resultView.cards.map((card, i) => (
                   <li
                     key={i}
-                    className="rounded-lg p-3 text-sm"
-                    style={{ border: "1px solid var(--border)", background: "var(--bg-card)" }}
+                    style={{ borderRadius: 10, padding: 12, fontSize: "calc(14px * var(--font-scale))", border: "1px solid var(--border)", background: "var(--bg-card)" }}
                   >
-                    <p className="font-medium" style={{ color: "var(--text)" }}>
+                    <p style={{ fontWeight: 600, color: "var(--text)", margin: 0 }}>
                       {card.front}
                     </p>
-                    <p className="mt-1" style={{ color: "var(--text-muted)" }}>{card.back}</p>
+                    <p style={{ marginTop: 4, marginBottom: 0, color: "var(--text-muted)" }}>{card.back}</p>
                     {card.tags.length > 0 && (
-                      <p className="mt-2 text-xs" style={{ color: "var(--text-faint)" }}>
+                      <p style={{ marginTop: 8, marginBottom: 0, fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)" }}>
                         {card.tags.join(" · ")}
                       </p>
                     )}
@@ -765,12 +1002,11 @@ export function PdfUploadFlow() {
 
           {resultView.extractedText !== undefined && (
             <details>
-              <summary className="cursor-pointer text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-faint)" }}>
+              <summary style={{ cursor: "pointer", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-faint)" }}>
                 Extracted text preview
               </summary>
               <pre
-                className="mt-2 max-h-48 overflow-auto rounded-lg p-3 text-xs whitespace-pre-wrap"
-                style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text-muted)" }}
+                style={{ marginTop: 8, maxHeight: 192, overflow: "auto", borderRadius: 10, padding: 12, fontSize: "calc(12px * var(--font-scale))", whiteSpace: "pre-wrap", border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text-muted)" }}
               >
                 {resultView.extractedText || "(empty)"}
               </pre>
@@ -779,12 +1015,11 @@ export function PdfUploadFlow() {
 
           {resultView.debug != null && (
             <details>
-              <summary className="cursor-pointer text-xs font-medium uppercase tracking-wide" style={{ color: "var(--text-faint)" }}>
+              <summary style={{ cursor: "pointer", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "var(--text-faint)" }}>
                 Pipeline debug JSON
               </summary>
               <pre
-                className="mt-2 max-h-48 overflow-auto rounded-lg p-3 text-xs"
-                style={{ border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text-muted)" }}
+                style={{ marginTop: 8, maxHeight: 192, overflow: "auto", borderRadius: 10, padding: 12, fontSize: "calc(12px * var(--font-scale))", border: "1px solid var(--border)", background: "var(--bg-card)", color: "var(--text-muted)" }}
               >
                 {JSON.stringify(resultView.debug, null, 2)}
               </pre>
@@ -795,17 +1030,17 @@ export function PdfUploadFlow() {
 
       {phase === "error" && (
         <div
-          className="flex flex-col gap-3 rounded-xl p-5"
-          style={{ border: "1px solid var(--error)", background: "var(--error-bg)" }}
+          className="anim-fade-up"
+          style={{ display: "flex", flexDirection: "column", gap: 12, borderRadius: 20, padding: 24, border: "1.5px solid var(--error)", background: "var(--error-bg)", fontFamily: "var(--font-body, sans-serif)" }}
         >
-          <p className="text-sm" style={{ color: "var(--error-dark)" }} role="alert">
+          <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--error-dark)", margin: 0 }} role="alert">
             {errorMessage}
           </p>
           <button
             type="button"
             onClick={resetToIdle}
-            className="btn-solid self-start rounded-lg px-4 py-2 text-sm font-medium"
-            style={{ background: "var(--primary)", color: "var(--on-primary)" }}
+            className="btn-solid"
+            style={{ alignSelf: "flex-start", borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, border: "none", cursor: "pointer", background: "var(--primary)", color: "var(--on-primary)", fontFamily: "var(--font-body, sans-serif)" }}
           >
             Try again
           </button>
@@ -813,7 +1048,7 @@ export function PdfUploadFlow() {
       )}
 
       {!PDF_EXTRACTION_TEST_MODE && phase === "generating" && (
-        <p className="text-xs" style={{ color: "var(--text-faint)" }}>{UIMessages.aiDisclaimer}</p>
+        <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)" }}>{UIMessages.aiDisclaimer}</p>
       )}
     </div>
   );
