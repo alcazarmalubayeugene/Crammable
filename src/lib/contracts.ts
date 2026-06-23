@@ -29,9 +29,9 @@
 
 export const App = {
   name:         "Crammable",
-  version:      "v.14",                  // bump by 0.1 on every meaningful frontend update
+  version:      "v.16",                  // bump by 0.1 on every meaningful frontend update
   tagline:      "Turn any document into a flashcard deck — in seconds.",
-  supportEmail: "support@crammable.ph",  // update once domain is live
+  supportEmail: "crammablesupport@gmail.com", // not created yet — co-devs to set up
   gcashName:    "Crammable",             // name displayed in GCash payment screen
   gcashNumber:  "09691816930",
 } as const;
@@ -172,6 +172,10 @@ export const ApiPaths = {
   submitQuizResult:    "/api/quiz/result",
   explainAnswer:       "/api/quiz/explain",
   quizHistory:         "/api/quiz/history",
+  // NOT YET IMPLEMENTED on the backend — see FRONTEND.md "Backend work needed:
+  // shareable quiz results" for the schema/RLS/route this pair requires.
+  quizResultShare:     (sessionId: string) => `/api/quiz/${sessionId}/share`,
+  publicResult:        (sessionId: string) => `/api/public/results/${sessionId}`,
   claimReferral:       "/api/referral/claim",
   submitPayment:       "/api/payment/submit",
   adminPayments:       "/api/admin/payments",
@@ -198,6 +202,7 @@ export const Routes = {
   signup:         "/signup",
   login:          "/login",
   forgotPassword: "/forgot-password",
+  help:           "/help",
 
   // Authenticated
   dashboard:  "/dashboard",
@@ -208,9 +213,11 @@ export const Routes = {
   upgrade:    "/upgrade",
   rewards:    "/rewards",
   settings:   "/settings",
+  avatar:     "/settings/avatar",
 
   // Public (no auth required)
-  publicDeck: (id: string) => `/public/decks/${id}`,
+  publicDeck:   (id: string) => `/public/decks/${id}`,
+  publicResult: (sessionId: string) => `/results/${sessionId}`,
 
   // Admin
   admin:      "/admin",
@@ -460,6 +467,10 @@ export const UIMessages = {
   // has been reviewed at least once (study mode or quiz), so "weak cards"
   // has nothing real to sort by before that.
   studyWeakCardsLocked: "Try every card at least once first — weak cards aren't meaningful until then.",
+
+  // Avatar styles gallery (/settings/avatar) — premade Capy styles are a
+  // concept idea only, no real per-style art exists yet.
+  avatarStylesUnavailable: "This is unavailable for now.",
 
   // Referral
   referralCredited:  (name: string, credits: number) => `+${credits} Capycoins — ${name} signed up with your link!`,
@@ -889,6 +900,25 @@ export interface ClaimProfileCompleteResult extends ClaimRewardResult {
 export interface ShareDeckResult {
   isPublic:       boolean;
   creditsAwarded: number;
+}
+
+// ── POST /api/quiz/[sessionId]/share ──────────────────────────────────────────
+// NOT YET IMPLEMENTED on the backend (no quiz_sessions.is_public column, no
+// route) — see FRONTEND.md "Backend work needed: shareable quiz results".
+export interface ShareQuizResultResult {
+  isPublic: boolean;
+}
+
+// ── GET /api/public/results/[sessionId] ──────────────────────────────────────
+// NOT YET IMPLEMENTED on the backend. Deliberately narrow — mirrors
+// getPublicDeckWithCards()'s "never expose owner internals" rule: no user_id,
+// no per-question answers, just enough to render a public score showcase.
+export interface PublicQuizResult {
+  deckTitle:      string;
+  scorePercent:   number;
+  correctCount:   number;
+  totalQuestions: number;
+  completedAt:    string;
 }
 
 // ── POST /api/rewards/submit-review ───────────────────────────────────────────

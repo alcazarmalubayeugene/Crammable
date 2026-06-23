@@ -4,13 +4,13 @@ export default function Home() {
 
       {/* ── NAVBAR ── */}
       <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div className="nav-row" style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", minHeight: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(20px * var(--font-scale))", color: "var(--nav-text)", letterSpacing: "-0.3px" }}>
               Crammable
             </span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          <div className="nav-cluster" style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <a href="/login" className="nav-link" style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)", textDecoration: "none" }}>
               Log in
             </a>

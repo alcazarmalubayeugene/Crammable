@@ -79,7 +79,7 @@ export default function ForgotPasswordPage() {
 
       {/* ── NAVBAR ── */}
       <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)" }}>
-        <div style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div className="nav-row" style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", minHeight: 64, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <Link href={Routes.home} style={{ display: "flex", alignItems: "center", gap: 10, textDecoration: "none" }}>
             <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
               Crammable

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import {
   Lora,
   DM_Sans,
@@ -21,25 +22,28 @@ import {
 } from "@/lib/theme/ThemeProvider";
 import "./globals.css";
 
-// Runs before paint so a returning dark-mode/font-scale/font-pair user never
-// sees a flash of the defaults. Reads from the same localStorage keys
-// ThemeProvider uses. Public/pre-login pages always stay light — see
-// PUBLIC_ROUTES in ThemeProvider.tsx for why.
+// Runs before paint so a returning user never sees a flash of the wrong
+// theme/font, AND so a first-time visitor (nothing in localStorage yet)
+// lands directly on the real defaults — dark + Baskerville, per the co-dev
+// request that's what most users actually prefer — instead of flashing the
+// old light/Lora CSS defaults for one frame before ThemeProvider mounts.
+// Reads from the same localStorage keys ThemeProvider uses. Public/pre-login
+// pages always stay light — see PUBLIC_ROUTES in ThemeProvider.tsx for why.
 const PUBLIC_ROUTES_FOR_SCRIPT = [Routes.home, Routes.login, Routes.signup, Routes.forgotPassword];
 const ANTI_FLASH_SCRIPT = `
 (function() {
   try {
     var isPublicRoute = ${JSON.stringify(PUBLIC_ROUTES_FOR_SCRIPT)}.indexOf(location.pathname) !== -1;
-    var theme = localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});
+    var theme = localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)}) || "dark";
     if (theme === "dark" && !isPublicRoute) document.documentElement.setAttribute("data-theme", "dark");
     var fontSize = localStorage.getItem(${JSON.stringify(FONT_SIZE_STORAGE_KEY)});
     var scales = ${JSON.stringify(FONT_SCALES)};
     if (fontSize && scales[fontSize]) {
       document.documentElement.style.setProperty("--font-scale", String(scales[fontSize]));
     }
-    var fontPair = localStorage.getItem(${JSON.stringify(FONT_PAIR_STORAGE_KEY)});
+    var fontPair = localStorage.getItem(${JSON.stringify(FONT_PAIR_STORAGE_KEY)}) || "baskerville";
     var pairs = ${JSON.stringify(FONT_PAIRS)};
-    if (fontPair && pairs[fontPair]) {
+    if (pairs[fontPair]) {
       document.documentElement.style.setProperty("--font-display", pairs[fontPair].display);
       document.documentElement.style.setProperty("--font-body", pairs[fontPair].body);
     }
@@ -109,7 +113,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <head>
-        <script dangerouslySetInnerHTML={{ __html: ANTI_FLASH_SCRIPT }} />
+        {/* next/script + beforeInteractive (not a raw <script> tag) — injected
+            into the initial server-rendered HTML and runs before hydration,
+            same timing a raw tag gave us, without React's dev-mode warning
+            about script tags rendered as JSX. */}
+        <Script id="anti-flash-script" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: ANTI_FLASH_SCRIPT }} />
       </head>
       <body
         className={`${lora.variable} ${dmSans.variable} ${playfair.variable} ${fraunces.variable} ${nunito.variable} ${garamond.variable} ${jakarta.variable} ${baskerville.variable} antialiased`}

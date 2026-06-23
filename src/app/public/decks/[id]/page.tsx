@@ -120,11 +120,12 @@ export default function PublicDeckPage() {
         }}
       >
         <div
+          className="nav-row"
           style={{
             maxWidth: "100%",
             margin: "0 auto",
             padding: "0 24px",
-            height: 64,
+            minHeight: 64,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",

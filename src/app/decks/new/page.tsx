@@ -45,24 +45,21 @@ export default function NewDeckPage() {
 
       {/* ── NAVBAR ── */}
       <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)", position: "sticky", top: 0, zIndex: 50 }}>
-        <div style={{ maxWidth: "100%", margin: "0 auto", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <div className="nav-row" style={{ maxWidth: "100%", margin: "0 auto", padding: "12px 20px", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <a href={Routes.dashboard} className="nav-link" style={{ display: "flex", alignItems: "center", textDecoration: "none" }}>
               <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
             </a>
-            <span style={{ color: "var(--nav-border)" }}>|</span>
-            <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 600, fontSize: "calc(16px * var(--font-scale))", color: "var(--nav-text)" }}>
-              {App.name}
-            </span>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: "calc(13.6px * var(--font-scale))" }}>
+          <div className="nav-cluster" style={{ display: "flex", alignItems: "center", gap: 12, fontSize: "calc(13.6px * var(--font-scale))" }}>
             <div
               title="Capycoins remaining"
+              className="nav-coin-pill"
               style={{ display: "flex", alignItems: "center", gap: 5, background: "var(--nav-bg)", border: "1.5px solid rgba(196,122,46,0.3)", borderRadius: 999, padding: "4px 12px" }}
             >
               <Image src="/capy/capycoin.png" alt="" width={18} height={18} style={{ borderRadius: "50%" }} />
               <span style={{ fontWeight: 600, color: "var(--primary-soft)" }}>
-                {profile?.token_balance ?? 0} Capycoins
+                {profile?.token_balance ?? 0}<span className="nav-collapse"> Capycoins</span>
               </span>
             </div>
             {isPro ? (
@@ -80,9 +77,6 @@ export default function NewDeckPage() {
             )}
             <Link href={Routes.rewards} className="nav-link" style={{ color: "var(--text-faint)", textDecoration: "none" }}>
               Rewards
-            </Link>
-            <Link href={Routes.settings} className="nav-link" style={{ color: "var(--text-faint)", textDecoration: "none" }}>
-              Settings
             </Link>
             <AvatarPicker />
           </div>

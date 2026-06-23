@@ -252,11 +252,12 @@ export default function RewardsPage() {
         }}
       >
         <div
+          className="nav-row"
           style={{
             maxWidth: "100%",
             margin: "0 auto",
             padding: "0 24px",
-            height: 64,
+            minHeight: 64,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -270,21 +271,11 @@ export default function RewardsPage() {
             >
               <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
             </a>
-            <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
-            <span
-              style={{
-                fontFamily: "var(--font-display, serif)",
-                fontWeight: 700,
-                fontSize: "calc(18px * var(--font-scale))",
-                color: "var(--nav-text)",
-              }}
-            >
-              {App.name}
-            </span>
           </div>
 
           {profile && (
             <div
+              className="nav-cluster"
               style={{
                 display: "flex",
                 alignItems: "center",
@@ -297,7 +288,7 @@ export default function RewardsPage() {
             >
               <Image src="/capy/capycoin.png" alt="" width={32} height={32} style={{ borderRadius: "50%" }} />
               <span style={{ fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--primary-soft)" }}>
-                {profile.token_balance} Capycoins
+                {profile.token_balance}<span className="nav-collapse"> Capycoins</span>
               </span>
             </div>
           )}

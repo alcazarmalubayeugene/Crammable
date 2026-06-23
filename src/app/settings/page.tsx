@@ -277,7 +277,7 @@ function SettingsContent() {
       <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
         {/* ── NAVBAR ── */}
         <nav style={{ background: "var(--nav-bg)", borderBottom: "1px solid var(--nav-border)" }}>
-          <div style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", height: 64, display: "flex", alignItems: "center", gap: 10 }}>
+          <div className="nav-row" style={{ maxWidth: "100%", margin: "0 auto", padding: "0 24px", minHeight: 64, display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontFamily: "var(--font-display, serif)", fontWeight: 700, fontSize: "calc(18px * var(--font-scale))", color: "var(--nav-text)" }}>
               {App.name}
             </span>
@@ -391,11 +391,12 @@ function SettingsContent() {
         }}
       >
         <div
+          className="nav-row"
           style={{
             maxWidth: "100%",
             margin: "0 auto",
             padding: "0 24px",
-            height: 64,
+            minHeight: 64,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -638,7 +639,7 @@ function SettingsContent() {
                     textTransform: "capitalize",
                   }}
                 >
-                  {mode === "light" ? "☀️ Light" : "🌙 Dark"}
+                  {mode === "light" ? "☀️ Light" : "🌙 Dark (default)"}
                 </button>
               ))}
             </div>
@@ -696,7 +697,7 @@ function SettingsContent() {
                     fontFamily: "var(--font-body, sans-serif)",
                   }}
                 >
-                  {FONT_PAIRS[key].label}
+                  {FONT_PAIRS[key].label}{key === "baskerville" ? " (default)" : ""}
                 </button>
               ))}
             </div>
@@ -747,6 +748,7 @@ function SettingsContent() {
             border: "1.5px solid var(--border)",
             borderRadius: 16,
             padding: "20px 22px",
+            marginBottom: 16,
           }}
         >
           <p

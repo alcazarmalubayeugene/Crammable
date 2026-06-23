@@ -78,9 +78,9 @@ function resolveFontVar(token: string): string {
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isPublicRoute = PUBLIC_ROUTES.has(pathname);
-  const [theme, setThemeState] = useState<ThemeMode>("light");
+  const [theme, setThemeState] = useState<ThemeMode>("dark");
   const [fontSize, setFontSizeState] = useState<FontSizeKey>("default");
-  const [fontPair, setFontPairState] = useState<FontPairKey>("lora");
+  const [fontPair, setFontPairState] = useState<FontPairKey>("baskerville");
 
   // Pick up whatever the anti-flash inline script (in layout.tsx) already
   // applied to <html>, so React state matches the DOM on first render.

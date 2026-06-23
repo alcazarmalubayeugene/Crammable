@@ -453,6 +453,41 @@ Whenever a bug is fixed, it **must** be documented here with three things:
 
 ---
 
+#### Nav cluster hugged the left edge once it wrapped onto its own line, instead of staying right-aligned
+- **What broke:** On `decks/new` (and every other page sharing the same nav shape) at narrow widths, once the right-side cluster (Capycoin pill, nav links, avatar) wrapped beneath the logo, it sat flush against the left edge — directly under "← Back" — instead of staying right-aligned like it is on wider screens.
+- **Why:** The outer row uses `justify-content: space-between`, which distributes space *between* two-or-more items sharing the same flex line. Once the cluster wraps onto its own line alone, it's the only item on that line — there's nothing left to space "between," so it falls back to `flex-start` (the left edge).
+- **Resolution:** Added `margin-left: auto` to `.nav-cluster` (`globals.css`). This pushes the cluster right regardless of whether it's sharing a line with the logo or has wrapped onto its own — `space-between` and `margin-left: auto` don't conflict, they just both want the same outcome from different mechanisms.
+- **Watch out for:** Any flex row using `justify-content: space-between` with `flex-wrap: wrap` needs an explicit fallback like `margin-left: auto` on the item that should stay right-aligned once it's wrapped alone — `space-between` silently stops doing anything useful the moment only one item occupies a line.
+
+---
+
+#### iPhone XR/Galaxy-S8+-width nav still wrapped even after the first round of mobile-responsiveness fixes
+- **What broke:** The mobile nav-wrap pass (`.nav-row`/`.nav-cluster`, documented in Pending below) stopped *clipping*, but on real narrow phones (iPhone XR @ 414px, Galaxy S8+ @ 360px) the wordmark + Capycoin pill + Rewards + Help + avatar still didn't fit on one line even with `.nav-collapse` hiding "Capycoins" — the whole right cluster wrapped under the logo onto its own row.
+- **Why:** The original fix only changed *whether* the row wraps (graceful, no clipping) — it never reduced how much horizontal space the row's own gaps/padding/avatar size actually demanded. At 414px and especially 360px, those demands still exceeded the available width even after the lowest-priority text collapsed.
+- **Resolution:** Two additional, width-isolated tiers in `globals.css`, both using `!important` (required because the gaps/padding/sizes they override are inline styles in each page's JSX, which otherwise always beat a plain class rule):
+  - `@media (max-width: 480px)`: tightens `.nav-cluster` gap, `.nav-coin-pill` padding/gap, `.avatar-wrap` margin, `.avatar-pic` size (40px) — enough to bring the iPhone XR/14 Pro class of phone back to one line.
+  - `@media (max-width: 390px)`: a second, more aggressive tier (new `.nav-wordmark`/`.nav-link` font-size overrides too) for genuinely small phones (Galaxy S8+ and similar ~360px Androids) — avatar down to 32px, gaps down further.
+  - Each tier is bounded by its own `max-width`, so tightening the small-phone tier cannot regress anything wider (iPhone 14 Pro, tablet, desktop keep the looser sizing). New `.nav-coin-pill` class added to the dashboard and `decks/new` pill divs so the breakpoints have something to target (previously inline-only, unreachable from CSS).
+- **Watch out for:** "Stops clipping" and "fits on one line" are two different bars — flex-wrap alone only guarantees the first. If a future device report says something still wraps after `.nav-row`/`.nav-cluster` are already in place, the fix is almost certainly tightening an existing breakpoint's gaps/sizes (or adding a narrower one), not redesigning the wrap logic itself. Don't over-tighten in one shot either — the first attempt at the 390px tier (gap 4px, avatar 30px, margin 0) was reported as visually "compressed"; eased back to gap 7px/avatar 32px/margin 3px after feedback. Leave real breathing room, verify on the actual narrowest target device, and remember `!important` is genuinely required here (not sloppy CSS) because the values being overridden are inline.
+
+---
+
+#### Stale Turbopack dev cache served the *old* CSS even after killing and restarting the dev server (3rd time this exact bug class has bitten this app)
+- **What broke:** Edited `globals.css` (the 390px nav tier above), confirmed the source file had the new rules, but the running browser kept showing the old, untightened spacing no matter how many hard refreshes happened. Killing the dev server process and running `npm run dev` fresh **did not fix it either** — `curl`ing the actual served CSS chunk both before and after the restart returned byte-identical output, missing the new rules.
+- **Why:** Same cache family as the two prior entries below (`.next/dev/cache/images/` and `.next/dev/cache/turbopack/`), but this occurrence is the proof that a plain process kill + `npm run dev` restart is **not sufficient** — Turbopack's persistent on-disk cache survives a cold process restart, not just Fast Refresh/HMR. Only deleting `.next` itself forced a genuinely fresh compile (confirmed: CSS chunk byte size changed from 70,880 → 71,328 bytes, and the new rules appeared in the served output).
+- **Resolution:** `rm -rf .next` (the whole directory, not just a subfolder this time — done with the server already stopped, per the existing "stop first, then delete" rule from the entry below) then `npm run dev` again.
+- **Watch out for:** If a CSS/JS change isn't showing up and you've already (a) hard-refreshed the browser and (b) killed + restarted the dev server, and it's *still* stale — don't keep restarting, go straight to `rm -rf .next` (server stopped first) before doing anything else. Verify the fix the same way every time: `curl` the page for its `<link>`/CSS chunk URL, `curl` that chunk directly, and `grep` for the specific new rule/string you just added — don't trust "the terminal said Fast Refresh rebuilt" as proof the *served* output actually changed, it isn't.
+
+---
+
+#### Perfect-score "N / N 🎉" text wasn't centered, even though the underlying image was
+- **What broke:** On the quiz result page's perfect-score state, the score text ("5 / 5 🎉") looked off-center — confirmed twice by the user despite the mascot image itself being verified pixel-centered via a `sharp` bounding-box check.
+- **Why:** The emoji was part of the same centered text block as the digits. Centering a string centers its *total rendered width* — the trailing 🎉's extra width pulled the visual weight of the digits themselves to the left of true center, even though the whole string (digits + emoji) was correctly centered as a unit.
+- **Resolution:** Moved the 🎉 into its own absolutely-positioned decorative `<span>` outside the text flow, so the digits ("5 / 5") center independently without the emoji's width affecting their layout.
+- **Watch out for:** A decorative trailing emoji/icon inside an otherwise-numeric or short text block will visually skew that block's perceived center even when the CSS centering is technically correct — if a centered short string "looks" off-center despite the math checking out, suspect a non-text decoration riding along inside the same centered span before re-measuring the underlying content.
+
+---
+
 ## Notes for Teammates
 
 - **✅ SHIPPED — AI "teaching lesson" on wrong quiz answers.** Built during the 2026-06-18→20
@@ -512,6 +547,8 @@ changes everywhere automatically.
 | v.06 | **Merged `main`'s feature-completion push (B/C/D/E) + security hardening.** Deck-detail rebuilt — rename, add/edit/delete card, share + copy public link, PDF export (Pro), study-weak-cards mode, per-deck quiz history (kept FrontEnd's existing delete-deck button, ported onto main's rebuilt page). Deep Dive (Pro) toggle in upload flow; Living Deck reinforcement notice / upsell on quiz result; public read-only deck viewer (`/public/decks/[id]`). Rewards page gained all 4 earn methods (share-a-deck, write-a-review, complete-profile — kept FrontEnd's "Referred by [name]" history entry alongside them); settings gained data export + account deletion; admin gained review verification, user list + grant credits, and audit log. Backend: `app_reviews` table + new atomic RPCs (Living Deck, self-referral earns, review verify, account deletion), Pro-expiry cron, payment Realtime. Security audit: closed a public-deck IDOR (owner-scoped deck lookups), CSRF/JSON/rate-limit gaps on new routes, trimmed public projection, pinned function `search_path`. Full schema applied live; typecheck + lint + 75 tests green. |
 | v.07 | **Theming + polish pass.** New "Preferred style" section in Settings — dark mode (Night Lamp palette), font-size adjuster, and a 5-pairing font picker, all wired through a new `ThemeProvider` (`src/lib/theme/ThemeProvider.tsx`) with live-preview-then-explicit-Save UX (anti-flash inline script in `layout.tsx`, localStorage-only persistence, whole app re-themed via CSS custom properties, not per-page). Header/nav fixed to span the full width and sit at the screen corners (`maxWidth: 1200` → `"100%"` across all app pages); the active page's own nav label now bolds/colors itself; every header nav link/button got a hover state (`.nav-link` class in `globals.css`). New hover-lift / button-press / fade-up animation system ported from the design concept (fade-up explicitly overrides `prefers-reduced-motion` per product decision — see Known fixes). **Export-my-data removed entirely** per product decision — deleted `/api/account/export`, `exportAccountData()`, its tests, and the Settings UI for it. Renamed all user-facing "credits" copy to "Capycoins" (display text only — `deduct_credit()`, `ApiErrorCode.INSUFFICIENT_CREDITS`, `token_balance`, and other internal identifiers were deliberately left unchanged). Added 3 new Capy character images (`public/capy/teaching-capy.png`, `congrats-capy.png`, `capycoin.png`) — teaching-capy on a wrong quiz answer, congrats-capy on a perfect quiz score, capycoin replacing the 🪙 emoji on every balance display. Typecheck/build/72-test suite all green (3 export tests removed). |
 | v.09 | **Swapped the beaver emoji for real Capy artwork, everywhere.** `🦫` (the literal beaver emoji — there is no capybara emoji in Unicode, flagged as a known gap in `docs/DESIGN_PROPOSAL_CAPY_CALM.md`) was still in use as the mascot on every single page: the nav logo (24px) on all 13 pages, plus the larger loading/empty/error-state mascot (48–56px) on `/`, `/login`, `/signup`, `/settings` (reset-password view), `/dashboard`, and the quiz-result/public-deck "not found" states. Replaced all 22 instances with the existing `public/capy/capy-idle.svg` artwork (a real capybara, already in the repo but never wired up). Typecheck + full 72-test suite green. |
+| v.16 | **Avatar account-menu polish, per-page wordmark decisions, and a real mobile nav fix (closes out the responsiveness work started in v.15).** `AvatarPicker.tsx` converted from hover-reveal to **click-toggle** (`open` state + a `mousedown` outside-click listener via a wrapper `ref`) since hover doesn't work on touch devices anyway; the dropdown now shows the user's email Gmail-style at the top (fetched via `supabase.auth.getUser()`), the card itself enlarged (`min-width` 200→240px, more padding), and the avatar circle resized again (40→44px) with extra right margin. **Per-page "Crammable" wordmark decisions** — established this is a per-page judgment call based on actual crowding, not a blanket rule: removed entirely from `/quiz/[deckId]`, the quiz result page, `/decks/new`, and `/rewards` (replaced with "Topic: {title}" on the quiz setup screen); **centered** (new `position:absolute; left/top:50%; transform:translate(-50%,-50%)` pattern) on `/upgrade` and `/help` instead, since those pages still had room either side and removing it wasn't necessary; **removed then explicitly restored** on `/dashboard` after an iPhone-XR screenshot was initially misread as the cause (it was actually the iPhone 14 Pro reference fitting fine) — Yujin's call: keep the wordmark on dashboard, "find a way the UI remains consistent," which is what the nav-breakpoint fix below is for. **Quiz "Correct!" feedback redesigned from a full-width banner into a small rotated stamp** overlaid on the question card's top-right corner (`position:absolute`, `transform:rotate(-8deg)`, `pointerEvents:"none"`) — the old banner pushed the action buttons down a whole extra row every time an answer was correct; the stamp doesn't affect layout at all. Dashboard's "Free"/"Pro" plan-card label shrunk (`26px`→`20px`font) since a 4-letter word at digit-sized type looked disproportionate next to the single-digit stat cards beside it; the Capycoins stat card enlarged instead (padding 16→22px, icon 44→56px, number 26→32px) to read as the primary credit indicator, not just another equal-weight stat. **Real mobile nav fix, two new breakpoints** (`globals.css`) — `.nav-row`/`.nav-cluster` from v.15 stopped *clipping* but still let the whole cluster wrap under the logo on real narrow phones; added `@media (max-width: 480px)` (tightens gap/padding/avatar to 40px, fits iPhone XR/14 Pro on one line) and `@media (max-width: 390px)` (more aggressive — avatar 32px, smaller wordmark/link font, fits ~360px Androids) — see Known Fixes for the full debugging arc, including a 3rd recurrence of the stale-Turbopack-cache bug that required `rm -rf .next` (not just a process restart) to actually serve the new CSS. Fixed a real centering bug found along the way: the perfect-score "N / N 🎉" text wasn't centering correctly because the trailing emoji's width was pulling the digits' visual center left — moved the emoji into its own absolutely-positioned decorative span outside the text flow (see Known Fixes). `npx tsc --noEmit` clean and the full 72-test suite green throughout every change in this entry. |
+| v.15 | **Copied UI mockups #7/#7b ("Quiz results") and #9 ("Avatar system") onto the real app; new Help & Support page.** Quiz results (`src/app/quiz/[deckId]/result/page.tsx`): replaced the flat percentage/label with an animated SVG score ring (count/total, fills on mount via a `ringAnimated` state flip), a Capy reaction bubble using the user's *actual* uploaded avatar plus a score-banded Taglish message (90+/75+/60+/below), relabeled the breakdown grid "Correct ✓"/"Review again" with moss/clay-style coloring, and reordered actions to ← Back to deck / Review N wrong (scrolls to the missed-cards list) / Try again ↺, with Dashboard kept as a small secondary link. **Perfect-score variant (#7b)**: swaps to `congrats-capy.png` (bobbing), "N/N 🎉", and a 2-button set (← Back to deck / Try a harder deck →) — the breakdown grid is hidden since it'd be redundant. **Avatar system (#9)**: a new dedicated `/settings/avatar` page (not a Settings sub-section — corrected mid-build after first building it in the wrong spot) replaces the nav tooltip's inline upload trigger. Left card shows the concept's actual `ALL Selection.png` sticker-set art (copied from `ui-concept/`, re-encoded losslessly via `sharp` at 640×960 — first compression pass used PNG palette quantization and visibly banded/blurred, redone with `palette: false`) sized to 260px and crossed with two decorative CSS "tape" strips reading "COMING SOON," plus a `.tooltip-wrap`/`.tooltip-bubble` hover ("This is unavailable for now.", new `UIMessages.avatarStylesUnavailable`) since none of those styles have real per-style art yet. Right card is the one actually-real part: upload now stages a **preview before committing** (`previewSrc` state) with explicit Save changes/Cancel buttons instead of applying on file-select — "Use default Capy" was folded into the same preview/confirm flow rather than resetting instantly, since a misclick could otherwise wipe a custom photo with no confirmation; removed the same "Use default Capy" shortcut from the nav tooltip entirely (it only lives on the dedicated page now) per Yujin's "looks bad that u can just click... accidentally." Renamed "Your Capy"/"YOUR CURRENT CAPY" → "Your Profile"/"Profile picture" since Capy is the mascot, not the user. New `Routes.avatar` (`/settings/avatar`). **New `/help` page** (`Routes.help`): contact card (`App.supportEmail`, changed to `crammablesupport@gmail.com` per Yujin — not created yet, co-devs to set up) plus 5 FAQ entries (AI/consent, Free vs Pro limits, pending Pro payment, account deletion, generic "something's broken"), linked from the dashboard nav next to Settings — not rolled out to every page's nav, since that's the same already-tracked "no shared Navbar/Footer" gap, not a new one. Also fixed a real spacing bug on `/settings` (the Session and Danger Zone cards rendered with zero visible gap despite `marginTop: 16` on Danger Zone — added an explicit `marginBottom: 16` on Session directly rather than relying on the next element's margin, and proactively cleared the Turbopack dev cache since this exact "code looks right but doesn't render" symptom matched a documented stale-cache bug from earlier in the week). `App.version` bumped `v.14` → `v.15` (not pre-confirmed with Yujin before bumping — flagged to him after the fact, he said keep it). `npx tsc --noEmit` clean and the full 72-test suite green throughout; zero new lint errors (only the same pre-existing `<img>`-vs-`next/image` warnings already present elsewhere in the codebase). **Also added a "Share score" button on the result page** (both perfect and non-perfect branches): builds a 1080×1080 PNG card client-side via `<canvas>` (background/text colors pulled live from the active theme's CSS vars so it matches light/dark, mascot art + score + reaction headline + deck title + app branding drawn directly, no DOM screenshot library). On share-capable browsers (`navigator.canShare({ files })`) it opens the native share sheet with the image + a generic homepage link (`window.location.origin + Routes.home`); otherwise it downloads the PNG and copies the homepage link to the clipboard (kept as a secondary "download score card" option). **Pivoted same session:** after seeing the Windows native share sheet for the PNG, Yujin decided he wants the real thing — a per-result deep link — and explicitly approved the backend work this requires. Built the **frontend half now, backend pending**: `QuizResultData.sessionId` now flows from `submitFinalResult()` through to the result page; a new "Share this result" card (`toggleResultShare()`/`copyResultLink()`, mirrors the existing deck-share card almost exactly) toggles `isPublic` and shows a copyable `Routes.publicResult(sessionId)` link; a new public page `src/app/results/[sessionId]/page.tsx` mirrors `/public/decks/[id]/page.tsx` (read-only score showcase + signup CTA). New `contracts.ts` entries: `Routes.publicResult`, `ApiPaths.quizResultShare`/`publicResult`, `ShareQuizResultResult`, `PublicQuizResult` — all explicitly commented `NOT YET IMPLEMENTED`. None of it works yet (the backend route doesn't exist — every toggle/fetch correctly shows its error state), by design: full backend requirements (new `quiz_sessions.is_public` column, RLS policy, two routes) are spelled out in the Pending section below for whoever picks it up. |
 | v.14 | **Copied UI mockup #4 (`ui-concept/v1/capy-lofi-concept.html`, "Generating — Capy is on it") onto `PdfUploadFlow.tsx`'s uploading/generating screen.** Was a bare capy-reading image + spinner + one status line; now a title ("Reading your PDF, hang tight…"), a deck-name/card-count subtitle, a 3-row checklist ("Extracted your text" / "Finding key concepts…" / "Writing your flashcards"), a progress bar, and a "Capy will use 1 Capycoin for this" footer. Two deliberate adaptations from the literal mockup, since the real data isn't available the way the concept assumes: (1) page count — the production `/api/upload` response doesn't return a page count at all (`pageCount` only exists on the `PDF_EXTRACTION_TEST_MODE`-only debug payload), so "Extracted text from N pages" only shows a real number when OCR ran (`pageProgress.total`, Layer 2) and falls back to "Extracted your text" otherwise rather than fabricating a figure; (2) the "Finding key concepts…"/"Writing your flashcards" split is a timer-based approximation (`genStage`, advances via one `setTimeout` ~2.5s into the call) — `/api/generate` is a single opaque DeepSeek round trip with no real sub-progress signal, so this is "perceived progress" in the same spirit as the concept's own "no blank spinner" intent, not a measured metric. Real signal kept honest where it exists: row 1 ("Extracted your text") is driven by an actual phase transition (`phase === "uploading"` → `"generating"`), only rows 2/3 are simulated. The footer's remaining-balance count (third adaptation, originally dropped) was added back per Yujin's "can we not do #3?" — `checkConsent()`'s existing profile read picked up `token_balance` alongside `consent_deepseek`/`subscription_tier` (one extra column on a query this component already runs, no new fetch), and the footer now reads "Capy will use 1 Capycoin · N remaining" with a real number. Worded as *anticipated* ("will use," not "used") rather than copying the concept's past-tense "Capy used 1 credit" — the backend only deducts on a *successful* generation (never on AI failure, per the standing rule), so claiming it's already used while the call is still in flight would be stating something not yet true if it ultimately fails. Cleaned up `statusLine` while in this code — it was the only thing the old block displayed, and replacing that block left it write-only everywhere else (lint caught it: `'statusLine' is assigned a value but never used`); removed the state and all ~8 `setStatusLine(...)` call sites rather than leaving dead code. Also fixed a `react-hooks/set-state-in-effect` lint error introduced by the first draft of the new `genStage` timer (was resetting state synchronously inside the effect body on phase change) by moving that reset into `callGenerate()`'s existing `setPhase("generating")` call instead, leaving the effect to only set state from its `setTimeout` callback. `npx tsc --noEmit` clean, `npm run lint` shows zero new errors/warnings (3 pre-existing `set-state-in-effect` errors elsewhere in the codebase, untouched), full 72-test suite green. |
 | v.13 | **Copied UI mockup #5 (`ui-concept/v1/capy-lofi-concept.html`, "Flashcard — study mode") onto the real `/decks/[id]` flip-card viewer — "✓ Got it" / "✗ Review again" self-report buttons, with real backend persistence** (confirmed with Yujin via AskUserQuestion — full persistence, not a visual stub). Reused the existing-but-previously-unused `apply_card_review()` RPC (schema §4.12) and its `applyCardReview()` TS wrapper — no schema changes. Added `getFlashcardById()` to `src/lib/db/flashcards.ts`, a new `POST /api/flashcards/[id]/review` route (mirrors the sibling PATCH/DELETE route's CSRF/auth/rate-limit/RLS-404 pattern), and `ReviewCardRequest`/`ReviewCardResult` + `ApiPaths.flashcardReview`/`RateLimits["/api/flashcards/[id]/review"]` in `contracts.ts`. The server computes the new `difficulty_score` itself (same nudge formula `submit_quiz_result()` uses) rather than trusting a client-supplied value, since self-reported review has no answer to grade against. Frontend: two new buttons below the flip card on `/decks/[id]/page.tsx`, styled with the theme's `--success`/`--error` tokens (matching the mockup's moss/clay colors) plus `!important` hover swaps (`.btn-review-correct`/`.btn-review-wrong` in `globals.css`) per this session's established hover-fix pattern. **Also added a quiz sub-type default picker to `/decks/[id]`** — Yujin pointed out the existing Multiple Choice/Identification/Mixed picker only ever appeared on the quiz page's own setup screen, with no way to see or set it from the deck page. New `src/lib/quiz/defaultQuizType.ts` (localStorage, keyed per deck — a lasting preference, not a `pauseState.ts`-style transient session value) backs a 3-chip row in the bottom Quiz CTA section; selecting a chip there pre-selects that type as the quiz page's `selectedType` initial state (still changeable on the actual setup screen before starting — a default, not a lock, confirmed with Yujin). Self-report buttons then went through several rounds of hover/styling feedback (Discord-reference hover effects, repositioned and toned down — see Last Session below for the full iteration and the Turbopack stale-CSS-cache bug it surfaced), and a final UX pass: relocated and reworded the "Click card to flip" hint (now "Click card to view answer" / "Click card to flip back", sitting between the card and the Got it/Review again buttons instead of the top header row), plus auto-advancing to the next card immediately after either button is clicked instead of requiring a manual Next click — which itself now auto-flips the card to reveal the answer first (smooth, existing 0.4s rotation) if it wasn't already flipped, with a short floor delay so the flip is never cut off by a fast API response, before advancing. The quiz pills' hover (`.quiz-pill:hover`) lost its lift/shadow per feedback ("looks like it's moving") — now a plain background swap, same register as the quiz-type chips. **Gated "Study weak cards" on having completed one full pass of the deck** — Yujin asked whether it touches the backend (it doesn't; `studyWeakMode` is a pure client-side re-sort of the already-loaded `cards` array by `difficulty_score`, no API call) and pointed out that sorting by difficulty is meaningless before every card has been reviewed at least once, since `difficulty_score` sits at its untouched default until then. New `hasCompletedFullPass = cards.length > 0 && cards.every(c => c.times_seen > 0)` (`times_seen` is bumped by both study-mode review and quiz answers, so either counts); the button locks with the same `tooltip-wrap`/`title` pattern Export PDF (Pro) already uses, new `UIMessages.studyWeakCardsLocked` copy. A `useEffect` also drops out of weak-cards mode automatically if a newly-added card (fresh `times_seen: 0`) flips a deck from "fully passed" back to not, mid-session. **Fixed a real bug Yujin caught: auto-advance could strand you on the last card.** Free navigation (arrows/dots) lets you jump straight to card 20 of 20 without ever answering 1-19; answering just that one then clamped at `total - 1` forever, with no way back to the unanswered cards short of manually clicking through. New `reviewedThisVisit` (a `Set<string>` of card ids answered this visit, separate from `times_seen` which persists across past sessions) plus a `findNextUnanswered()` wrap-around search — auto-advance now routes to the next not-yet-answered card, wrapping back to the start of the deck if needed, instead of clamping at the end. Also fixed an adjacent gap found while in the same code: `times_seen` was never incremented in local state after a study-mode review (only `difficulty_score` was), which would have kept "Study weak cards" locked all session even after a real full pass, until a refresh re-fetched from the backend. See Known Fixes below for the full writeup. **Added an answered badge to the dot indicators**, per Yujin's suggestion — `reviewedThisVisit` upgraded from `Set<string>` to `Map<string, boolean>` (card id → outcome) so the dots can badge green/red, not just track membership. Fixed a latent bug found while wiring this up: the dots always mapped over `cards` (raw insertion order) instead of `displayCards` (the order actually shown, which "Study weak cards" mode re-sorts) — harmless before since it only used the index, but would have badged the wrong card's outcome once weak-cards mode was active. **Then fixed the badge itself per feedback** — the first version had the current dot's gold fill fully override its own answered color, so a card you were currently sitting on couldn't show whether it was already answered, and the "current" dot blended into the row at a glance (confirmed via `AskUserQuestion` which exact problem it was). Reworked so position and outcome are two independent visual channels instead of one fighting over fill: outcome is always the dot's fill color (gray/green/red, current or not), current-ness is always a `1.5px solid var(--primary)` gold ring + the wider pill shape, regardless of what color it's filled with. **Then removed the 12-dot cap entirely** — Yujin caught that once you're past card 12 (e.g. "Card 18 of 20"), the row only ever rendered dots for the first 12 cards plus a plain "+8" text count for the rest, so there was no dot at all to show your current position or any answered badge for cards 13 onward. Dropped the `.slice(0, Math.min(total, 12))` cap and the "+N" span — every card now gets a real dot, and the row (`flexWrap: "wrap"`) wraps onto extra lines for decks too long to fit one row rather than truncating information. `npx tsc --noEmit` clean and the full 72-test suite green. |
 | v.12 | **Merged `main`'s live explanation feature into `FrontEnd`; gave it a real quiz-page UI; theming/animation polish pass.** Pulled `origin/main` (commit `1d5c002`, the backend dev's re-implementation of the wrong-answer "teaching lesson" — `flashcards.explanation` column, `ApiPaths.explainAnswer`/`POST /api/quiz/explain`, `Flashcard.explanation`/`GeneratedCard.explanation`/`QuizQuestion.correctExplanation`) into `FrontEnd`; `contracts.ts` merged cleanly, only `src/app/quiz/[deckId]/page.tsx` and this file had real conflicts, both resolved. Built a dedicated wrong-answer sidebar on the quiz page (`flex` row, main column + `flex: "0 0 220px"` sidebar) instead of `main`'s inline banner: a CSS-only `.speech-bubble` (no image asset — the bubble tail is a rotated `::after` square) showing "Not quite — Capy's got you" plus the live `explanation`/`explanationLoading` state, next to a 96×96 `teaching-capy.png` card. Removed `teaching-capy.png`'s baked-in white background (same `sharp` flood-fill-from-edges technique as `capy-reading.png` below — was colorType 2/opaque RGB, now genuine alpha, 1.64MB → 74KB). New `public/capy/capy-reading.png` (capybara-reading-a-PDF art, background removed + resized/compressed) replaces the bare spinner during `PdfUploadFlow.tsx`'s uploading/generating phase, with a gentle CSS bob animation. `AuthCard.tsx`'s Sign up/Log in toggle link got a hover state (`.text-link` class) and the mode switch now crossfades (`anim-fade-up` keyed on `mode`) instead of jumping, both modes aligned from the top instead of center-jumping; signup form spacing tightened to fit without scrolling (Gizmo-referenced). Fixed a real bug: dark mode was persisting onto public marketing/auth pages after logout, since it's a localStorage device preference with no "log out" concept — `ThemeProvider.tsx` and `layout.tsx`'s anti-flash script now force light theme on `contracts.ts`'s `// Public`-tagged routes regardless of the stored preference. `/upgrade`'s pending-payment ⏳ now flips like a real hourglass (`hourglassFlip` keyframe). `/decks/new` tightened (padding/header/disclaimer sizing) to fit on screen without scrolling. **Animated every full-page loading state app-wide** — all 9 bare "Loading…" text-only screens (`/admin`, `/dashboard`, `/decks/[id]`, `/public/decks/[id]`, `/quiz/[deckId]` loading/starting/submitting phases, `/rewards`, `/settings`'s own loading state and its `Suspense` fallback, `/upgrade`) replaced with a new shared `src/components/ui/PageLoading.tsx` (spinner + message, reusing the existing `.spinner` CSS class) instead of static text. **Quiz page got a Pause/End quiz header (deck title + Question X of Y, matching the design concept) and smoother animations** — Pause saves progress to `sessionStorage` and auto-resumes on reopen; End quiz forfeits remaining questions as wrong via a shared `submitFinalResult()` helper; added a spring "pop" animation for correct-answer reveals and a per-question fade transition. **Dashboard deck cards gained a "⋮" Edit/Delete menu and a "Continue — Question X of Y" indicator** for paused quizzes, reading from a newly-shared `src/lib/quiz/pauseState.ts`. `npx tsc --noEmit` clean and the full 72-test suite green after the merge and every change. |
@@ -558,8 +595,41 @@ changes everywhere automatically.
 > badge, the dot cap removed entirely) — see the dated log below for all of it, including
 > two real bugs caught and fixed mid-session (auto-advance could strand you on the last
 > card; the quiz page's question card was shrinking/sliding depending on answer state).
-> **Next concrete to-do, logged in Pending below: concept sections #7/#7b (quiz results
-> polish) and #9 (avatar system — needs a scoping decision on art assets first).**
+>
+> **Update (2026-06-23, later same day):** Now on v.15. Concept sections **#7/#7b and #9
+> are done** (see v.15 row in Version History above) — quiz results got the SVG score
+> ring + Capy reaction bubble + perfect-score variant, and the avatar system got a real
+> dedicated `/settings/avatar` page (real upload with a preview/confirm step, plus the
+> concept's actual sticker-set art shown taped-shut as "coming soon"). Also shipped a new
+> `/help` page (FAQ + `App.supportEmail`, now `crammablesupport@gmail.com`). Per Yujin's
+> later final scoping call, **all 10 concept sections are now resolved** — #1/#8 decided
+> not necessary (text-only record), #6/#10 confirmed already done/settled, #7/#7b/#9 done
+> above. Also fixed the cramped missed-cards layout (numbered, stacked correct/your-answer
+> blocks instead of inline label+text), anglicized the lowest-score reaction copy, fixed
+> the deck-title caption ("HTML" → "HTML Quiz"), and ran down a real bug where
+> `congrats-capy.png`/`teaching-capy.png` showed a white box in real browsers — root cause
+> was `next/image`'s WebP conversion silently dropping the alpha channel; fixed by
+> switching both to plain `<img>` tags (see the dated log below for the full debugging
+> arc). **Just added a client-side "Share score" canvas card + share/download flow**
+> (same v.15 row above) — no backend touched.
+>
+> **Update (2026-06-24): Now on v.16, pushed to `origin/FrontEnd` and PR'd to `main`.**
+> Picked up exactly where v.15 left off (it was never pushed separately — this PR carries
+> both). Avatar dropdown went from hover to click-toggle (touch devices don't have hover)
+> with the user's email shown Gmail-style at the top. Spent real time on a recurring
+> "Crammable" wordmark crowding complaint across several pages — landed on a **per-page
+> decision** (remove / center / keep) based on each page's actual content, not one global
+> rule; the dashboard case specifically went remove → restore after a screenshot was
+> initially misread as iPhone XR when it was iPhone 14 Pro, which is the origin of the
+> two-tier (`480px`/`390px`) nav breakpoint fix in the v.16 row above — that fix is what
+> actually lets the wordmark stay on dashboard without clipping on a real narrow phone.
+> Redesigned the quiz "Correct!" feedback from a layout-shifting banner into a small
+> rotated stamp. **Hit the stale-Turbopack-cache bug a third time** — this occurrence
+> proved a process kill + `npm run dev` restart isn't sufficient on its own, only
+> `rm -rf .next` reliably forces a fresh compile; see Known Fixes, this is worth knowing
+> before burning another round-trip on it. Everything in this update plus everything
+> carried over from v.15 is now one PR — see the top of this file's Pages/API tables for
+> current status, nothing else changed there this round.
 
 **Last session: 2026-06-22 [Personal PC] — merged `main`'s live explanation feature, quiz wrong-answer sidebar, theming/animation polish**
 
@@ -884,36 +954,138 @@ changes everywhere automatically.
   column's width *or* position, regardless of which state is showing.
 
 ### Pending (as of 2026-06-23, Personal PC)
-- Committed and pushed to `origin/FrontEnd` at the end of this session (see commit log).
-- **TO-DO TOMORROW — next 3 concept sections to copy** (`ui-concept/v1/capy-lofi-concept.html`),
-  continuing the same "copy mockup #N onto the real page" pattern this session used for #4
-  and #5:
-  - **#7 "Quiz results — Capy reacts"** — the real result page
-    (`src/app/quiz/[deckId]/result/page.tsx`) already has *some* of this (a score-based
-    emoji/label/color/image picker in `scoreLabel()`, the percentage display) — this is a
-    **polish/match pass, not a from-scratch build**. Concept adds: a circular SVG score
-    ring (currently just text), a "Capy reaction" bubble styled as a card (avatar + bolded
-    reaction line + a softer second line), a 2-column Correct/Review-again breakdown grid,
-    and 3 action buttons (← Back to deck / Review N wrong / Try again ↺).
-  - **#7b "Quiz results — perfect score (100%)"** — variant of the above for a 10/10 score.
-    `congrats-capy.png` already exists and is already wired to the perfect-score case in
-    `scoreLabel()` — this section is about matching the *exact* perfect-score layout
-    (Capy front-and-center, bigger, with a bob animation) and swapping the action buttons
-    to ("← Back to deck" / "Try a harder deck →") instead of the normal 3-button row.
-  - **#9 "Avatar system — your Capy identity"** — the app already has a working
-    `AvatarPicker` (CSS-filter "moods" over one base image, from the v.10/v.11 sessions)
-    plus a separate custom-avatar upload feature — **but the concept shows a real
-    multi-image AI-generated sticker set** (`ALL Selection.png` — hats, distinct styles,
-    not just CSS filters over one image). No such asset set exists in `public/capy/` yet.
-    Confirm with Yujin before starting this one specifically: is the CSS-filter approach
-    being kept long-term (cheap, no new art needed), or is actual multi-image avatar art
-    now in scope (needs real assets generated/sourced first — bigger task than #7/#7b)?
-- Discovered but **not yet fixed**: `public/capy/congrats-capy.png` and
-  `public/capy/avatar-default.png` have the same baked-in-white-background issue
-  (colorType 2, no alpha) as `teaching-capy.png` had — flagged for a future pass, not
-  acted on yet since it wasn't asked for this session.
+- **All 10 concept sections from `ui-concept/v1/capy-lofi-concept.html` are now resolved**
+  — closing out the "copy mockup #N onto the real page" thread that ran across v.10–v.15:
+  - **#1 (empty state) and #8 (Capycoin showcase) — DECIDED NOT NECESSARY** (Yujin,
+    2026-06-23). Both are static/explainer mockup sections with no real functional gap
+    behind them — the dashboard's zero-deck state already works, and the coin icon +
+    balance already appear in the nav pill and the upload screen's footer (v.14). No code
+    change; this entry is the record of the decision, not a TODO.
+  - **#6 (quiz-taking screen) and #10 (live style picker) — DONE/settled** (Yujin,
+    2026-06-23). #6: the live quiz page's existing functionality (pause/resume header,
+    progress bar, wrong-answer sidebar, pop animations, built across v.12/v.13/this
+    session's layout fix) is confirmed close enough — no further fidelity pass needed.
+    #10 stays out of scope (concept-demo tooling, never a real feature to begin with).
+  - **#7, #7b, #9 — DONE**, the only sections that needed real engineering this round (see
+    v.15 row above). Committed and pushed as part of v.16, alongside everything else dated
+    2026-06-24 below — see top of "For Claude" lifeline block.
+- **FIXED:** `public/capy/congrats-capy.png` and `public/capy/avatar-default.png` had the
+  same baked-in white background (no alpha) as `teaching-capy.png` had — same flood-fill-
+  from-edges `sharp` technique applied, resized to 400px, both now genuinely transparent.
+  1.9MB → 236KB and 1.7MB → 194KB respectively. **Side note, real finding:**
+  `avatar-default.png`'s EXIF/XMP metadata contained Canva export info including a
+  `pdf:Author` field with Yujin's real name — leaked into a file already committed and
+  pushed to the shared `origin/FrontEnd` remote (commit `89b89fd`) that co-devs can read.
+  The re-encode strips all EXIF/XMP (confirmed `hasExif: false, hasXmp: false` on the new
+  file), so it won't carry forward — but the **old commit still has the original file with
+  the metadata intact** in git history. Flagged to Yujin; no history rewrite attempted
+  (rewriting a shared branch's history needs explicit sign-off, not assumed).
+- **Backend work needed: shareable quiz results.** Yujin decided the result page's "share
+  score" feature should be a real per-result link (not just a generic homepage redirect +
+  downloadable PNG, which is what got built first and now stays as a secondary "download
+  score card" option). The frontend UI is built and ready — wired against an API shape
+  that **does not exist on the backend yet**. This mirrors the existing deck-sharing
+  feature (`decks.is_public` + `/api/decks/[id]/share` + `/api/public/decks/[id]` +
+  `/public/decks/[id]`) almost exactly; co-devs should copy that pattern, not invent a new
+  one. What's missing, concretely:
+  - **Schema:** `quiz_sessions.is_public BOOLEAN NOT NULL DEFAULT false` (new migration).
+  - **RLS:** a new SELECT policy on `quiz_sessions`, `USING (is_public = true)` — same
+    shape as the existing "decks: anyone read public" policy (`schema.sql` §5, ~line 1659).
+  - **`POST`/`DELETE /api/quiz/[sessionId]/share`** — toggles `is_public` on a session the
+    caller owns (RLS already scopes the write via `auth.uid() = user_id`, same as
+    `setDeckPublic()` in `src/lib/db/decks.ts`). Response shape is already in
+    `contracts.ts`: `ShareQuizResultResult { isPublic: boolean }`.
+  - **`GET /api/public/results/[sessionId]`** — anonymous read, gated on `is_public = true`.
+    **Must project only safe fields** — no `user_id`, no `quiz_answers` (a public result
+    page should never leak which specific questions someone missed). Response shape is
+    already in `contracts.ts`: `PublicQuizResult { deckTitle, scorePercent, correctCount,
+    totalQuestions, completedAt }` — `deckTitle` needs a join to `decks.title` (safe to
+    expose even if the deck itself is private — it's just a label, same as the existing
+    `listQuizSessionsForUser()` join in `src/lib/db/quiz.ts`).
+  - Frontend pieces already done and waiting on the above: `QuizResultData.sessionId` now
+    flows from `submitFinalResult()` through to the result page; the result page has a
+    "Share this result" / "Make public" toggle card (mirrors the deck-share card exactly,
+    `toggleResultShare()`/`copyResultLink()`) that calls `Routes.api.quizResultShare()`;
+    and a new public page at `/results/[sessionId]` (`src/app/results/[sessionId]/page.tsx`)
+    that fetches `ApiPaths.publicResult()` and renders a read-only score showcase + signup
+    CTA, mirroring `/public/decks/[id]/page.tsx`. Right now every one of these correctly
+    shows its error/not-found state, since the backend route 404s — that's expected, not a
+    bug, until the above lands.
+  - **Not implemented and not asked for:** no referral-credit incentive for sharing a
+    result (decks get +Capycoins for sharing — flagged as a possible future parallel, not
+    built since Yujin didn't ask for it here).
+- **Mobile/tablet responsiveness pass on every page's nav bar.** Yujin tested via Chrome's
+  device toolbar (iPhone XR, 414px) and found the deck page's nav clipping the username and
+  avatar off-screen — the right-side cluster (Capycoin pill + name + avatar) had no
+  wrap/shrink behavior in a `display:flex, justifyContent:space-between` row with a fixed
+  `height: 64`. Same nav shape is duplicated inline across every page (no shared Navbar
+  component yet — known gap), so this was systemic, not a one-page bug. Fixed everywhere
+  it appears (15 files: `dashboard`, `decks/[id]`, `decks/new`, `rewards`, `upgrade`,
+  `settings` (both its navs), `settings/avatar`, `admin`, the homepage, `forgot-password`,
+  `help`, `public/decks/[id]`, `quiz/[deckId]`, `quiz/[deckId]/result`,
+  `results/[sessionId]`) with two new shared `globals.css` classes: `.nav-row` (flex-wrap +
+  row-gap on the outer row, `height: 64` → `minHeight: 64` so wrapped content isn't
+  clipped) and `.nav-cluster` (flex-wrap on the right-side item group). A `.nav-collapse`
+  class + `@media (max-width: 480px)` query hides the lowest-priority text first (the word
+  "Capycoins" — the number+icon stays, dashboard's email address, the first-name label on
+  the deck page) so what's left stays compact instead of wrapping into a cluttered 3-line
+  mess. This is computed live by the browser at any viewport width — phone, tablet,
+  desktop — not a fixed rule tuned for one device size. No hamburger menu / nav redesign
+  built — out of scope for what was asked (stop content from clipping off-screen), not a
+  missing feature.
+- **Default theme/font flipped to dark + Baskerville**, relayed by Yujin from co-dev
+  Christian ("yun talaga pinaka gusto nila"). Changed both halves that have to agree or a
+  first-time visitor flashes the old defaults for one frame: `ThemeProvider.tsx`'s
+  `useState<ThemeMode>("light")` → `"dark"` and `useState<FontPairKey>("lora")` →
+  `"baskerville"`, **and** `layout.tsx`'s anti-flash inline script, which previously only
+  forced dark/a font pair when localStorage explicitly had one saved — now falls back to
+  `"dark"` / `"baskerville"` when nothing's stored yet, so brand-new visitors land directly
+  on the real default instead of light/Lora-then-flip. Public/pre-login pages (home, login,
+  signup, forgot-password) are unchanged — still forced light regardless, per the existing
+  documented reason (a shared-browser dark-mode leak onto the next visitor's auth pages).
+  Anyone who already explicitly picked light/a different font in Settings keeps their
+  choice (only the *default* for new/never-chosen users changed). No schema/contracts.ts
+  change — this is pure `ThemeProvider`/`layout.tsx` state, `tsc`/lint/72-test suite all
+  green. Added `"(default)"` labels to the Dark/Baskerville chips in Settings' Appearance
+  picker per Yujin's follow-up, so the picker itself shows which option is now the default.
+- **Nav avatar circle recentered + enlarged.** `public/capy/avatar-default.png` had the
+  same kind of off-center content as `congrats-capy.png` earlier this session (73px top
+  margin vs. 55px bottom, ~4.5% vertical offset within its own 400×400 canvas) — re-cropped
+  and re-centered the same way (now 64/64 top-bottom, 41/40 left-right). `AvatarPicker.tsx`'s
+  circle bumped 32px → 40px.
+- **Settings + Log out moved into the avatar dropdown** (Gmail-style account-menu pattern,
+  Yujin's reference screenshot) instead of sitting as separate persistent nav-bar links/
+  buttons. `AvatarPicker.tsx` now owns `handleLogout` directly (`getSupabaseBrowserClient().
+  auth.signOut()` + redirect to `Routes.home`) and renders a "Settings" link + "Log out"
+  button below "Change profile picture" in its existing hover tooltip — previously
+  `handleLogout` only existed in `dashboard.tsx`, so `decks/[id]` and `decks/new` had **no
+  way to sign out at all** without navigating back to the dashboard first; this fixes that
+  for every page that renders `<AvatarPicker />`, not just dashboard. Removed the
+  now-duplicate "Settings" link + "Log out" button (and the dead `handleLogout` function)
+  from `dashboard.tsx`'s nav, and the duplicate "Settings" link from `decks/new.tsx`'s nav
+  — also directly helps the mobile nav-wrapping fix from earlier today, since it's two
+  fewer items competing for space in the main row. Left `profile.email` in dashboard's nav
+  as-is (still hidden under 480px via `.nav-collapse`) — wasn't asked to move it, only
+  Settings/Log out were.
 - Carries forward everything still open from the v.11 entry below (OAuth/phone backend
-  work, remaining out-of-scope concept sections, app-wide chrome gap).
+  work, app-wide chrome gap).
+
+### Pending (as of 2026-06-24, Personal PC) — what's actually still open for backend
+Everything above this point in the 2026-06-23 entry (concept sections, avatar/theme/nav
+polish) is now done and pushed as part of v.16. What's genuinely still outstanding:
+- **Backend: shareable quiz results** (full spec a few bullets up — schema column, RLS
+  policy, two routes). This is the one concrete, ready-to-build backend ask sitting out of
+  the whole v.15/v.16 arc; everything else in this PR is frontend-only.
+- **OAuth (Apple/Google) + phone-number auth** are still UI-only placeholders on the
+  login/signup card (carried forward from v.11) — needs Supabase OAuth provider config, a
+  callback route, and an SMS gateway before they can go live.
+- **App-wide chrome gaps**, unchanged from prior sessions: no `not-found.tsx`/`error.tsx`/
+  `loading.tsx`, no shared `<Navbar>`/`<Footer>` (every page still re-implements its own nav
+  inline — this is *why* the nav-wrap/breakpoint fixes in v.16 had to touch 15+ files
+  individually instead of one component), no admin nav link (reachable only by typing the
+  URL).
+- **`/api/quiz/explain` latency on old cards** (10-30s per wrong answer, no DB write-back) —
+  flagged in Notes for Teammates below, still open as of this entry.
 
 ---
 

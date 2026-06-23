@@ -199,6 +199,102 @@ button:not(:disabled):active {
 .anim-fade-up-4 { animation: fadeUp 0.6s ease 0.24s both; }
 .anim-fade-up-5 { animation: fadeUp 0.6s ease 0.3s both; }
 
+/* ── Responsive nav (every page duplicates its own nav row inline — no
+   shared Navbar component yet). Below ~480px there isn't room for every nav
+   item on one line; instead of letting the overflow clip off past the edge
+   of a phone viewport (the actual reported bug), the row wraps onto a
+   second line, and the least-essential text collapses first so what's left
+   stays compact. This is recalculated live by the browser at any viewport
+   width — phone, tablet, desktop — not a fixed breakpoint tuned for one
+   specific device. ────────────────────────────────────────────────────── */
+.nav-row {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.nav-cluster {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  row-gap: 6px;
+  /* justify-content: space-between on .nav-row only works with 2+ items on a
+     flex line — once this cluster wraps onto its own line alone, there's
+     nothing to space "between", so it collapses to the left edge instead of
+     staying right-aligned. margin-left: auto pushes it right regardless of
+     whether it's sharing a line with the logo or wrapped onto its own. */
+  margin-left: auto;
+}
+@media (max-width: 480px) {
+  .nav-collapse {
+    display: none;
+  }
+  /* Even with .nav-collapse hiding " Capycoins", the wordmark + pill +
+     Rewards + Help + avatar still ran ~30px over on a 414px-wide iPhone XR,
+     wrapping the whole cluster under the logo instead of staying on one
+     row. These claw the width back; !important is needed because the gaps/
+     padding/size below are inline styles, which otherwise beat a plain
+     class rule in the cascade. */
+  .nav-cluster {
+    gap: 9px !important;
+  }
+  .nav-coin-pill {
+    padding: 4px 10px !important;
+    gap: 4px !important;
+  }
+  .avatar-wrap {
+    margin-left: 5px !important;
+  }
+  .avatar-pic {
+    width: 40px !important;
+    height: 40px !important;
+  }
+}
+@media (max-width: 390px) {
+  /* A second, more aggressive tier for genuinely small phones (Galaxy S8+
+     at 360px, etc.) — the 480px tier above wasn't enough margin for these.
+     Isolated to its own max-width range, so it cannot affect anything
+     wider (iPhone 14 Pro, XR, tablet, desktop keep the tier above/default
+     sizing untouched). */
+  .nav-wordmark {
+    font-size: calc(13px * var(--font-scale)) !important;
+  }
+  .nav-cluster {
+    gap: 7px !important;
+  }
+  .nav-coin-pill {
+    padding: 3px 7px !important;
+    gap: 2px !important;
+  }
+  .nav-link {
+    font-size: calc(12px * var(--font-scale)) !important;
+  }
+  .avatar-wrap {
+    margin-left: 3px !important;
+  }
+  .avatar-pic {
+    width: 32px !important;
+    height: 32px !important;
+  }
+}
+
+/* ── Page content rhythm — outer container padding + the gap between a
+   page's major top-level sections. Shrinks on narrow screens only (desktop
+   keeps its current spacing) so there's less scrolling before you reach the
+   thing you actually came for (e.g. the flashcard on /decks/[id], reported
+   buried under header/share/disclaimer/toolbar on a phone). ─────────────── */
+.page-content {
+  padding: 40px 24px;
+}
+.section-gap {
+  margin-bottom: 24px;
+}
+@media (max-width: 480px) {
+  .page-content {
+    padding: 20px 16px;
+  }
+  .section-gap {
+    margin-bottom: 14px;
+  }
+}
+
 /* ── Nav link hover/active state — applies to every nav-bar link/button
    across pages (Rewards, Settings, Log out, Back, etc.) so the header
    gives feedback on hover instead of sitting static. ──────────────────── */
@@ -432,6 +528,7 @@ button:not(:disabled):active {
   position: relative;
   display: inline-flex;
   align-items: center;
+  margin-left: 6px;
 }
 .avatar-pic {
   border-radius: 50%;
@@ -445,22 +542,22 @@ button:not(:disabled):active {
 }
 .avatar-tooltip {
   position: absolute;
-  top: 40px;
+  top: 44px;
   right: 0;
   background: var(--nav-bg);
   border: 1.5px solid rgba(255, 252, 247, 0.12);
-  border-radius: 14px;
-  padding: 12px;
+  border-radius: 16px;
+  padding: 18px;
   display: none;
   flex-direction: column;
-  gap: 8px;
-  min-width: 200px;
+  gap: 10px;
+  min-width: 240px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
   z-index: 99;
 }
-.avatar-wrap:hover .avatar-tooltip {
-  display: flex;
-}
+/* Visibility is controlled by AvatarPicker.tsx's `open` state (inline
+   `display`) now, not :hover — hover doesn't work on touch devices, and
+   click-to-open/click-again-to-close was specifically requested. */
 
 /* ── Generic small hover tooltip (e.g. "Export PDF (Pro)" explaining the Pro
    gate) — a styled bubble instead of relying on the native `title` attribute,

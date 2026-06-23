@@ -1,10 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import {
-  App,
   ApiPaths,
   QuizType,
   Routes,
@@ -23,6 +21,7 @@ import { readDefaultQuizType } from "@/lib/quiz/defaultQuizType";
 // Stored in sessionStorage so result/page.tsx can display the review.
 export interface QuizResultData {
   deckId:         string;
+  sessionId:      string;
   deckTitle:      string;
   scorePercent:   number;
   correctCount:   number;
@@ -313,6 +312,7 @@ export default function QuizPage() {
 
       const result: QuizResultData = {
         deckId,
+        sessionId,
         deckTitle:      deck?.title ?? "",
         scorePercent:   data.scorePercent ?? 0,
         correctCount:   data.correctCount ?? 0,
@@ -464,11 +464,12 @@ export default function QuizPage() {
         }}
       >
         <div
+          className="nav-row"
           style={{
             maxWidth: "100%",
             margin: "0 auto",
             padding: "0 24px",
-            height: 64,
+            minHeight: 64,
             display: "flex",
             alignItems: "center",
             justifyContent: "space-between",
@@ -482,17 +483,6 @@ export default function QuizPage() {
             >
               <span style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)" }}>← Back</span>
             </a>
-            <span style={{ color: "var(--nav-border)", margin: "0 8px" }}>|</span>
-            <span
-              style={{
-                fontFamily: "var(--font-display, serif)",
-                fontWeight: 700,
-                fontSize: "calc(18px * var(--font-scale))",
-                color: "var(--nav-text)",
-              }}
-            >
-              {App.name}
-            </span>
           </div>
 
           {phase === "quizzing" && (
@@ -502,7 +492,7 @@ export default function QuizPage() {
           )}
           {phase === "setup" && (
             <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>
-              {deck?.title}
+              Topic: {deck?.title}
             </span>
           )}
         </div>
@@ -787,6 +777,7 @@ export default function QuizPage() {
             {/* Question card */}
             <div
               style={{
+                position: "relative",
                 background: "var(--bg-card)",
                 border: "1.5px solid var(--border)",
                 borderRadius: 20,
@@ -794,6 +785,33 @@ export default function QuizPage() {
                 marginBottom: 20,
               }}
             >
+              {/* Correct-answer stamp — overlaid on the card's corner instead
+                  of a full-width banner below the options, so answering
+                  correctly doesn't push the layout down / add a row. */}
+              {hasAnswered && isCorrect && (
+                <div
+                  className="anim-pop"
+                  style={{
+                    position: "absolute",
+                    top: -14,
+                    right: -14,
+                    background: "var(--success-bg)",
+                    border: "2px solid var(--success)",
+                    borderRadius: 10,
+                    padding: "6px 14px",
+                    transform: "rotate(-8deg)",
+                    fontWeight: 700,
+                    fontSize: "calc(13px * var(--font-scale))",
+                    color: "var(--success-dark)",
+                    letterSpacing: "0.04em",
+                    textTransform: "uppercase",
+                    boxShadow: "0 4px 10px rgba(0,0,0,0.2)",
+                    pointerEvents: "none",
+                  }}
+                >
+                  ✓ Correct!
+                </div>
+              )}
               <div
                 style={{
                   fontSize: "calc(11px * var(--font-scale))",
@@ -950,31 +968,6 @@ export default function QuizPage() {
             )}
             </div>
 
-            {/* Correct-answer feedback — the right/wrong call is already made by the
-                option highlighting above; this just confirms it. The wrong-answer
-                case moves to the sidebar bubble instead (see below), so it isn't
-                a second alarm stacked on top of the already-red wrong-answer box. */}
-            {hasAnswered && isCorrect && (
-              <div
-                className="anim-pop"
-                style={{
-                  background:   "var(--success-bg)",
-                  border:       "1.5px solid var(--success)",
-                  borderRadius: 12,
-                  padding:      "14px 18px",
-                  marginBottom: 20,
-                  display:      "flex",
-                  alignItems:   "center",
-                  gap:          12,
-                }}
-              >
-                <span style={{ fontSize: "calc(18px * var(--font-scale))" }}>✅</span>
-                <p style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--success-dark)", margin: 0 }}>
-                  Correct!
-                </p>
-              </div>
-            )}
-
             {/* Action buttons */}
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
               {!hasAnswered ? (
@@ -1080,7 +1073,11 @@ export default function QuizPage() {
                   justifyContent: "center",
                 }}
               >
-                <Image
+                {/* Plain <img>, not next/image — Next's optimizer serves this
+                    as lossy WebP to real browsers and silently flattens the
+                    alpha channel onto white. Same root cause as the quiz
+                    result page's congrats-capy fix. */}
+                <img
                   src="/capy/teaching-capy.png"
                   alt=""
                   width={80}
