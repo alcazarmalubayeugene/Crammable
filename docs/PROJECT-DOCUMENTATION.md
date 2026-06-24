@@ -296,13 +296,18 @@ stays fast and offline; the default `vitest.config.ts` excludes `tests/integrati
   7. Atomic credit economy — `create_deck_with_cards_and_charge` debits exactly one credit,
      and at a 0 balance it errors and creates **no orphan deck** (full rollback).
   8. Payment RLS — one-pending-submission-per-user is enforced; B can't read A's submission.
-- **Scope gap (deliberate):** the route-level IDOR fix on the share / flashcard-create /
-  quiz-start handlers is enforced by the **route** (the owner-scoped `getDeckById`), **not by
-  RLS** — at the raw RLS layer a foreign-card insert isn't blocked (the flashcards `WITH CHECK`
-  only validates `user_id = auth.uid()`). Verifying that fix faithfully needs an **HTTP-level
-  test against a running server** (auth-cookie session driving the real endpoints), which is
-  not yet built. The suite documents this in its header and covers everything the DB itself
-  guarantees. The mocked unit suite + `tsc` cover the route handlers' logic.
+- **Route-level IDOR fix — now covered by the HTTP suite.** The fix on the share /
+  flashcard-create / quiz-start (and rename / delete) handlers is enforced by the **route**
+  (the owner-scoped `getDeckById`), **not by RLS** — at the raw RLS layer a foreign-card
+  insert isn't blocked (the flashcards `WITH CHECK` only validates `user_id = auth.uid()`).
+  Verifying it faithfully needs an **HTTP-level test against a running server** (auth-cookie
+  session driving the real endpoints). That suite now exists: `npm run test:http`
+  (`vitest.http.config.ts`, `tests/http/`) boots the production server and drives
+  authenticated requests as two throwaway users — asserting B is blocked (404 `FORBIDDEN`,
+  no row written) on each owner-scoped route, the CSRF origin check fires, and the
+  `ApiResponse` envelope holds. A negative-control run (guard removed → B's insert returns
+  201) confirmed the tests have teeth. The mocked unit suite + `tsc` still cover handler
+  logic; `test:int` covers everything the DB itself guarantees.
 
 **Smoke-test signup** (second terminal — use a REAL email; Supabase rejects `@example.com`/
 `@test.com`):
@@ -853,8 +858,11 @@ adds anon/authenticated — so any new `SECURITY DEFINER` function in `public` i
 **Still open — data-access / architecture**
 - Generated Supabase types — eliminate the `as` casts throughout the data-access layer.
 - ~~Integration test suite against a real Supabase stack~~ — **built** (`npm run test:int`,
-  10 tests vs the live project; see §5). Remaining: **HTTP-level route tests** (drive the real
-  endpoints with an auth-cookie session) to cover route-layer guards like the IDOR fix that
-  RLS alone doesn't enforce.
+  10 tests vs the live project; see §5).
+- ~~HTTP-level route tests~~ — **built** (`npm run test:http`, `vitest.http.config.ts`,
+  `tests/http/`). Boots the production Next server and drives the real endpoints with
+  auth-cookie sessions to cover route-layer guards the DB doesn't enforce (the IDOR fix on
+  flashcard-create / quiz-start / share / rename / delete, the CSRF origin check, and
+  `ApiResponse` envelope conformance). See §5.
 - Living Deck reinforcement runs inline in the quiz-submit request (adds DeepSeek latency);
   could be moved to an async/background path.

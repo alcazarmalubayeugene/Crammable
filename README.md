@@ -9,6 +9,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 - [`docs/MISSING_FEATURES.md`](./docs/MISSING_FEATURES.md) — feature gap analysis (all items ✅ as of v.17; see the status banner).
 - [`docs/BASIC_UI.md`](./docs/BASIC_UI.md) — UI inventory & gap list (chrome gaps closed in v.17; admin link intentionally URL-only).
 - [`CLAUDE.md`](./CLAUDE.md) / [`AGENTS.md`](./AGENTS.md) — backend rules and conventions.
+- [`docs/LAUNCH_OPS.md`](./docs/LAUNCH_OPS.md) — pre-launch dashboard runbook: Google OAuth provider + custom SMTP setup (code is done; these are external config gates).
 - [`docs/PROJECT-DOCUMENTATION.md`](./docs/PROJECT-DOCUMENTATION.md) · [`docs/TODO.md`](./docs/TODO.md)
 
 ## Testing
@@ -16,9 +17,18 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 ```bash
 npm test          # 72 unit tests (Vitest, Supabase mocked, offline)
 npm run test:int  # 10 integration tests against the live Supabase project
+npm run test:http # 8 HTTP route tests — boots the prod server, drives real
+                  # auth-cookie requests (route-layer guards RLS can't enforce)
 npm run typecheck # tsc --noEmit
 npm run lint      # eslint
 ```
+
+`npm run test:http` needs a production build first — run `npm run build`, then
+`npm run test:http` (or set `HTTP_TEST_AUTOBUILD=1` to build automatically, or
+`HTTP_TEST_BASE_URL` to point at an already-running server). Like `test:int` it hits
+the live Supabase project and creates/deletes its own throwaway users. Do **not** run it
+concurrently with `npm run dev` — they share `.next`. See `vitest.http.config.ts` and
+`tests/http/` for details.
 
 `npm run test:int` requires `.env.local` (Supabase URL + anon + service-role keys); it
 creates and deletes throwaway users on the real project and verifies RLS, the privilege

@@ -11,9 +11,10 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
-    // Integration tests (tests/integration/**) hit the real Supabase project and
-    // are run separately via `npm run test:int` (vitest.int.config.ts).
-    exclude: [...configDefaults.exclude, "tests/integration/**"],
+    // Integration tests (tests/integration/**) and HTTP route tests (tests/http/**)
+    // hit the real Supabase project (and, for HTTP, a running Next server) and are
+    // run separately via `npm run test:int` / `npm run test:http`.
+    exclude: [...configDefaults.exclude, "tests/integration/**", "tests/http/**"],
   },
   resolve: {
     alias: {

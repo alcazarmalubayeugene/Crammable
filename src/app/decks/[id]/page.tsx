@@ -1613,7 +1613,7 @@ export default function DeckDetailPage() {
         )}
 
         {/* D3 — quiz history / progress */}
-        {!loadingHistory && history.length > 0 && (
+        {!loadingHistory && cards.length > 0 && (
           <div style={{ marginTop: 36, paddingTop: 28, borderTop: "1px solid var(--border)" }}>
             <h2
               style={{
@@ -1626,6 +1626,11 @@ export default function DeckDetailPage() {
             >
               Quiz history
             </h2>
+            {history.length === 0 ? (
+              <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))", margin: 0 }}>
+                No quizzes yet — take your first quiz and your scores will show up here.
+              </p>
+            ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {history.map((session) => (
                 <div
@@ -1669,6 +1674,7 @@ export default function DeckDetailPage() {
                 </div>
               ))}
             </div>
+            )}
           </div>
         )}
       </div>
