@@ -28,3 +28,31 @@ export async function getAccessToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
   return data.session?.access_token ?? null;
 }
+
+/**
+ * Start the Google OAuth (PKCE) flow.
+ *
+ * createBrowserClient stores the PKCE code-verifier in a cookie, which is what
+ * lets GET /api/auth/callback complete exchangeCodeForSession() server-side.
+ *
+ * Intent is carried across the round-trip via query params on redirectTo
+ * (Supabase preserves them):
+ *   - consent=1  → user ticked the DeepSeek consent box before a signup-mode
+ *                  click; the callback persists consent_deepseek = true.
+ *   - flow       → which button was used (advisory only; new-vs-returning is
+ *                  decided server-side from profile completeness).
+ */
+export async function signInWithGoogle(opts: {
+  consent: boolean;
+  flow: "login" | "signup";
+}) {
+  const supabase = getSupabaseBrowserClient();
+  const params = new URLSearchParams();
+  if (opts.consent) params.set("consent", "1");
+  params.set("flow", opts.flow);
+  const redirectTo = `${window.location.origin}/api/auth/callback?${params.toString()}`;
+  return supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo },
+  });
+}

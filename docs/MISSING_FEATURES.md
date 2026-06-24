@@ -21,8 +21,12 @@ core feature · **[P2]** nice-to-have / compliance.
 > **Every gap below is now implemented.** `A1` (the last one still open as of the
 > 2026-06-11 update) shipped in v.17, along with shareable quiz results, theme/font
 > sync to the profile, global `error`/`not-found`/`loading` boundaries, and a shared
-> `<Navbar>`/`<Footer>`. The only remaining product gaps are OAuth/phone auth (needs
-> external provider config) and `/api/quiz/explain` latency on legacy cards.
+> `<Navbar>`/`<Footer>`. **Google OAuth login/signup shipped in v.18** (Supabase PKCE,
+> consent-gated signup button, callback OAuth branch + onboarding integration — see
+> `docs/PROJECT-DOCUMENTATION.md` §2 for the external Google Cloud / Supabase setup it
+> needs). The only remaining product gap is `/api/quiz/explain` latency on legacy cards.
+> The Apple OAuth button and the phone-number field were removed from the auth card on
+> 2026-06-24 (Google-only), so phone/SMS auth is no longer a pending gap.
 >
 > | Item | Status | Item | Status |
 > |---|---|---|---|

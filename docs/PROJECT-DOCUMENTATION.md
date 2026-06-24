@@ -51,7 +51,8 @@ and the roadmap. (Deferred work is tracked separately in `docs/TODO.md`.)
 | Logout | `src/app/api/auth/logout/route.ts` | ✅ |
 | Forgot / reset password | `src/app/api/auth/forgot-password/route.ts`, `reset-password/route.ts` | ✅ (both `/forgot-password` page and `/settings?mode=reset-password` handler built) |
 | Resend confirmation | `src/app/api/auth/resend-confirmation/route.ts` | ✅ (new) |
-| OAuth/email callback | `src/app/api/auth/callback/route.ts` | ✅ |
+| OAuth/email callback | `src/app/api/auth/callback/route.ts` | ✅ (also handles Google OAuth: code exchange + consent persistence per RA 10173 when `?consent=1`, Google name prefill, new-user→onboarding / returning→dashboard routing) |
+| Google OAuth (sign-in) | `src/lib/supabase/browser.ts` (`signInWithGoogle`), `src/components/auth/AuthCard.tsx` | ✅ (v.18) — Supabase PKCE; signup-mode button gated on the consent checkbox |
 
 ### Database (deployed to Supabase & verified — full schema applied 2026-06-11)
 
@@ -130,8 +131,12 @@ and the roadmap. (Deferred work is tracked separately in `docs/TODO.md`.)
 > results** shipped end-to-end (column + RPC + two routes), **theme/font sync to the
 > profile** is live, and the app-wide chrome gaps (global `error`/`not-found`/`loading`
 > boundaries + a shared `<Navbar>`/`<Footer>`) are filled. UI gaps are catalogued in
-> `docs/BASIC_UI.md`. Still open: OAuth/phone auth (external provider config) and
-> `/api/quiz/explain` latency on legacy cards.
+> `docs/BASIC_UI.md`. **(v.18)** Google OAuth login/signup is now live — Supabase PKCE,
+> a consent-gated signup button, and a callback OAuth branch with onboarding integration
+> (see §2 for the external Google Cloud / Supabase provider setup it requires). Still
+> open: `/api/quiz/explain` latency on legacy cards. The Apple OAuth button and
+> phone-number field were removed from the auth card on 2026-06-24 — Google-only — so
+> phone/SMS auth is no longer open.
 
 ### Configuration & dependencies
 
@@ -319,7 +324,19 @@ UPDATE public.profiles SET is_admin = true WHERE email = 'you@gmail.com';
 
 **Resetting during testing:** delete test users in Dashboard → Authentication → Users;
 toggle off "Confirm email" under Auth → Providers → Email while developing (re-enable for prod);
-add `http://localhost:3000/api/auth/callback` under Auth → URL Configuration.
+add `http://localhost:3000/api/auth/callback` under Auth → URL Configuration. Note the
+callback route now serves **OAuth too**, not just password reset — every auth flow (signup
+confirm, resend, password reset, Google OAuth) funnels through that single allow-listed entry.
+
+**Google OAuth setup (one-time, dashboard-side — not in the repo or env):**
+1. **Google Cloud Console** → APIs & Services → Credentials → create an **OAuth 2.0 Web client**;
+   set the authorized redirect URI to `https://<project-ref>.supabase.co/auth/v1/callback`
+   (Supabase's receiver — *not* the app route). While in Testing mode, add your Google
+   account under the OAuth consent screen → Test users.
+2. **Supabase → Auth → Providers → Google** → enable and paste the Client ID + Client Secret.
+3. **Supabase → Auth → URL Configuration** → set Site URL and ensure the Redirect URLs
+   allow-list contains `${appUrl}/api/auth/callback` (add the prod domain on deploy).
+   No new env vars — the Google secret lives only in Supabase.
 
 ---
 

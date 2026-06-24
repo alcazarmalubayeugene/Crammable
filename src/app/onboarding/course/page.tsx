@@ -11,6 +11,7 @@ import {
 import { authHeaders } from "@/lib/api/auth-headers";
 
 const ONBOARDING_NAME_KEY = "cm_onb_fullName";
+const ONBOARDING_CONSENT_KEY = "cm_onb_consent";
 
 export default function OnboardingCoursePage() {
   const router = useRouter();
@@ -44,11 +45,18 @@ export default function OnboardingCoursePage() {
 
     setSaving(true);
     setError("");
+    // Carried from the name step for the Google-via-login edge — when set, the
+    // user just consented to AI processing, so persist it with the profile.
+    const consentDeepseek = localStorage.getItem(ONBOARDING_CONSENT_KEY) === "1";
     try {
       const res = await fetch(ApiPaths.claimProfileComplete, {
         method: "POST",
         headers: { "Content-Type": "application/json", ...(await authHeaders()) } as HeadersInit,
-        body: JSON.stringify({ fullName: fullName ?? "", course: trimmed }),
+        body: JSON.stringify({
+          fullName: fullName ?? "",
+          course: trimmed,
+          ...(consentDeepseek ? { consentDeepseek: true } : {}),
+        }),
       });
       const data = (await res.json()) as ApiResponse<ClaimProfileCompleteResult>;
       if (!data.success) {
@@ -57,6 +65,7 @@ export default function OnboardingCoursePage() {
         return;
       }
       localStorage.removeItem(ONBOARDING_NAME_KEY);
+      localStorage.removeItem(ONBOARDING_CONSENT_KEY);
       if (data.creditsAwarded > 0) {
         setAwarded(data.creditsAwarded);
         setTimeout(() => router.push("/onboarding/referral"), 900);

@@ -13,8 +13,11 @@ Frontend page status is in `FRONTEND.md`. Unimplemented backend routes are track
 > **Update (v.17, 2026-06-24):** the last remaining product gap — **deck-delete UI** —
 > now ships on the deck-detail page. v.17 also delivered shareable quiz results,
 > theme/font sync to the profile, global `error`/`not-found`/`loading` boundaries, and
-> a shared `<Navbar>`/`<Footer>`. Only OAuth/phone auth (external setup) and
-> `/api/quiz/explain` legacy-card latency remain open.
+> a shared `<Navbar>`/`<Footer>`. **Google OAuth login/signup shipped in v.18**
+> (Supabase PKCE + consent-gated signup + onboarding integration; needs external Google
+> Cloud / Supabase provider config). Only `/api/quiz/explain` legacy-card latency
+> remains open. The Apple OAuth button and the phone-number field were removed from the
+> auth card on 2026-06-24 (Google-only), so phone/SMS auth is no longer open.
 
 ---
 

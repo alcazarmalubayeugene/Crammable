@@ -57,6 +57,60 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // ── OAuth (Google) — no `type` param on the redirect ──────────────────────
+  // handle_new_user() already created the profile row on first sign-in, but the
+  // consent checkbox + name collection that email signup does don't happen here,
+  // so we reconcile them now and route new users into onboarding.
+  const providers = (user.app_metadata?.providers as string[] | undefined) ?? [];
+  const isOAuth =
+    user.app_metadata?.provider === "google" || providers.includes("google");
+
+  if (!type && isOAuth) {
+    const admin = createAdminClient();
+
+    // Read the current profile to decide what to patch and where to send them.
+    const { data: profileRow } = await admin
+      .from(TableNames.profiles)
+      .select("full_name, course, consent_deepseek")
+      .eq("id", user.id)
+      .maybeSingle();
+
+    const profilePatch: Record<string, unknown> = {};
+
+    // consent=1 means the user ticked the consent box before the signup-mode
+    // Google button. Persist it (RA 10173) — never downgrade an existing yes.
+    if (searchParams.get("consent") === "1" && !profileRow?.consent_deepseek) {
+      profilePatch.consent_deepseek = true;
+    }
+
+    // Prefill the name from the Google profile so onboarding starts populated.
+    if (!profileRow?.full_name) {
+      const googleName =
+        (user.user_metadata?.full_name as string | undefined) ??
+        (user.user_metadata?.name as string | undefined);
+      if (googleName) profilePatch.full_name = googleName;
+    }
+
+    if (Object.keys(profilePatch).length > 0) {
+      const { error: patchError } = await admin
+        .from(TableNames.profiles)
+        .update(profilePatch)
+        .eq("id", user.id);
+      if (patchError) {
+        console.error("[auth/callback] oauth profile patch failed (non-fatal):", patchError);
+      }
+    }
+
+    // New / incomplete profile → onboarding (mirrors the dashboard's own check).
+    // We re-derive completeness from the patched values, not the stale read.
+    const finalName = profilePatch.full_name ?? profileRow?.full_name;
+    const finalCourse = profileRow?.course;
+    if (!finalName || !finalCourse) {
+      return NextResponse.redirect(new URL(Routes.onboardingName, appUrl));
+    }
+    return NextResponse.redirect(new URL(Routes.dashboard, appUrl));
+  }
+
   // ── Email verification — write profile fields + process referral ─────────
   const referralCodeUsed = user.user_metadata?.referral_code_used as
     | string

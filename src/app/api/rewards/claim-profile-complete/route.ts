@@ -43,6 +43,11 @@ export async function POST(request: Request): Promise<Response> {
     const updated = await updateOwnProfile(user.id, {
       full_name: fullName || null,
       course: course || null,
+      // Google-via-login onboarding edge: the user consented during onboarding.
+      // Only ever flips false → true (never downgrades an existing consent).
+      ...(body.consentDeepseek === true && !profile.consent_deepseek
+        ? { consent_deepseek: true }
+        : {}),
     });
 
     let creditsAwarded = 0;

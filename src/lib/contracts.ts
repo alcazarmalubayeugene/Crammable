@@ -29,7 +29,7 @@
 
 export const App = {
   name:         "Crammable",
-  version:      "v.17",                  // bump by 0.1 on every meaningful frontend update
+  version:      "v.18",                  // bump by 0.1 on every meaningful frontend update
   tagline:      "Turn any document into a flashcard deck — in seconds.",
   supportEmail: "crammablesupport@gmail.com", // not created yet — co-devs to set up
   gcashName:    "Crammable",             // name displayed in GCash payment screen
@@ -215,6 +215,11 @@ export const Routes = {
   rewards:    "/rewards",
   settings:   "/settings",
   avatar:     "/settings/avatar",
+
+  // Post-signup onboarding (one question at a time)
+  onboardingName:     "/onboarding/name",
+  onboardingCourse:   "/onboarding/course",
+  onboardingReferral: "/onboarding/referral",
 
   // Public (no auth required)
   publicDeck:   (id: string) => `/public/decks/${id}`,
@@ -892,6 +897,11 @@ export interface ClaimRewardResult {
 export interface ClaimProfileCompleteRequest {
   fullName: string;
   course:   string;
+  // Optional consent capture for the OAuth (Google) onboarding edge: a user who
+  // signed in with Google via the login button never saw the consent checkbox,
+  // so consent_deepseek is still false. When present, persisted alongside the
+  // profile fields. Email/consent-gated signups never send this (already true).
+  consentDeepseek?: boolean;
 }
 
 export interface ClaimProfileCompleteResult extends ClaimRewardResult {

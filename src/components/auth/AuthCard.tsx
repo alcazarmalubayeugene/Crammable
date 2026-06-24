@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { ApiPaths, App, Routes } from "@/lib/contracts";
+import { signInWithGoogle } from "@/lib/supabase/browser";
 import {
   THEME_STORAGE_KEY,
   FONT_SIZE_STORAGE_KEY,
@@ -47,6 +48,9 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
 
   // Login-only
   const [resendStatus, setResendStatus] = useState<"idle" | "sending" | "sent">("idle");
+
+  // Google OAuth
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   // Password visibility — shared show/hide state for the password field in
   // both modes, plus a separate one for signup's confirm-password field.
@@ -200,6 +204,32 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
     // this flag and redirects there instead of showing the dashboard directly.
     localStorage.setItem("cm_pending_onboarding", "1");
     setSuccess(true);
+  }
+
+  async function handleGoogle() {
+    setError("");
+    const signingUp = mode === "signup";
+
+    // Signup mode gates Google behind the same consent the email form requires —
+    // RA 10173: no document reaches DeepSeek without the user agreeing first.
+    // The decision is carried to /api/auth/callback (consent=1) and persisted
+    // there. Login mode is for returning users who already consented at signup.
+    if (signingUp && !consent) {
+      setError("You must agree to AI processing to use Crammable.");
+      return;
+    }
+
+    setGoogleLoading(true);
+    const { error: oauthError } = await signInWithGoogle({
+      consent: signingUp && consent,
+      flow: signingUp ? "signup" : "login",
+    });
+
+    // On success the browser navigates to Google, so we only land here on error.
+    if (oauthError) {
+      setGoogleLoading(false);
+      setError("Couldn't start Google sign-in. Please try again.");
+    }
   }
 
   const inputStyle = {
@@ -476,41 +506,27 @@ export default function AuthCard({ initialMode }: { initialMode: Mode }) {
               <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
             </div>
 
-            {/* Disabled placeholders — phone auth needs a Supabase phone provider +
-                paid SMS gateway (Twilio), Apple/Google need OAuth provider registration
-                + Supabase Auth config + a callback route, none of which exist yet.
-                Styling-only for now; see backend task to wire these up for real. */}
+            {/* Google OAuth (PKCE). In signup mode the consent checkbox above
+                must be ticked first — handleGoogle enforces it and carries the
+                decision to /api/auth/callback. */}
             <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
-              <div style={{ display: "flex", gap: 8 }}>
-                <select
-                  disabled
-                  title="Coming soon"
-                  style={{ width: 72, padding: "9px 6px", borderRadius: 10, border: "1.5px solid var(--border)", background: "var(--bg)", color: "var(--text-faint)", fontSize: "calc(13px * var(--font-scale))", fontFamily: "var(--font-body, sans-serif)", cursor: "not-allowed" }}
-                >
-                  <option>+63</option>
-                </select>
-                <input
-                  disabled
-                  placeholder="Phone number"
-                  title="Coming soon"
-                  style={{ flex: 1, padding: "9px 14px", borderRadius: 10, border: "1.5px solid var(--border)", background: "var(--bg)", color: "var(--text-faint)", fontSize: "calc(13px * var(--font-scale))", fontFamily: "var(--font-body, sans-serif)", cursor: "not-allowed", boxSizing: "border-box" }}
-                />
-              </div>
               <button
                 type="button"
-                disabled
-                title="Coming soon"
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "9px 0", borderRadius: 10, border: "1.5px solid var(--border)", background: "var(--bg)", color: "var(--text-faint)", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, cursor: "not-allowed", fontFamily: "var(--font-body, sans-serif)" }}
+                onClick={handleGoogle}
+                disabled={googleLoading}
+                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "9px 0", borderRadius: 10, border: "1.5px solid var(--border)", background: "var(--bg)", color: googleLoading ? "var(--text-faint)" : "var(--text)", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, cursor: googleLoading ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
               >
-                <span aria-hidden="true"></span> {isLogin ? "Sign in with Apple" : "Sign up with Apple"}
-              </button>
-              <button
-                type="button"
-                disabled
-                title="Coming soon"
-                style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, width: "100%", padding: "9px 0", borderRadius: 10, border: "1.5px solid var(--border)", background: "var(--bg)", color: "var(--text-faint)", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, cursor: "not-allowed", fontFamily: "var(--font-body, sans-serif)" }}
-              >
-                <span aria-hidden="true">G</span> {isLogin ? "Sign in with Google" : "Sign up with Google"}
+                <svg width="16" height="16" viewBox="0 0 18 18" aria-hidden="true" style={{ flexShrink: 0 }}>
+                  <path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62Z" />
+                  <path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.8.54-1.84.86-3.04.86-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18Z" />
+                  <path fill="#FBBC05" d="M3.97 10.72a5.4 5.4 0 0 1 0-3.44V4.95H.96a9 9 0 0 0 0 8.1l3.01-2.33Z" />
+                  <path fill="#EA4335" d="M9 3.58c1.32 0 2.5.45 3.44 1.35l2.58-2.58A9 9 0 0 0 .96 4.95l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58Z" />
+                </svg>
+                {googleLoading
+                  ? "Redirecting…"
+                  : isLogin
+                  ? "Sign in with Google"
+                  : "Sign up with Google"}
               </button>
             </div>
 
