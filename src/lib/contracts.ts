@@ -29,7 +29,7 @@
 
 export const App = {
   name:         "Crammable",
-  version:      "v.18",                  // bump by 0.1 on every meaningful frontend update
+  version:      "v.19",                  // bump by 0.1 on every meaningful frontend update
   tagline:      "Turn any document into a flashcard deck — in seconds.",
   supportEmail: "crammablesupport@gmail.com", // not created yet — co-devs to set up
   gcashName:    "Crammable",             // name displayed in GCash payment screen

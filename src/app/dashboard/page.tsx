@@ -132,6 +132,7 @@ export default function DashboardPage() {
 
       {/* ── NAVBAR ── */}
       <Navbar
+        wordmarkHref={Routes.dashboard}
         coinBalance={profile?.token_balance ?? 0}
         isPro={isPro}
         links={[

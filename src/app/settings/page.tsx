@@ -385,7 +385,7 @@ function SettingsContent() {
       }}
     >
       {/* ── NAVBAR ── */}
-      <Navbar backHref={Routes.dashboard} sectionLabel="Settings" />
+      <Navbar backHref={Routes.dashboard} wordmarkHref={Routes.dashboard} sectionLabel="Settings" />
 
       {/* ── CONTENT ── */}
       <div style={{ maxWidth: 580, margin: "0 auto", padding: "40px 24px 64px" }}>

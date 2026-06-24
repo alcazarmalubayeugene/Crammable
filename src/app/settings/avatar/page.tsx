@@ -57,7 +57,7 @@ export default function AvatarSettingsPage() {
   return (
     <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
       {/* ── NAVBAR ── */}
-      <Navbar backHref={Routes.settings} sectionLabel="Avatar" />
+      <Navbar backHref={Routes.settings} wordmarkHref={Routes.dashboard} sectionLabel="Avatar" />
 
       {/* ── CONTENT ── */}
       <div style={{ maxWidth: 760, margin: "0 auto", padding: "40px 24px 64px" }}>

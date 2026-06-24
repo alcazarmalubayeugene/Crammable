@@ -544,6 +544,7 @@ export default function DeckDetailPage() {
       {/* ── NAVBAR ── */}
       <Navbar
         backHref={Routes.dashboard}
+        wordmarkHref={Routes.dashboard}
         coinBalance={profile?.token_balance}
         userName={profile?.full_name ? profile.full_name.split(" ")[0] : undefined}
         showAvatarMenu={!!profile}

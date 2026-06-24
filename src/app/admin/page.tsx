@@ -338,6 +338,7 @@ export default function AdminPage() {
 
       {/* ── NAVBAR ── */}
       <Navbar
+        wordmarkHref={Routes.dashboard}
         adminBadge
         rightContent={
           <span style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)" }}>

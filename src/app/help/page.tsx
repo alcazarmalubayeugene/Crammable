@@ -47,7 +47,7 @@ export default function HelpPage() {
   return (
     <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
       {/* ── NAVBAR ── */}
-      <Navbar backHref={Routes.dashboard} centerWordmark sectionLabel="Help" />
+      <Navbar backHref={Routes.dashboard} centerWordmark wordmarkHref={Routes.dashboard} sectionLabel="Help" />
 
       {/* ── CONTENT ── */}
       <div style={{ maxWidth: 640, margin: "0 auto", padding: "40px 24px 64px" }}>

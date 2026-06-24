@@ -5,7 +5,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 - [`WORK_SUMMARY_2026-06-10.md`](./WORK_SUMMARY_2026-06-10.md) — session log: audit fixes, the referral/quiz DB migration, and the env-config fix.
 - [`CODE_AUDIT.txt`](./CODE_AUDIT.txt) — code audit (correctness, redundancy, optimization).
 - [`SECURITY_AUDIT.txt`](./SECURITY_AUDIT.txt) — security audit (auth, RLS, CSRF, fraud, privacy).
-- [`FRONTEND.md`](./FRONTEND.md) — frontend pages/routes status + per-session Version History (latest: **v.17**).
+- [`FRONTEND.md`](./FRONTEND.md) — frontend pages/routes status + per-session Version History (latest: **v.19**).
 - [`docs/MISSING_FEATURES.md`](./docs/MISSING_FEATURES.md) — feature gap analysis (all items ✅ as of v.17; see the status banner).
 - [`docs/BASIC_UI.md`](./docs/BASIC_UI.md) — UI inventory & gap list (chrome gaps closed in v.17; admin link intentionally URL-only).
 - [`CLAUDE.md`](./CLAUDE.md) / [`AGENTS.md`](./AGENTS.md) — backend rules and conventions.
