@@ -501,6 +501,8 @@ export default function DeckDetailPage() {
   // that every card is sitting at its untouched default, so "weak cards" has
   // nothing real to sort by yet.
   const hasCompletedFullPass = cards.length > 0 && cards.every((c) => c.times_seen > 0);
+  const reinforcementCount = cards.filter((c) => c.is_reinforcement).length;
+  const isPro = profile?.subscription_tier === SubscriptionTier.PRO;
   // Only meaningful once we're past the loading gate below (client-only read).
   const pausedQuiz = readPausedQuiz(deckId);
 
@@ -1539,6 +1541,68 @@ export default function DeckDetailPage() {
               >
                 →
               </button>
+            </div>
+
+            {/* Live Deck section */}
+            <div style={{ marginTop: 36, paddingTop: 28, borderTop: "1px solid var(--border)" }}>
+              {isPro ? (
+                reinforcementCount > 0 ? (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                    <div>
+                      <p style={{ fontWeight: 700, fontSize: "calc(14px * var(--font-scale))", color: "var(--text)", marginBottom: 2 }}>
+                        🌱 Live Deck
+                      </p>
+                      <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
+                        {reinforcementCount} reinforcement {reinforcementCount === 1 ? "card" : "cards"} ready
+                      </p>
+                    </div>
+                    <a
+                      href={`${Routes.quiz(deckId)}?live=1`}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 6,
+                        background: "var(--success, #22c55e)",
+                        color: "#fff",
+                        padding: "10px 20px",
+                        borderRadius: 10,
+                        fontWeight: 600,
+                        fontSize: "calc(13px * var(--font-scale))",
+                        textDecoration: "none",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      Quiz Live Deck →
+                    </a>
+                  </div>
+                ) : (
+                  <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
+                    🌱 <strong>Live Deck is active.</strong> Complete a quiz and score below 70% to generate your first reinforcement cards.
+                  </p>
+                )
+              ) : (
+                <span className="tooltip-wrap" style={{ display: "inline-flex", position: "relative" }}>
+                  <a
+                    href={Routes.upgrade}
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      background: "var(--bg-card)",
+                      border: "1.5px solid var(--border)",
+                      color: "var(--text-faint)",
+                      padding: "10px 20px",
+                      borderRadius: 10,
+                      fontWeight: 600,
+                      fontSize: "calc(14px * var(--font-scale))",
+                      textDecoration: "none",
+                    }}
+                  >
+                    🌱 Live Deck (Pro)
+                  </a>
+                  <span className="tooltip-bubble">{UIMessages.proFeatureLocked}</span>
+                </span>
+              )}
             </div>
 
             {/* Quiz CTA — bottom */}

@@ -248,3 +248,24 @@ export async function verifyAppReview(
   if (error) throw toDbError(error, "Failed to verify review.");
   return { userId: data as string, creditsAwarded: approve ? credits : 0 };
 }
+
+/**
+ * Manually revoke a user's Pro subscription via revoke_pro() (schema §4.7c):
+ * downgrades to free, clears subscription_expires_at, writes audit log — all
+ * in one transaction.
+ *
+ * @throws {DbError} VALIDATION_ERROR if the user isn't currently Pro.
+ */
+export async function revokeProSubscription(
+  adminId: string,
+  userId: string,
+  notes?: string,
+): Promise<void> {
+  const admin = createAdminClient();
+  const { error } = await admin.rpc("revoke_pro", {
+    p_admin_id: adminId,
+    p_user_id:  userId,
+    p_notes:    notes ?? null,
+  });
+  if (error) throw toDbError(error, "Failed to revoke Pro subscription.");
+}

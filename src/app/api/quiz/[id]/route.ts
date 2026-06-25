@@ -2,6 +2,9 @@ import type { NextRequest } from "next/server";
 import {
   ApiErrorCode,
   QuizType,
+  SubscriptionTier,
+  TierLimits,
+  UIMessages,
   type Flashcard,
   type QuizQuestion,
   type StartQuizRequest,
@@ -90,7 +93,7 @@ export async function POST(req: NextRequest, { params }: Ctx): Promise<Response>
     const csrf = assertSameOrigin(req);
     if (csrf) return csrf;
 
-    const { user } = await requireAuth();
+    const { user, profile } = await requireAuth();
     const { id: deckId } = await params;
 
     let body: StartQuizRequest;
@@ -112,13 +115,27 @@ export async function POST(req: NextRequest, { params }: Ctx): Promise<Response>
       return apiFail(ApiErrorCode.FORBIDDEN, "Deck not found.", 404);
     }
 
-    const cards = await getFlashcardsForDeck(deckId);
+    let cards = await getFlashcardsForDeck(deckId);
     if (cards.length === 0) {
       return apiFail(
         ApiErrorCode.VALIDATION_ERROR,
         "This deck has no cards yet.",
         422,
       );
+    }
+
+    if (body.reinforcementOnly) {
+      if (!TierLimits[SubscriptionTier.PRO].livingDecks || profile.subscription_tier !== SubscriptionTier.PRO) {
+        return apiFail(ApiErrorCode.FORBIDDEN, UIMessages.proFeatureLocked, 403);
+      }
+      cards = cards.filter((c) => c.is_reinforcement);
+      if (cards.length === 0) {
+        return apiFail(
+          ApiErrorCode.VALIDATION_ERROR,
+          "No Live Deck cards yet — complete a quiz to generate them.",
+          422,
+        );
+      }
     }
 
     const questions = buildQuestions(cards, body.quizType);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   ApiPaths,
   QuizType,
@@ -92,6 +92,8 @@ type Phase = "loading" | "error" | "setup" | "starting" | "quizzing" | "submitti
 export default function QuizPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const isLiveMode = searchParams.get("live") === "1";
   const deckId = Array.isArray(params.deckId)
     ? params.deckId[0]
     : (params.deckId as string);
@@ -179,7 +181,7 @@ export default function QuizPage() {
       const res = await fetch(ApiPaths.startQuiz(deckId), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ quizType: selectedType }),
+        body: JSON.stringify({ quizType: selectedType, ...(isLiveMode && { reinforcementOnly: true }) }),
       });
       const data = await res.json() as {
         success: boolean;
@@ -525,6 +527,22 @@ export default function QuizPage() {
               </div>
             ) : (
               <>
+                {isLiveMode && (
+                  <div
+                    style={{
+                      background: "var(--success-bg, #f0fdf4)",
+                      border: "1.5px solid var(--success, #22c55e)",
+                      borderRadius: 10,
+                      padding: "10px 14px",
+                      marginBottom: 20,
+                      fontSize: "calc(13px * var(--font-scale))",
+                      color: "var(--success, #16a34a)",
+                      fontWeight: 600,
+                    }}
+                  >
+                    🌱 Live Deck — quizzing your reinforcement cards only
+                  </div>
+                )}
                 <p
                   style={{
                     fontSize: "calc(13px * var(--font-scale))",

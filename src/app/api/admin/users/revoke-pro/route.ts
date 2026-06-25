@@ -1,12 +1,15 @@
 import {
   ApiErrorCode,
+  ApiPaths,
+  Validation,
   type RevokeProRequest,
   type RevokeProResult,
 } from "@/lib/contracts";
 import { apiFail, apiSuccess, handleApiError } from "@/lib/api/errors";
 import { assertSameOrigin } from "@/lib/api/csrf";
 import { requireAdmin } from "@/lib/auth/helpers";
-import { revokeProAsAdmin } from "@/lib/db/admin";
+import { enforceRateLimit } from "@/lib/supabase/server";
+import { revokeProSubscription } from "@/lib/db/admin";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,14 +28,18 @@ export async function POST(request: Request): Promise<Response> {
 
     const { user } = await requireAdmin();
 
+    await enforceRateLimit(user.id, ApiPaths.adminRevokeProSubscription);
+
     const userId = (body.userId ?? "").trim();
     if (!userId) {
       return apiFail(ApiErrorCode.VALIDATION_ERROR, "userId is required.", 400);
     }
 
-    const result = await revokeProAsAdmin(user.id, userId);
+    const notes = body.notes?.trim().slice(0, Validation.adminNotes.maxLength) || undefined;
 
-    return apiSuccess<RevokeProResult>(result);
+    await revokeProSubscription(user.id, userId, notes);
+
+    return apiSuccess<RevokeProResult>({ userId });
   } catch (err) {
     return handleApiError(err);
   }

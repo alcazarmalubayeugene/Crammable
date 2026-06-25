@@ -80,6 +80,15 @@ function expiryLabel(iso: string | null): string {
   return `expires ${date} (${days} day${days === 1 ? "" : "s"})`;
 }
 
+interface RevokeState {
+  busy: boolean;
+  error: string;
+}
+
+function emptyRevokeState(): RevokeState {
+  return { busy: false, error: "" };
+}
+
 function minutesToLabel(mins: number): string {
   if (mins < 60) return `${mins}m ago`;
   const h = Math.floor(mins / 60);
@@ -100,6 +109,7 @@ export default function AdminPage() {
   const [usersLoading, setUsersLoading] = useState(false);
   const [userSearch, setUserSearch] = useState("");
   const [grantStates, setGrantStates] = useState<Record<string, GrantState>>({});
+  const [revokeStates, setRevokeStates] = useState<Record<string, RevokeState>>({});
   const [auditLog, setAuditLog] = useState<AdminAuditLogRow[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
 
@@ -172,8 +182,13 @@ export default function AdminPage() {
       if (data.success) {
         setUsers(data.users);
         const states: Record<string, GrantState> = {};
-        data.users.forEach((u) => { states[u.id] = emptyGrantState(); });
+        const revStates: Record<string, RevokeState> = {};
+        data.users.forEach((u) => {
+          states[u.id] = emptyGrantState();
+          revStates[u.id] = emptyRevokeState();
+        });
         setGrantStates(states);
+        setRevokeStates(revStates);
       }
     } finally {
       setUsersLoading(false);
@@ -231,10 +246,11 @@ export default function AdminPage() {
     }
   }
 
-  async function revokePro(targetUser: AdminUserRow) {
-    setGrant(targetUser.id, { revoking: true, error: "", success: "" });
+  async function revokeProSub(targetUser: AdminUserRow) {
+    if (!window.confirm(`Revoke Pro for ${targetUser.email}? This will immediately downgrade them to Free.`)) return;
+    setRevokeStates((prev) => ({ ...prev, [targetUser.id]: { busy: true, error: "" } }));
     try {
-      const res = await fetch(ApiPaths.adminRevokePro, {
+      const res = await fetch(ApiPaths.adminRevokeProSubscription, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -244,7 +260,7 @@ export default function AdminPage() {
       });
       const data = (await res.json()) as ApiResponse<RevokeProResult>;
       if (!data.success) {
-        setGrant(targetUser.id, { revoking: false, error: data.error.message });
+        setRevokeStates((prev) => ({ ...prev, [targetUser.id]: { busy: false, error: data.error.message } }));
         return;
       }
       setUsers((prev) =>
@@ -254,10 +270,10 @@ export default function AdminPage() {
             : u
         )
       );
-      setGrant(targetUser.id, { revoking: false, success: "Pro revoked." });
+      setRevokeStates((prev) => ({ ...prev, [targetUser.id]: { busy: false, error: "" } }));
       loadAuditLog();
     } catch {
-      setGrant(targetUser.id, { revoking: false, error: UIMessages.genericError });
+      setRevokeStates((prev) => ({ ...prev, [targetUser.id]: { busy: false, error: UIMessages.genericError } }));
     }
   }
 
@@ -701,19 +717,25 @@ export default function AdminPage() {
                     >
                       {gs.busy ? "Granting…" : "Grant Capycoins"}
                     </button>
-                    {u.subscription_tier === SubscriptionTier.PRO && (
-                      <button
-                        type="button"
-                        disabled={gs.revoking}
-                        onClick={() => revokePro(u)}
-                        style={{ background: "none", border: "1.5px solid var(--error)", borderRadius: 8, padding: "8px 16px", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--error)", cursor: gs.revoking ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
-                      >
-                        {gs.revoking ? "Revoking…" : "Revoke Pro"}
-                      </button>
-                    )}
+                    {u.subscription_tier === SubscriptionTier.PRO && (() => {
+                      const rs = revokeStates[u.id] ?? emptyRevokeState();
+                      return (
+                        <button
+                          type="button"
+                          disabled={rs.busy}
+                          onClick={() => revokeProSub(u)}
+                          style={{ background: "var(--error)", color: "#fff", border: "none", borderRadius: 8, padding: "8px 16px", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, cursor: rs.busy ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
+                        >
+                          {rs.busy ? "Revoking…" : "Revoke Pro"}
+                        </button>
+                      );
+                    })()}
                   </div>
                   {gs.error && <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error)", marginTop: 6 }}>{gs.error}</p>}
                   {gs.success && <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--success)", marginTop: 6 }}>{gs.success}</p>}
+                  {(revokeStates[u.id] ?? emptyRevokeState()).error && (
+                    <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error)", marginTop: 6 }}>{(revokeStates[u.id] ?? emptyRevokeState()).error}</p>
+                  )}
                 </div>
               );
             })}

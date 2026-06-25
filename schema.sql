@@ -747,6 +747,42 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 4.7c revoke_pro(p_admin_id, p_user_id, p_notes)
+-- Admin: manually downgrade a Pro user to free tier immediately, clearing
+-- subscription_expires_at. SECURITY DEFINER so it bypasses the
+-- prevent_privilege_escalation trigger. Writes an audit log row.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.revoke_pro(
+  p_admin_id  UUID,
+  p_user_id   UUID,
+  p_notes     TEXT DEFAULT NULL
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = p_user_id AND subscription_tier = 'pro'
+  ) THEN
+    RAISE EXCEPTION 'NOT_PRO'
+      USING HINT = 'User is not currently on Pro — nothing to revoke';
+  END IF;
+
+  UPDATE public.profiles
+  SET    subscription_tier       = 'free',
+         subscription_expires_at = NULL,
+         updated_at              = now()
+  WHERE  id = p_user_id;
+
+  INSERT INTO public.admin_action_log (admin_id, target_user_id, action, notes)
+  VALUES (p_admin_id, p_user_id, 'revoke_pro', p_notes);
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 4.7b pro_monthly_credit_refresh()
 -- Called by the daily pg_cron job to top up Pro users who haven't received
 -- their monthly 30-credit allotment in the last 28 days and whose subscription

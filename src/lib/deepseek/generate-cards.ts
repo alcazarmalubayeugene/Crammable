@@ -52,6 +52,8 @@ Rules:
 - tags: 0–3 short topic labels per card.
 - Distribute cards across categories; do not put all cards in one category.
 - Do not invent facts not supported by the source text.
+- "back" must be a complete, naturally readable answer — a noun phrase or 1–2 sentences. Do NOT write a raw formula, equation, math expression, digit sequence, or code snippet as the sole content of "back". If the concept is inherently mathematical, express the answer in words and include the formula as a supplement (e.g. "Kinetic energy equals one-half mass times velocity squared (KE = ½mv²)", not just "½mv²").
+- Every "back" answer must make sense as a multiple-choice option: a student who doesn't know the answer should be able to read it, understand what is being claimed, and decide whether it is plausible.
 
 --- DOCUMENT START ---
 ${documentText}
@@ -184,7 +186,9 @@ Rules:
 - Each card must have a non-empty front, back, and explanation.
 - tags: 0–3 short topic labels per card.
 - Do not invent facts not supported by the original cards.
-- Reuse the same category names as the struggling cards where it makes sense.`;
+- Reuse the same category names as the struggling cards where it makes sense.
+- "back" must be a complete, naturally readable answer — a noun phrase or 1–2 sentences. Do NOT write a raw formula, equation, math expression, digit sequence, or code snippet as the sole content of "back". If the concept is inherently mathematical, express the answer in words and include the formula as a supplement (e.g. "Force equals mass times acceleration (F = ma)", not just "F = ma").
+- Every "back" answer must make sense as a multiple-choice option: a student who doesn't know the answer should be able to read it, understand what is being claimed, and decide whether it is plausible.`;
 }
 
 /**

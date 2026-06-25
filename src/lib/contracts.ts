@@ -92,7 +92,7 @@ export const AdminAction = {
   REJECTED:        "rejected",
   CREDIT_GRANT:    "credit_grant",
   ACCOUNT_DELETED: "account_deleted",
-  PRO_REVOKED:     "revoke_pro",
+  REVOKE_PRO:      "revoke_pro",
 } as const;
 export type AdminAction = (typeof AdminAction)[keyof typeof AdminAction];
 
@@ -188,7 +188,7 @@ export const ApiPaths = {
   adminVerifyReview:     "/api/admin/reviews/verify",
   adminUsers:            "/api/admin/users",
   adminGrantCredits:     "/api/admin/users/grant-credits",
-  adminRevokePro:        "/api/admin/users/revoke-pro",
+  adminRevokeProSubscription: "/api/admin/users/revoke-pro",
   adminAuditLog:         "/api/admin/audit-log",
   accountDelete:         "/api/account/delete",
   updatePreferences:     "/api/account/preferences",
@@ -344,8 +344,9 @@ export const RateLimits: Record<string, RateLimitRule> = {
   "/api/flashcards/[id]/review": { windowMinutes: 60,  maxRequests: 200 }, // study-mode Got it/Review again, no AI call
   [ApiPaths.adminVerifyReview]: { windowMinutes: 60,   maxRequests: 120 },
   [ApiPaths.adminUsers]:        { windowMinutes: 60,   maxRequests: 200 },
-  [ApiPaths.adminGrantCredits]: { windowMinutes: 60,   maxRequests: 60  },
-  [ApiPaths.adminAuditLog]:     { windowMinutes: 60,   maxRequests: 200 },
+  [ApiPaths.adminGrantCredits]:          { windowMinutes: 60,   maxRequests: 60  },
+  [ApiPaths.adminRevokeProSubscription]: { windowMinutes: 60,   maxRequests: 60  },
+  [ApiPaths.adminAuditLog]:              { windowMinutes: 60,   maxRequests: 200 },
   [ApiPaths.accountDelete]:     { windowMinutes: 1440, maxRequests: 3   }, // 24-hour window
   [ApiPaths.updatePreferences]: { windowMinutes: 60,   maxRequests: 60  }, // theme/font saves — generous
 } as const;
@@ -778,7 +779,8 @@ export interface ReviewCardResult {
 
 // ── POST /api/quiz/[id] ───────────────────────────────────────────────────────
 export interface StartQuizRequest {
-  quizType: QuizType;
+  quizType:          QuizType;
+  reinforcementOnly?: boolean;  // Pro-only: quiz only is_reinforcement=true cards (Live Deck mode)
 }
 
 export interface QuizQuestion {
@@ -991,8 +993,14 @@ export interface GrantCreditsResult {
 }
 
 // ── POST /api/admin/users/revoke-pro ───────────────────────────────────────────
-export interface RevokeProRequest { userId: string; }
-export interface RevokeProResult  { userId: string; }
+export interface RevokeProRequest {
+  userId: string;
+  notes?: string;
+}
+
+export interface RevokeProResult {
+  userId: string;
+}
 
 // ── GET /api/admin/audit-log (E4) ──────────────────────────────────────────────
 export interface AdminAuditLogRow extends AdminActionLog {
