@@ -269,7 +269,7 @@ CREATE TABLE IF NOT EXISTS public.admin_action_log (
   target_user_id UUID        REFERENCES public.profiles(id) ON DELETE SET NULL,
   -- Set for credit_grant — the number of credits granted.
   credits_amount INTEGER,
-  action         TEXT        NOT NULL CHECK (action IN ('approved', 'rejected', 'credit_grant', 'account_deleted')),
+  action         TEXT        NOT NULL CHECK (action IN ('approved', 'rejected', 'credit_grant', 'account_deleted', 'revoke_pro')),
   notes          TEXT,
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -1010,6 +1010,46 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 4.11a revoke_pro(p_admin_id, p_user_id, p_notes)
+-- Manual admin Pro revocation: downgrades the user to 'free' and clears the
+-- expiry immediately (the inverse of approve_payment's tier flip), then writes
+-- a 'revoke_pro' audit row. Capycoins are left untouched. Raises NOT_PRO if the
+-- target isn't currently on Pro (the admin UI only surfaces the button for Pro
+-- users). Mirrors admin_grant_credits (§4.7a): SECURITY DEFINER so the
+-- service-role admin path can flip the prevent_privilege_escalation-guarded
+-- subscription_tier column.
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.revoke_pro(
+  p_admin_id UUID,
+  p_user_id  UUID,
+  p_notes    TEXT DEFAULT NULL
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = p_user_id AND subscription_tier = 'pro'
+  ) THEN
+    RAISE EXCEPTION 'NOT_PRO'
+      USING HINT = 'User is not currently on Pro — nothing to revoke';
+  END IF;
+
+  UPDATE public.profiles
+  SET    subscription_tier       = 'free',
+         subscription_expires_at = NULL,
+         updated_at              = now()
+  WHERE  id = p_user_id;
+
+  INSERT INTO public.admin_action_log (admin_id, target_user_id, action, notes)
+  VALUES (p_admin_id, p_user_id, 'revoke_pro', p_notes);
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 4.11b prepare_account_deletion(p_user_id)
 -- E5: Run before auth.admin.deleteUser(p_user_id). Detaches the user's
 -- payment_submissions from admin_action_log (the RESTRICT FK would otherwise
@@ -1605,6 +1645,7 @@ GRANT EXECUTE ON FUNCTION public.claim_referral(uuid, uuid, text, text, integer)
 GRANT EXECUTE ON FUNCTION public.claim_self_referral_event(uuid, text, integer, text, uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.verify_app_review(uuid, uuid, boolean, integer, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.admin_grant_credits(uuid, uuid, integer, text)  TO service_role;
+GRANT EXECUTE ON FUNCTION public.revoke_pro(uuid, uuid, text)                    TO service_role;
 GRANT EXECUTE ON FUNCTION public.prepare_account_deletion(uuid)                  TO service_role;
 -- pro_monthly_credit_refresh / downgrade_expired_pro are called by pg_cron
 -- (postgres role) — no service_role grant needed;

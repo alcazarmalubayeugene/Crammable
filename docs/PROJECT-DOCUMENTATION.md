@@ -77,6 +77,9 @@ and the roadmap. (Deferred work is tracked separately in `docs/TODO.md`.)
   newer **`insert_reinforcement_cards_and_charge`** (Living Deck, atomic),
   **`claim_self_referral_event`** (profile-complete / deck-share earns),
   **`verify_app_review`** (admin review verification), **`admin_grant_credits`**,
+  **`revoke_pro`** (manual admin Pro revocation — `RETURNS void`; downgrades to free +
+  clears `subscription_expires_at`, raises `NOT_PRO` if the target isn't Pro, audits as
+  `revoke_pro`; leaves Capycoins intact),
   **`prepare_account_deletion`** (E5), **`downgrade_expired_pro`** (Pro-expiry cron), and
   **(v.17) `get_public_quiz_result`** (shareable quiz results — narrow public projection,
   anon-callable `SECURITY DEFINER`; exposes deck title + score only, never owner internals).
@@ -118,7 +121,8 @@ and the roadmap. (Deferred work is tracked separately in `docs/TODO.md`.)
 | `POST /api/rewards/submit-review` | `…/submit-review/route.ts` | ✅ submit in-app review (B4); admin verifies |
 | `POST /api/rewards/claim-profile-complete` | `…/claim-profile-complete/route.ts` | ✅ profile-complete earn (B4) |
 | `GET /api/admin/reviews` (+ `/verify`) | `src/app/api/admin/reviews/**` | ✅ list + atomic `verify_app_review` (E4) |
-| `GET /api/admin/users` (+ `/grant-credits`) | `src/app/api/admin/users/**` | ✅ user list (LIKE-escaped search) + atomic `admin_grant_credits` (E4) |
+| `GET /api/admin/users` (+ `/grant-credits`) | `src/app/api/admin/users/**` | ✅ user list (LIKE-escaped search, incl. `subscription_expires_at`) + atomic `admin_grant_credits` (E4) |
+| `POST /api/admin/users/revoke-pro` | `src/app/api/admin/users/revoke-pro/route.ts` | ✅ `requireAdmin`; atomic `revoke_pro` RPC (downgrade → clear expiry → audit); one-click in admin UI |
 | `GET /api/admin/audit-log` | `src/app/api/admin/audit-log/route.ts` | ✅ admin action trail (E4) |
 | `GET /api/account/export` · `POST /api/account/delete` | `src/app/api/account/**` | ✅ RA-10173 data export + account deletion (E5) |
 | `POST /api/quiz/result` (Living Deck) | `…/quiz/result/route.ts` | ✅ Pro+consent weak-score refresh via `insert_reinforcement_cards_and_charge` (B1) |

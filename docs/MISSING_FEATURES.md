@@ -37,7 +37,7 @@ core feature · **[P2]** nice-to-have / compliance.
 > | **B4** All 3 earn methods | ✅ Done | **E1** Payment notifications | ✅ Done (Realtime toast) |
 > | **B5** Public/shared decks | ✅ Done | **E2** GCash number | ✅ Done |
 > | **C1** Pro card cap | ✅ Done | **E3** Pro-expiry cron | ✅ Done |
-> | | | **E4** Admin tooling | ✅ Done (users/reviews/audit/grant) |
+> | | | **E4** Admin tooling | ✅ Done (users/reviews/audit/grant/revoke-pro) |
 > | | | **E5** Account export + delete | ✅ Done |
 >
 > **The only remaining product gap is A1 — there is no UI to delete a deck**, even

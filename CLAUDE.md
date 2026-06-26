@@ -59,7 +59,7 @@ The error codes already cover the real cases: `UNAUTHORIZED`, `FORBIDDEN`, `CONS
 
 The schema has 10 tables (`profiles`, `decks`, `flashcards`, `quiz_sessions`, `quiz_answers`, `payment_submissions`, `referral_events`, `app_reviews`, `rate_limit_log`, `admin_action_log`) and ~20 functions. **Use the functions — do not re-implement their logic in TypeScript.** (`schema.sql` is the canonical, authoritative list — count is approximate here and grows over time.)
 
-Recent additions (v.17): `quiz_sessions.is_public` + the `get_public_quiz_result()` SECURITY DEFINER RPC (shareable quiz results — narrow public projection, anon-callable), and `profiles.theme_preference` / `font_size_preference` / `font_pair_preference` (theme/font sync; freely user-updatable, not guarded by `protect_immutable_profile_fields()`).
+Recent additions (v.17): `quiz_sessions.is_public` + the `get_public_quiz_result()` SECURITY DEFINER RPC (shareable quiz results — narrow public projection, anon-callable), and `profiles.theme_preference` / `font_size_preference` / `font_pair_preference` (theme/font sync; freely user-updatable, not guarded by `protect_immutable_profile_fields()`). Admin manual Pro revocation: the `revoke_pro()` SECURITY DEFINER RPC + the `revoke_pro` `admin_action_log` action value (see §5).
 
 - **Credits — always `deduct_credit()`.** It is atomic and raises `INSUFFICIENT_CREDITS` when the balance is too low. Never read the balance, subtract in JS, and write it back — that races and lets users double-spend. Catch the raised error and return `ApiErrorCode.INSUFFICIENT_CREDITS`.
 - **Rate limiting — always `check_rate_limit()`** (SECURITY DEFINER RPC) at the top of every AI-facing handler. It both checks *and* logs the request, so `rate_limit_log` writes happen inside it — clients have no direct access to that table. Limits live in `RateLimits` (`/api/upload` 5/hr, `/api/generate` 2/hr, `/api/payment/submit` 2/24h, `/api/referral/claim` 5/24h, etc.). If it returns `allowed: false`, return `RATE_LIMITED`.
@@ -104,6 +104,8 @@ Pro is ₱150 (see `Pricing`). The flow is deliberately manual:
 1. User submits a GCash reference. Validate it against `Validation` — a 13-digit reference (`INVALID_REFERENCE_NUMBER` otherwise). One pending submission at a time (`PAYMENT_ALREADY_PENDING`).
 2. Row lands in `payment_submissions` with status `pending`.
 3. An admin verifies in the GCash app, then approves/rejects via the admin routes. **Only approval flips `subscription_tier` to pro** — and that path writes an `admin_action_log` row (`admin_id` + timestamp). Never auto-activate Pro from the submit handler.
+
+Admins can also **manually revoke Pro** (`POST /api/admin/users/revoke-pro` → `revoke_pro()` RPC): downgrades the user to `free`, clears `subscription_expires_at`, and audits the action as `revoke_pro` (Capycoins are left intact). It raises `NOT_PRO` if the target isn't currently Pro, so the admin UI only surfaces the one-click button for Pro users — which also display their expiry date. This is the inverse of approval; like every privileged tier change it goes through a service-role `SECURITY DEFINER` RPC, never a direct profile write.
 
 `PaymentStatus` is `pending | verified | rejected`. Don't add states without updating `contracts.ts` and the DB CHECK constraint.
 

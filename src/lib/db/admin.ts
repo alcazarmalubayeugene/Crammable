@@ -111,7 +111,7 @@ export async function listUsers(search?: string): Promise<AdminUserRow[]> {
   const admin = createAdminClient();
   let query = admin
     .from(TableNames.profiles)
-    .select("id, email, full_name, subscription_tier, token_balance, is_admin, created_at")
+    .select("id, email, full_name, subscription_tier, subscription_expires_at, token_balance, is_admin, created_at")
     .order("created_at", { ascending: false })
     .limit(50);
 
@@ -148,6 +148,30 @@ export async function grantCreditsAsAdmin(
   });
   if (error) throw toDbError(error, "Failed to grant Capycoins.");
   return data as number;
+}
+
+/**
+ * Manually revoke a user's Pro via revoke_pro() (schema §4.11a): atomic
+ * downgrade to free + clear of subscription_expires_at + admin_action_log
+ * insert (action='pro_revoked'), so the tier change and audit row commit
+ * together. Capycoins are left untouched. Idempotent for already-free users.
+ */
+export async function revokeProAsAdmin(
+  adminId: string,
+  targetUserId: string,
+  notes?: string
+): Promise<{ userId: string }> {
+  const admin = createAdminClient();
+  // Deployed revoke_pro(p_admin_id, p_user_id, p_notes) RETURNS void — PostgREST
+  // matches RPCs by argument name, so the param must be p_user_id. Nothing is
+  // returned, so we echo back the id we were given.
+  const { error } = await admin.rpc("revoke_pro", {
+    p_admin_id: adminId,
+    p_user_id: targetUserId,
+    p_notes: notes ?? null,
+  });
+  if (error) throw toDbError(error, "Failed to revoke Pro.");
+  return { userId: targetUserId };
 }
 
 /**

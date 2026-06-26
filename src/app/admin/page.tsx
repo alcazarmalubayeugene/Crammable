@@ -11,6 +11,7 @@ import {
   PaymentStatus,
   Pricing,
   Routes,
+  SubscriptionTier,
   TableNames,
   UIMessages,
   ReferralCaps,
@@ -27,6 +28,8 @@ import {
   type GrantCreditsRequest,
   type GrantCreditsResult,
   type RejectPaymentRequest,
+  type RevokeProRequest,
+  type RevokeProResult,
   type VerifyReviewRequest,
   type VerifyReviewResult,
 } from "@/lib/contracts";
@@ -57,12 +60,24 @@ interface GrantState {
   amount: string;
   notes: string;
   busy: boolean;
+  revoking: boolean;
   error: string;
   success: string;
 }
 
 function emptyGrantState(): GrantState {
-  return { amount: "", notes: "", busy: false, error: "", success: "" };
+  return { amount: "", notes: "", busy: false, revoking: false, error: "", success: "" };
+}
+
+/** Friendly expiry label for a Pro user's subscription_expires_at. */
+function expiryLabel(iso: string | null): string {
+  if (!iso) return "no expiry set";
+  const expires = new Date(iso);
+  const days = Math.ceil((expires.getTime() - Date.now()) / 86_400_000);
+  const date = expires.toLocaleDateString();
+  if (days < 0) return `expired ${date}`;
+  if (days === 0) return `expires today (${date})`;
+  return `expires ${date} (${days} day${days === 1 ? "" : "s"})`;
 }
 
 function minutesToLabel(mins: number): string {
@@ -213,6 +228,36 @@ export default function AdminPage() {
       loadAuditLog();
     } catch {
       setGrant(targetUser.id, { busy: false, error: UIMessages.genericError });
+    }
+  }
+
+  async function revokePro(targetUser: AdminUserRow) {
+    setGrant(targetUser.id, { revoking: true, error: "", success: "" });
+    try {
+      const res = await fetch(ApiPaths.adminRevokePro, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await authHeaders()),
+        } as HeadersInit,
+        body: JSON.stringify({ userId: targetUser.id } satisfies RevokeProRequest),
+      });
+      const data = (await res.json()) as ApiResponse<RevokeProResult>;
+      if (!data.success) {
+        setGrant(targetUser.id, { revoking: false, error: data.error.message });
+        return;
+      }
+      setUsers((prev) =>
+        prev.map((u) =>
+          u.id === targetUser.id
+            ? { ...u, subscription_tier: SubscriptionTier.FREE, subscription_expires_at: null }
+            : u
+        )
+      );
+      setGrant(targetUser.id, { revoking: false, success: "Pro revoked." });
+      loadAuditLog();
+    } catch {
+      setGrant(targetUser.id, { revoking: false, error: UIMessages.genericError });
     }
   }
 
@@ -625,7 +670,8 @@ export default function AdminPage() {
                         )}
                       </p>
                       <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
-                        {u.full_name ?? "—"} · {u.subscription_tier} · {u.token_balance} Capycoins
+                        {u.full_name ?? "—"} · {u.subscription_tier}
+                        {u.subscription_tier === SubscriptionTier.PRO ? ` (${expiryLabel(u.subscription_expires_at)})` : ""} · {u.token_balance} Capycoins
                       </p>
                     </div>
                   </div>
@@ -655,6 +701,16 @@ export default function AdminPage() {
                     >
                       {gs.busy ? "Granting…" : "Grant Capycoins"}
                     </button>
+                    {u.subscription_tier === SubscriptionTier.PRO && (
+                      <button
+                        type="button"
+                        disabled={gs.revoking}
+                        onClick={() => revokePro(u)}
+                        style={{ background: "none", border: "1.5px solid var(--error)", borderRadius: 8, padding: "8px 16px", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--error)", cursor: gs.revoking ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
+                      >
+                        {gs.revoking ? "Revoking…" : "Revoke Pro"}
+                      </button>
+                    )}
                   </div>
                   {gs.error && <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error)", marginTop: 6 }}>{gs.error}</p>}
                   {gs.success && <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--success)", marginTop: 6 }}>{gs.success}</p>}

@@ -92,6 +92,7 @@ export const AdminAction = {
   REJECTED:        "rejected",
   CREDIT_GRANT:    "credit_grant",
   ACCOUNT_DELETED: "account_deleted",
+  PRO_REVOKED:     "revoke_pro",
 } as const;
 export type AdminAction = (typeof AdminAction)[keyof typeof AdminAction];
 
@@ -187,6 +188,7 @@ export const ApiPaths = {
   adminVerifyReview:     "/api/admin/reviews/verify",
   adminUsers:            "/api/admin/users",
   adminGrantCredits:     "/api/admin/users/grant-credits",
+  adminRevokePro:        "/api/admin/users/revoke-pro",
   adminAuditLog:         "/api/admin/audit-log",
   accountDelete:         "/api/account/delete",
   updatePreferences:     "/api/account/preferences",
@@ -962,13 +964,14 @@ export interface VerifyReviewResult {
 // ── GET /api/admin/users (E4) ──────────────────────────────────────────────────
 /** Minimal profile fields for the admin user-management list. */
 export interface AdminUserRow {
-  id:                string;
-  email:             string;
-  full_name:         string | null;
-  subscription_tier: SubscriptionTier;
-  token_balance:     number;
-  is_admin:          boolean;
-  created_at:        string;
+  id:                      string;
+  email:                   string;
+  full_name:               string | null;
+  subscription_tier:       SubscriptionTier;
+  subscription_expires_at: string | null;   // ISO 8601; null = free or not yet set
+  token_balance:           number;
+  is_admin:                boolean;
+  created_at:              string;
 }
 
 export interface AdminUsersListResult {
@@ -986,6 +989,10 @@ export interface GrantCreditsResult {
   userId:     string;
   newBalance: number;
 }
+
+// ── POST /api/admin/users/revoke-pro ───────────────────────────────────────────
+export interface RevokeProRequest { userId: string; }
+export interface RevokeProResult  { userId: string; }
 
 // ── GET /api/admin/audit-log (E4) ──────────────────────────────────────────────
 export interface AdminAuditLogRow extends AdminActionLog {
