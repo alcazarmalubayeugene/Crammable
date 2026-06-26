@@ -12,22 +12,13 @@ import {
   ApiPaths,
   Routes,
   SubscriptionTier,
-  TableNames,
   UIMessages,
   Validation,
   type ApiResponse,
   type ClaimProfileCompleteResult,
 } from "@/lib/contracts";
 import { Navbar } from "@/components/nav/Navbar";
-
-interface MinProfile {
-  email: string;
-  full_name: string | null;
-  course: string | null;
-  subscription_tier: string;
-  token_balance: number;
-  referral_code: string;
-}
+import { useAppProfile } from "../AppProfileContext";
 
 function SettingsContent() {
   const searchParams = useSearchParams();
@@ -84,7 +75,7 @@ function SettingsContent() {
     }).catch(() => {});
   }
 
-  const [profile, setProfile] = useState<MinProfile | null>(null);
+  const { profile, loading: profileLoading, mutate: mutateProfile } = useAppProfile();
   const [loading, setLoading] = useState(true);
 
   // editable fields
@@ -113,32 +104,22 @@ function SettingsContent() {
   const [resetExpired, setResetExpired] = useState(false);
   const [resetDone, setResetDone] = useState(false);
 
+  // Auth + profile come from the (app) layout context. Seed the editable
+  // name/course fields once the shared profile resolves (reset-password mode
+  // renders its own form above the loading gate and needs no profile).
   useEffect(() => {
-    if (isResetMode) return; // reset mode renders its own form — no profile needed
-    async function load() {
-      const supabase = getSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        window.location.href = Routes.login;
-        return;
+    if (isResetMode) return;
+    if (profileLoading) return;
+    const p = profile;
+    async function seedFields() {
+      if (p) {
+        setFullName(p.full_name ?? "");
+        setCourse(p.course ?? "");
       }
-
-      const { data } = await supabase
-        .from(TableNames.profiles)
-        .select("email, full_name, course, subscription_tier, token_balance, referral_code")
-        .eq("id", user.id)
-        .single();
-
-      const p = data as MinProfile | null;
-      setProfile(p);
-      setFullName(p?.full_name ?? "");
-      setCourse(p?.course ?? "");
       setLoading(false);
     }
-    load();
-  }, [isResetMode]);
+    void seedFields();
+  }, [isResetMode, profile, profileLoading]);
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
@@ -156,12 +137,6 @@ function SettingsContent() {
     setSaveError("");
     setSaveSuccess(false);
     setCreditsAwarded(0);
-
-    const supabase = getSupabaseBrowserClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    if (!user) { window.location.href = Routes.login; return; }
 
     let data: ApiResponse<ClaimProfileCompleteResult>;
     try {
@@ -186,7 +161,7 @@ function SettingsContent() {
       return;
     }
 
-    setProfile((p) => p ? { ...p, full_name: data.fullName, course: data.course, token_balance: data.newBalance } : p);
+    mutateProfile({ full_name: data.fullName, course: data.course, token_balance: data.newBalance });
     setSaveSuccess(true);
     if (data.creditsAwarded > 0) setCreditsAwarded(data.creditsAwarded);
     setTimeout(() => setSaveSuccess(false), 3000);

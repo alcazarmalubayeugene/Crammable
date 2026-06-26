@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { App, Routes } from "@/lib/contracts";
 import { Navbar } from "@/components/nav/Navbar";
-import { QUIZ_RESULT_KEY, type QuizResultData } from "@/app/quiz/[deckId]/page";
+import { QUIZ_RESULT_KEY, type QuizResultData } from "../page";
 import { useCustomAvatar } from "@/lib/theme/customAvatar";
 
 // ── shared styles ─────────────────────────────────────────────────────────────

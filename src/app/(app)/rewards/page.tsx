@@ -5,6 +5,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
 import { PageLoading } from "@/components/ui/PageLoading";
 import { Navbar } from "@/components/nav/Navbar";
+import { useAppProfile } from "../AppProfileContext";
 import {
   App,
   ApiPaths,
@@ -20,15 +21,6 @@ import {
   type ReferralEvent,
   type SubmitAppReviewRequest,
 } from "@/lib/contracts";
-
-// ── types ─────────────────────────────────────────────────────────────────────
-
-interface MinProfile {
-  token_balance: number;
-  full_name: string | null;
-  referral_code: string;
-  referred_by: string | null;
-}
 
 // ── earn-method display config ────────────────────────────────────────────────
 
@@ -80,7 +72,7 @@ function eventLabel(type: string): string {
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function RewardsPage() {
-  const [profile, setProfile] = useState<MinProfile | null>(null);
+  const { profile, loading: profileLoading, mutate: mutateProfile } = useAppProfile();
   const [history, setHistory] = useState<ReferralEvent[]>([]);
   const [referrerName, setReferrerName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -101,27 +93,19 @@ export default function RewardsPage() {
   const [reviewError, setReviewError] = useState("");
   const [submittingReview, setSubmittingReview] = useState(false);
 
+  // Auth + profile come from the (app) layout context. Once the profile
+  // resolves, load this page's own data (referral history, app review, and the
+  // referrer's name) using the shared profile's id / referred_by.
   useEffect(() => {
-    async function load() {
-      const supabase = getSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        window.location.href = Routes.login;
-        return;
-      }
+    if (profileLoading || !profile) return;
 
-      const [profileRes, historyRes, reviewRes] = await Promise.all([
-        supabase
-          .from(TableNames.profiles)
-          .select("token_balance, full_name, referral_code, referred_by")
-          .eq("id", user.id)
-          .single(),
+    async function load(userId: string, referredBy: string | null) {
+      const supabase = getSupabaseBrowserClient();
+      const [historyRes, reviewRes] = await Promise.all([
         supabase
           .from(TableNames.referralEvents)
           .select("*")
-          .eq("referrer_id", user.id)
+          .eq("referrer_id", userId)
           .order("created_at", { ascending: false })
           .limit(20),
         supabase
@@ -130,15 +114,13 @@ export default function RewardsPage() {
           .maybeSingle(),
       ]);
 
-      const profileData = profileRes.data as MinProfile;
-      setProfile(profileData);
       setHistory((historyRes.data ?? []) as ReferralEvent[]);
 
-      if (profileData?.referred_by) {
+      if (referredBy) {
         const { data: referrer } = await supabase
           .from(TableNames.profiles)
           .select("full_name")
-          .eq("id", profileData.referred_by)
+          .eq("id", referredBy)
           .single();
         setReferrerName(referrer?.full_name ?? "a classmate");
       }
@@ -146,8 +128,8 @@ export default function RewardsPage() {
       setAppReview((reviewRes.data as AppReview | null) ?? null);
       setLoading(false);
     }
-    load();
-  }, []);
+    load(profile.id, profile.referred_by);
+  }, [profile, profileLoading]);
 
   async function handleSubmitReview(e: React.FormEvent) {
     e.preventDefault();
@@ -217,7 +199,9 @@ export default function RewardsPage() {
         return;
       }
       setClaimSuccess(UIMessages.referralClaimThanks(data.creditsAwarded));
-      setProfile((p) => p ? { ...p, token_balance: data.newBalance, referred_by: "claimed" } : p);
+      // "claimed" is a sentinel that just needs to be non-null so the claim form
+      // hides — the real referrer id isn't shown anywhere.
+      mutateProfile({ token_balance: data.newBalance, referred_by: "claimed" });
       setClaimCode("");
     } catch {
       setClaimError(UIMessages.genericError);

@@ -2,12 +2,12 @@
 
 import { useEffect, useState, type CSSProperties } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
-import { PageLoading } from "@/components/ui/PageLoading";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { readPausedQuiz, clearPausedQuiz } from "@/lib/quiz/pauseState";
 import { readDefaultQuizType, saveDefaultQuizType } from "@/lib/quiz/defaultQuizType";
 import { Navbar } from "@/components/nav/Navbar";
+import { useAppProfile } from "../../AppProfileContext";
 import {
   ApiPaths,
   GenerationMode,
@@ -16,7 +16,6 @@ import {
   ReferralEventType,
   Routes,
   SubscriptionTier,
-  TableNames,
   UIMessages,
   Validation,
   type ApiResponse,
@@ -35,12 +34,6 @@ import {
   type UpdateFlashcardRequest,
   type UpdateFlashcardResult,
 } from "@/lib/contracts";
-
-interface MinProfile {
-  token_balance: number;
-  full_name: string | null;
-  subscription_tier: (typeof SubscriptionTier)[keyof typeof SubscriptionTier];
-}
 
 // Shared style for the D1 add/edit-card form fields.
 const inputStyle: CSSProperties = {
@@ -62,7 +55,7 @@ export default function DeckDetailPage() {
   const router = useRouter();
   const deckId = Array.isArray(params.id) ? params.id[0] : (params.id as string);
 
-  const [profile, setProfile] = useState<MinProfile | null>(null);
+  const { profile } = useAppProfile();
   const [deck, setDeck] = useState<Deck | null>(null);
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,26 +125,10 @@ export default function DeckDetailPage() {
 
     async function load() {
       try {
-      const supabase = getSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        window.location.replace(Routes.login);
-        return;
-      }
-
-      // Profile stays a direct (RLS-scoped) read — no profile API route exists.
-      // Deck + cards now come from GET /api/decks/[id] (cookie-auth; the route
-      // enforces ownership server-side and 404s for non-owned/missing decks).
-      const [profileRes, deckRes] = await Promise.all([
-        supabase
-          .from(TableNames.profiles)
-          .select("token_balance, full_name, subscription_tier")
-          .eq("id", user.id)
-          .single(),
-        fetch(ApiPaths.deck(deckId)),
-      ]);
+      // Auth + profile are handled by the (app) layout context. Deck + cards
+      // come from GET /api/decks/[id] (cookie-auth; the route enforces ownership
+      // server-side and 404s for non-owned/missing decks).
+      const deckRes = await fetch(ApiPaths.deck(deckId));
 
       const deckJson = (await deckRes.json()) as {
         success: boolean;
@@ -166,7 +143,6 @@ export default function DeckDetailPage() {
         return;
       }
 
-      setProfile(profileRes.data);
       setDeck(deckJson.deck);
       setCards(deckJson.cards ?? []);
       setLoading(false);
@@ -506,8 +482,25 @@ export default function DeckDetailPage() {
   // Only meaningful once we're past the loading gate below (client-only read).
   const pausedQuiz = readPausedQuiz(deckId);
 
+  // Keep the nav + background on screen while the deck loads; show skeletons
+  // where the header and card list will land instead of a full-screen spinner.
   if (loading) {
-    return <PageLoading />;
+    return (
+      <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
+        <Navbar backHref={Routes.dashboard} wordmarkHref={Routes.dashboard} showAvatarMenu={false} />
+        <div className="page-content" style={{ maxWidth: 860, margin: "0 auto" }}>
+          <div className="section-gap">
+            <Skeleton height={28} width="55%" style={{ marginBottom: 10 }} />
+            <Skeleton height={14} width={200} />
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={i} height={64} radius={12} />
+            ))}
+          </div>
+        </div>
+      </main>
+    );
   }
 
   if (error || !deck) {

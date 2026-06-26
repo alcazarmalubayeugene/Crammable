@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
 import { PageLoading } from "@/components/ui/PageLoading";
 import { Navbar } from "@/components/nav/Navbar";
+import { useAppProfile } from "../AppProfileContext";
 import {
   AdminConfig,
   ApiPaths,
@@ -12,7 +12,6 @@ import {
   Pricing,
   Routes,
   SubscriptionTier,
-  TableNames,
   UIMessages,
   ReferralCaps,
   ReferralEventType,
@@ -97,8 +96,8 @@ function minutesToLabel(mins: number): string {
 }
 
 export default function AdminPage() {
+  const { profile, loading: profileLoading } = useAppProfile();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [profile, setProfile] = useState<{ full_name: string | null } | null>(null);
   const [submissions, setSubmissions] = useState<AdminPaymentRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState("");
@@ -113,28 +112,19 @@ export default function AdminPage() {
   const [auditLog, setAuditLog] = useState<AdminAuditLogRow[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
 
+  // Auth + profile (incl. is_admin) come from the (app) layout context. Once it
+  // resolves, gate on is_admin and only then load the admin dashboard data.
   useEffect(() => {
+    if (profileLoading || !profile) return;
+    const isAdminUser = profile.is_admin;
+
     async function load() {
-      const supabase = getSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) { window.location.href = Routes.login; return; }
-
-      const { data: profileData } = await supabase
-        .from(TableNames.profiles)
-        .select("is_admin, full_name")
-        .eq("id", user.id)
-        .single();
-
-      if (!profileData?.is_admin) {
+      if (!isAdminUser) {
         setIsAdmin(false);
         setLoading(false);
         return;
       }
-
       setIsAdmin(true);
-      setProfile({ full_name: profileData.full_name });
 
       const res = await fetch(ApiPaths.adminPayments, {
         headers: await authHeaders(),
@@ -170,8 +160,8 @@ export default function AdminPage() {
       loadUsers();
       loadAuditLog();
     }
-    load();
-  }, []);
+    void load();
+  }, [profile, profileLoading]);
 
   async function loadUsers(search?: string) {
     setUsersLoading(true);

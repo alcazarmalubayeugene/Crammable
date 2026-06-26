@@ -5,6 +5,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { Navbar } from "@/components/nav/Navbar";
 import { authHeaders } from "@/lib/api/auth-headers";
 import { PageLoading } from "@/components/ui/PageLoading";
+import { useAppProfile } from "../AppProfileContext";
 import {
   AdminConfig,
   App,
@@ -26,12 +27,6 @@ import {
 // ── types ─────────────────────────────────────────────────────────────────────
 
 type Phase = "loading" | "already_pro" | "pending" | "form" | "submitted";
-
-interface MinProfile {
-  token_balance: number;
-  full_name: string | null;
-  subscription_tier: string;
-}
 
 interface LatestPayment {
   status: string;
@@ -60,7 +55,7 @@ const PRO_FEATURES = [
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function UpgradePage() {
-  const [profile, setProfile] = useState<MinProfile | null>(null);
+  const { profile, loading: profileLoading } = useAppProfile();
   const [latestPayment, setLatestPayment] = useState<LatestPayment | null>(null);
   const [phase, setPhase] = useState<Phase>("loading");
 
@@ -69,52 +64,33 @@ export default function UpgradePage() {
   const [submitError, setSubmitError] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
+  // Auth + profile come from the (app) layout context. Once the profile
+  // resolves, derive the phase: Pro users see "already_pro", otherwise read the
+  // latest payment (RLS-scoped to this user) to decide pending vs. the form.
   useEffect(() => {
-    async function load() {
-      const supabase = getSupabaseBrowserClient();
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) {
-        window.location.href = Routes.login;
-        return;
-      }
+    if (profileLoading || !profile) return;
+    const p = profile;
 
-      const [profileRes, paymentRes] = await Promise.all([
-        supabase
-          .from(TableNames.profiles)
-          .select("token_balance, full_name, subscription_tier")
-          .eq("id", user.id)
-          .single(),
-        supabase
-          .from(TableNames.paymentSubmissions)
-          .select("status, rejection_reason")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .maybeSingle(),
-      ]);
-
-      const p = profileRes.data as MinProfile | null;
-      setProfile(p);
-
-      if (p?.subscription_tier === SubscriptionTier.PRO) {
+    async function decidePhase() {
+      if (p.subscription_tier === SubscriptionTier.PRO) {
         setPhase("already_pro");
         return;
       }
+      const supabase = getSupabaseBrowserClient();
+      const { data } = await supabase
+        .from(TableNames.paymentSubmissions)
+        .select("status, rejection_reason")
+        .eq("user_id", p.id)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
 
-      const payment = paymentRes.data as LatestPayment | null;
+      const payment = data as LatestPayment | null;
       setLatestPayment(payment);
-
-      if (payment?.status === PaymentStatus.PENDING) {
-        setPhase("pending");
-        return;
-      }
-
-      setPhase("form");
+      setPhase(payment?.status === PaymentStatus.PENDING ? "pending" : "form");
     }
-    load();
-  }, []);
+    void decidePhase();
+  }, [profile, profileLoading]);
 
   // ── validation ───────────────────────────────────────────────────────────────
 

@@ -14,6 +14,7 @@ import {
 } from "@/lib/contracts";
 import { Navbar } from "@/components/nav/Navbar";
 import { PageLoading } from "@/components/ui/PageLoading";
+import { Skeleton } from "@/components/ui/Skeleton";
 import { readPausedQuiz, savePausedQuiz, clearPausedQuiz } from "@/lib/quiz/pauseState";
 import { readDefaultQuizType } from "@/lib/quiz/defaultQuizType";
 
@@ -413,12 +414,27 @@ export default function QuizPage() {
 
   // ── loading / error ───────────────────────────────────────────────────────
 
-  if (phase === "loading" || phase === "starting" || phase === "submitting") {
-    const msg =
-      phase === "starting"   ? "Setting up quiz…" :
-      phase === "submitting" ? "Saving your results…" :
-      "Loading…";
-    return <PageLoading message={msg} />;
+  // "starting" (building the quiz) and "submitting" (saving results) are genuine
+  // full-screen waits — keep the spinner. The initial "loading" phase (fetching
+  // the deck/cards) instead keeps the nav + background on screen and shows a
+  // skeleton where the setup card will land, so the shell never blanks.
+  if (phase === "starting" || phase === "submitting") {
+    return <PageLoading message={phase === "starting" ? "Setting up quiz…" : "Saving your results…"} />;
+  }
+
+  if (phase === "loading") {
+    return (
+      <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
+        <Navbar backHref={Routes.deck(deckId)} showWordmark={false} rightContent={<></>} />
+        <div style={{ maxWidth: 680, margin: "0 auto", padding: "40px 24px" }}>
+          <div style={{ marginBottom: 32 }}>
+            <Skeleton height={30} width={220} style={{ marginBottom: 10 }} />
+            <Skeleton height={14} width={280} />
+          </div>
+          <Skeleton height={180} radius={16} />
+        </div>
+      </main>
+    );
   }
 
   if (phase === "error") {

@@ -163,6 +163,25 @@ button:not(:disabled):active {
   flex-shrink: 0;
 }
 
+/* Skeleton shimmer — a sweeping highlight across a muted block, used by the
+   <Skeleton> components to hold a page's layout while its data loads (in place
+   of the old full-screen spinner). Theme-var driven so it works in light/dark. */
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-subtle) 25%,
+    var(--border) 37%,
+    var(--bg-subtle) 63%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  border-radius: 8px;
+}
+
 /* Capy-reading mascot (upload "generating" state) — a slow, gentle bob so it
    reads as "studying" rather than sitting completely static. */
 @keyframes capyReadBob {

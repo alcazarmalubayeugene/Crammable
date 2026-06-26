@@ -27,6 +27,7 @@ import type { UploadTestDebug } from "@/app/api/upload/route";
 import { PDF_EXTRACTION_TEST_MODE } from "@/lib/dev/pdf-test-mode";
 import { authHeaders } from "@/lib/api/auth-headers";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { useAppProfile } from "@/app/(app)/AppProfileContext";
 import { runOcrOnPages } from "@/lib/pdf/ocr-client";
 import { renderPdfPagesToCanvases } from "@/lib/pdf/render-pages-client";
 
@@ -51,6 +52,8 @@ type ResultView = {
 
 export function PdfUploadFlow() {
   const router = useRouter();
+  // Keep the shared nav coin balance in sync after a generation deducts a credit.
+  const { mutate: mutateProfile } = useAppProfile();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<FlowPhase>("idle");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -202,6 +205,12 @@ export function PdfUploadFlow() {
         return;
       }
 
+      // A successful generation deducts a credit — push the fresh balance into
+      // the shared profile so the nav coin pill is correct on the next page.
+      if (typeof data.creditsRemaining === "number") {
+        mutateProfile({ token_balance: data.creditsRemaining });
+      }
+
       const isPreview = data.deckId.startsWith("preview-");
 
       if (isPreview) {
@@ -219,7 +228,7 @@ export function PdfUploadFlow() {
 
       router.push(Routes.deck(data.deckId));
     },
-    [router, generationMode, deckName, cardCount],
+    [router, generationMode, deckName, cardCount, mutateProfile],
   );
 
   const uploadPdf = useCallback(

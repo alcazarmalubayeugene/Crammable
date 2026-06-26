@@ -1,42 +1,20 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { PdfUploadFlow } from "@/components/upload/PdfUploadFlow";
 import { AvatarPicker } from "@/components/nav/AvatarPicker";
 import { Navbar } from "@/components/nav/Navbar";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { App, MAX_UPLOAD_SIZE_MB, Routes, SubscriptionTier, TableNames } from "@/lib/contracts";
-
-interface NavProfile {
-  token_balance: number;
-  subscription_tier: string;
-}
+import { App, MAX_UPLOAD_SIZE_MB, Routes, SubscriptionTier } from "@/lib/contracts";
+import { useAppProfile } from "../../AppProfileContext";
 
 export default function NewDeckPage() {
-  const [profile, setProfile] = useState<NavProfile | null>(null);
+  // Nav-only profile (Capycoin pill + Pro badge) from the shared (app) context.
+  const { profile } = useAppProfile();
 
-  // Nav-only profile read (Capycoin pill + Pro badge) — mirrors the dashboard's
-  // direct, RLS-scoped Supabase read. Independent of PdfUploadFlow's own
-  // internal consent/tier fetch, which serves a different purpose.
   useEffect(() => {
     document.title = `New Deck — ${App.name}`;
-  }, []);
-
-  useEffect(() => {
-    async function loadNavProfile() {
-      const supabase = getSupabaseBrowserClient();
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data } = await supabase
-        .from(TableNames.profiles)
-        .select("token_balance, subscription_tier")
-        .eq("id", user.id)
-        .single();
-      setProfile(data);
-    }
-    loadNavProfile();
   }, []);
 
   const isPro = profile?.subscription_tier === SubscriptionTier.PRO;

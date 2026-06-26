@@ -12,6 +12,7 @@ import {
 } from "next/font/google";
 import { App, Routes } from "@/lib/contracts";
 import PaymentNotifications from "./PaymentNotifications";
+import { RouteProgress } from "@/components/ui/RouteProgress";
 import {
   ThemeProvider,
   THEME_STORAGE_KEY,
@@ -129,6 +130,7 @@ export default function RootLayout({
         style={{ fontFamily: "var(--font-body, var(--font-dm-sans)), sans-serif" }}
       >
         <ThemeProvider>
+          <RouteProgress />
           {children}
           <PaymentNotifications />
           <div

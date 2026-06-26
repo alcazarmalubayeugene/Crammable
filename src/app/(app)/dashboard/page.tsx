@@ -4,19 +4,11 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { ApiPaths, Routes, SubscriptionTier, TableNames } from "@/lib/contracts";
+import { ApiPaths, Routes, SubscriptionTier } from "@/lib/contracts";
 import { Navbar } from "@/components/nav/Navbar";
-import { PageLoading } from "@/components/ui/PageLoading";
+import { Skeleton, SkeletonDeckCard } from "@/components/ui/Skeleton";
 import { readPausedQuiz } from "@/lib/quiz/pauseState";
-
-interface Profile {
-  full_name: string | null;
-  email: string;
-  token_balance: number;
-  subscription_tier: string;
-  course: string | null;
-}
+import { useAppProfile } from "../AppProfileContext";
 
 interface DeckListItem {
   id: string;
@@ -28,9 +20,12 @@ interface DeckListItem {
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [profile, setProfile] = useState<Profile | null>(null);
+  const { profile, loading: profileLoading } = useAppProfile();
   const [decks, setDecks] = useState<DeckListItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [decksLoading, setDecksLoading] = useState(true);
+  // Show the skeleton shell until both the shared profile and this page's decks
+  // have resolved.
+  const loading = profileLoading || decksLoading;
   // Which deck's "⋮" menu is open — at most one at a time, closed by clicking
   // anywhere else (see the document click listener below).
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -69,54 +64,72 @@ export default function DashboardPage() {
     router.push("/onboarding/course");
   }
 
+  // Decks come from GET /api/decks (cookie-auth); the route enforces ownership
+  // server-side. Auth + profile are handled once by the (app) layout's context.
   useEffect(() => {
-    async function loadDashboard() {
-      const supabase = getSupabaseBrowserClient();
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
-        window.location.href = Routes.login;
-        return;
-      }
-
-      // Profile stays a direct (RLS-scoped) read — there is no profile API route.
-      // Decks now come from GET /api/decks (cookie-auth) instead of a direct query.
-      const [{ data: profileData }, decksRes] = await Promise.all([
-        supabase
-          .from(TableNames.profiles)
-          .select("full_name, email, token_balance, subscription_tier, course")
-          .eq("id", user.id)
-          .single(),
-        fetch(ApiPaths.decks),
-      ]);
-
+    async function loadDecks() {
+      const decksRes = await fetch(ApiPaths.decks);
       const decksJson = (await decksRes.json()) as {
         success: boolean;
         decks?: DeckListItem[];
       };
-
-      // Fresh signups land here right after email confirmation — if they never
-      // finished the one-question-at-a-time /onboarding/* flow, send them
-      // there instead of showing the dashboard. The flag is cleared once that
-      // flow completes (or is skipped), so this never fires again afterward.
-      if (
-        localStorage.getItem("cm_pending_onboarding") === "1" &&
-        (!profileData?.full_name || !profileData?.course)
-      ) {
-        window.location.href = "/onboarding/name";
-        return;
-      }
-
-      setProfile(profileData);
       setDecks(decksJson.success && decksJson.decks ? decksJson.decks : []);
-      setLoading(false);
+      setDecksLoading(false);
     }
-
-    loadDashboard();
+    loadDecks();
   }, []);
 
+  // Fresh signups land here right after email confirmation — if they never
+  // finished the one-question-at-a-time /onboarding/* flow, send them there
+  // instead of showing the dashboard. The flag is cleared once that flow
+  // completes (or is skipped), so this never fires again afterward. Runs once
+  // the shared profile resolves.
+  useEffect(() => {
+    if (profileLoading || !profile) return;
+    if (
+      localStorage.getItem("cm_pending_onboarding") === "1" &&
+      (!profile.full_name || !profile.course)
+    ) {
+      window.location.href = "/onboarding/name";
+    }
+  }, [profile, profileLoading]);
+
+  // While data loads, keep the nav + background on screen and show skeletons
+  // only in the content region — no full-screen spinner, no blank shell. The
+  // Navbar renders pre-data (coin pill / name simply absent until profile
+  // resolves) so the chrome never disappears between navigations.
   if (loading) {
-    return <PageLoading />;
+    return (
+      <main style={{ minHeight: "100vh", background: "var(--bg)", fontFamily: "var(--font-body, sans-serif)" }}>
+        <Navbar
+          wordmarkHref={Routes.dashboard}
+          links={[
+            { label: "Rewards", href: Routes.rewards },
+            { label: "Help", href: Routes.help },
+          ]}
+          showAvatarMenu
+        />
+        <div style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 24px" }}>
+          {/* Greeting */}
+          <div style={{ marginBottom: 36 }}>
+            <Skeleton height={26} width={240} style={{ marginBottom: 10 }} />
+            <Skeleton height={15} width={320} />
+          </div>
+          {/* Stats row */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 16, marginBottom: 40 }}>
+            <Skeleton height={100} radius={14} />
+            <Skeleton height={100} radius={14} />
+            <Skeleton height={100} radius={14} />
+          </div>
+          {/* Deck grid */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <SkeletonDeckCard key={i} />
+            ))}
+          </div>
+        </div>
+      </main>
+    );
   }
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
