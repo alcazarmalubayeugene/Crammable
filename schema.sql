@@ -809,7 +809,7 @@ $$;
 -- Mirrors ReferralCaps in contracts.ts — keep both in sync when caps change.
 --
 -- Caps:
---   signup:           monthly 5
+--   signup:           lifetime 1
 --   deck_share:       monthly 3
 --   app_review:       lifetime 1
 --   profile_complete: lifetime 1
@@ -828,18 +828,17 @@ DECLARE
   monthly_count  INTEGER;
   lifetime_count INTEGER;
 BEGIN
-  IF p_event_type IN ('signup', 'deck_share') THEN
+  IF p_event_type = 'deck_share' THEN
     SELECT COUNT(*) INTO monthly_count
     FROM   public.referral_events
     WHERE  referrer_id = p_referrer_id
       AND  event_type  = p_event_type
       AND  month_key   = p_month_key;
 
-    IF p_event_type = 'signup'     AND monthly_count >= 5 THEN RETURN false; END IF;
-    IF p_event_type = 'deck_share' AND monthly_count >= 3 THEN RETURN false; END IF;
+    IF monthly_count >= 3 THEN RETURN false; END IF;
   END IF;
 
-  IF p_event_type IN ('app_review', 'profile_complete') THEN
+  IF p_event_type IN ('app_review', 'profile_complete', 'signup') THEN
     SELECT COUNT(*) INTO lifetime_count
     FROM   public.referral_events
     WHERE  referrer_id = p_referrer_id
@@ -1155,13 +1154,12 @@ BEGIN
   -- SECURITY (audit 3.1): correctness is re-derived HERE from the canonical
   -- flashcard.back, NOT trusted from the client's isCorrect flag. A client can
   -- send any isCorrect it likes; the authoritative score must come from the DB.
-  -- Matching mirrors the client's grading: case-insensitive, whitespace-trimmed
-  -- equality (works for both identification typing and multiple-choice, where
-  -- the selected option text equals the card back when correct). RLS confines
+  -- Matching: for multiple_choice, case-insensitive trimmed equality; for
+  -- identification, also accepts substring/contains in either direction so
+  -- partial keyword answers grade correctly (mirrors looselyCorrect on the client).
+  -- A blank userAnswer is always incorrect regardless of type. RLS confines
   -- the join to the caller's own cards, so a foreign/unknown flashcardId
-  -- resolves to no row → graded incorrect and earns no score. The grading join
-  -- is inlined per statement (rather than a temp table) so the function is safe
-  -- to call more than once within a single transaction.
+  -- resolves to no row → graded incorrect and earns no score.
 
   -- Tally from the server-derived grade.
   SELECT COUNT(*)::int,
@@ -1170,8 +1168,18 @@ BEGIN
   FROM (
     SELECT COALESCE(
              a->>'userAnswer' IS NOT NULL
+             AND btrim(a->>'userAnswer') <> ''
              AND f.back IS NOT NULL
-             AND lower(btrim(a->>'userAnswer')) = lower(btrim(f.back)),
+             AND (
+               lower(btrim(a->>'userAnswer')) = lower(btrim(f.back))
+               OR (
+                 a->>'quizType' = 'identification'
+                 AND (
+                   position(lower(btrim(a->>'userAnswer')) IN lower(btrim(f.back))) > 0
+                   OR position(lower(btrim(f.back)) IN lower(btrim(a->>'userAnswer'))) > 0
+                 )
+               )
+             ),
              false
            ) AS is_correct
     FROM   jsonb_array_elements(p_answers) AS a
@@ -1192,8 +1200,18 @@ BEGIN
          a->>'userAnswer',
          COALESCE(
            a->>'userAnswer' IS NOT NULL
+           AND btrim(a->>'userAnswer') <> ''
            AND f.back IS NOT NULL
-           AND lower(btrim(a->>'userAnswer')) = lower(btrim(f.back)),
+           AND (
+             lower(btrim(a->>'userAnswer')) = lower(btrim(f.back))
+             OR (
+               a->>'quizType' = 'identification'
+               AND (
+                 position(lower(btrim(a->>'userAnswer')) IN lower(btrim(f.back))) > 0
+                 OR position(lower(btrim(f.back)) IN lower(btrim(a->>'userAnswer'))) > 0
+               )
+             )
+           ),
            false
          )
   FROM   jsonb_array_elements(p_answers) AS a
@@ -1218,8 +1236,18 @@ BEGIN
            bool_or(
              COALESCE(
                a->>'userAnswer' IS NOT NULL
+               AND btrim(a->>'userAnswer') <> ''
                AND fc.back IS NOT NULL
-               AND lower(btrim(a->>'userAnswer')) = lower(btrim(fc.back)),
+               AND (
+                 lower(btrim(a->>'userAnswer')) = lower(btrim(fc.back))
+                 OR (
+                   a->>'quizType' = 'identification'
+                   AND (
+                     position(lower(btrim(a->>'userAnswer')) IN lower(btrim(fc.back))) > 0
+                     OR position(lower(btrim(fc.back)) IN lower(btrim(a->>'userAnswer'))) > 0
+                   )
+                 )
+               ),
                false
              )
            ) AS is_correct

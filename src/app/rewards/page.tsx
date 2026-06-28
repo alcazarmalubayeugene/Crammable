@@ -15,10 +15,9 @@ import {
   UIMessages,
   Validation,
   type ApiResponse,
-  type AppReview,
   type ClaimReferralResult,
-  type ReferralEvent,
-  type SubmitAppReviewRequest,
+  type ReferralHistoryItem,
+  type ReferralHistoryResult,
 } from "@/lib/contracts";
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -39,7 +38,7 @@ const EARN_METHODS = [
     label: "Refer a friend",
     desc: "Share your code. When they sign up, you both earn Capycoins.",
     credits: ReferralCaps[ReferralEventType.SIGNUP].creditsAwarded,
-    cap: `Up to ${ReferralCaps[ReferralEventType.SIGNUP].monthlyCap}x per month`,
+    cap: "Once ever",
   },
   {
     type: ReferralEventType.DECK_SHARE,
@@ -48,14 +47,6 @@ const EARN_METHODS = [
     desc: `Share a public deck that has at least ${(ReferralCaps[ReferralEventType.DECK_SHARE] as { minCards: number }).minCards} cards.`,
     credits: ReferralCaps[ReferralEventType.DECK_SHARE].creditsAwarded,
     cap: `Up to ${ReferralCaps[ReferralEventType.DECK_SHARE].monthlyCap}x per month`,
-  },
-  {
-    type: ReferralEventType.APP_REVIEW,
-    icon: "⭐",
-    label: "Write a review",
-    desc: "Leave a review on the app store. Requires admin verification.",
-    credits: ReferralCaps[ReferralEventType.APP_REVIEW].creditsAwarded,
-    cap: "Once ever",
   },
   {
     type: ReferralEventType.PROFILE_COMPLETE,
@@ -67,13 +58,14 @@ const EARN_METHODS = [
   },
 ] as const;
 
-function eventLabel(type: string): string {
-  switch (type) {
-    case ReferralEventType.SIGNUP:           return "Friend signed up";
+function eventLabel(event: ReferralHistoryItem): string {
+  switch (event.event_type) {
+    case ReferralEventType.SIGNUP:
+      return event.referredName ? `${event.referredName} signed up` : "A friend signed up";
     case ReferralEventType.DECK_SHARE:       return "Shared a deck";
     case ReferralEventType.APP_REVIEW:       return "App review";
     case ReferralEventType.PROFILE_COMPLETE: return "Completed profile";
-    default:                                  return type;
+    default:                                  return event.event_type;
   }
 }
 
@@ -81,7 +73,7 @@ function eventLabel(type: string): string {
 
 export default function RewardsPage() {
   const [profile, setProfile] = useState<MinProfile | null>(null);
-  const [history, setHistory] = useState<ReferralEvent[]>([]);
+  const [history, setHistory] = useState<ReferralHistoryItem[]>([]);
   const [referrerName, setReferrerName] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -94,13 +86,6 @@ export default function RewardsPage() {
   // copy feedback
   const [copied, setCopied] = useState(false);
 
-  // app review form
-  const [appReview, setAppReview] = useState<AppReview | null>(null);
-  const [reviewRating, setReviewRating] = useState(5);
-  const [reviewText, setReviewText] = useState("");
-  const [reviewError, setReviewError] = useState("");
-  const [submittingReview, setSubmittingReview] = useState(false);
-
   useEffect(() => {
     async function load() {
       const supabase = getSupabaseBrowserClient();
@@ -112,27 +97,26 @@ export default function RewardsPage() {
         return;
       }
 
-      const [profileRes, historyRes, reviewRes] = await Promise.all([
+      const [profileRes, historyRes] = await Promise.all([
         supabase
           .from(TableNames.profiles)
           .select("token_balance, full_name, referral_code, referred_by")
           .eq("id", user.id)
           .single(),
-        supabase
-          .from(TableNames.referralEvents)
-          .select("*")
-          .eq("referrer_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(20),
-        supabase
-          .from(TableNames.appReviews)
-          .select("*")
-          .maybeSingle(),
+        fetch(ApiPaths.rewardsReferrals, {
+          headers: await authHeaders(),
+        }),
       ]);
 
       const profileData = profileRes.data as MinProfile;
       setProfile(profileData);
-      setHistory((historyRes.data ?? []) as ReferralEvent[]);
+
+      if (historyRes.ok) {
+        const historyData = (await historyRes.json()) as ApiResponse<ReferralHistoryResult>;
+        if (historyData.success) {
+          setHistory(historyData.events);
+        }
+      }
 
       if (profileData?.referred_by) {
         const { data: referrer } = await supabase
@@ -143,46 +127,10 @@ export default function RewardsPage() {
         setReferrerName(referrer?.full_name ?? "a classmate");
       }
 
-      setAppReview((reviewRes.data as AppReview | null) ?? null);
       setLoading(false);
     }
     load();
   }, []);
-
-  async function handleSubmitReview(e: React.FormEvent) {
-    e.preventDefault();
-    const text = reviewText.trim();
-    if (!text) {
-      setReviewError("Please write a short review.");
-      return;
-    }
-    if (text.length > Validation.appReview.textMaxLength) {
-      setReviewError(`Review must be ${Validation.appReview.textMaxLength} characters or less.`);
-      return;
-    }
-    setReviewError("");
-    setSubmittingReview(true);
-    try {
-      const res = await fetch(ApiPaths.submitAppReview, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(await authHeaders()),
-        } as HeadersInit,
-        body: JSON.stringify({ rating: reviewRating, reviewText: text } satisfies SubmitAppReviewRequest),
-      });
-      const data = (await res.json()) as ApiResponse<AppReview>;
-      if (!data.success) {
-        setReviewError(data.error.message);
-        return;
-      }
-      setAppReview(data);
-    } catch {
-      setReviewError(UIMessages.genericError);
-    } finally {
-      setSubmittingReview(false);
-    }
-  }
 
   async function copyCode() {
     if (!profile?.referral_code) return;
@@ -438,79 +386,6 @@ export default function RewardsPage() {
                       </a>
                     )
                   )}
-
-                  {/* APP_REVIEW: status / form */}
-                  {method.type === ReferralEventType.APP_REVIEW && (
-                    appReview ? (
-                      <span
-                        style={{
-                          fontSize: "calc(12px * var(--font-scale))",
-                          fontWeight: 700,
-                          color: appReview.status === "approved" ? "var(--success)"
-                            : appReview.status === "rejected" ? "var(--error)" : "var(--text-faint)",
-                        }}
-                      >
-                        {appReview.status === "approved" ? "✓ Approved"
-                          : appReview.status === "rejected" ? "✗ Rejected"
-                          : "Pending verification"}
-                      </span>
-                    ) : (
-                      <form onSubmit={handleSubmitReview} style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 4 }}>
-                        <div style={{ display: "flex", gap: 4 }}>
-                          {[1, 2, 3, 4, 5].map((star) => (
-                            <button
-                              key={star}
-                              type="button"
-                              onClick={() => setReviewRating(star)}
-                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: "calc(18px * var(--font-scale))", padding: 0, color: star <= reviewRating ? "var(--primary)" : "var(--border)" }}
-                              aria-label={`${star} star${star > 1 ? "s" : ""}`}
-                            >
-                              {star <= reviewRating ? "★" : "☆"}
-                            </button>
-                          ))}
-                        </div>
-                        <textarea
-                          value={reviewText}
-                          onChange={(e) => setReviewText(e.target.value)}
-                          maxLength={Validation.appReview.textMaxLength}
-                          placeholder="What do you like about Crammable?"
-                          rows={2}
-                          style={{
-                            background: "var(--bg)",
-                            border: "1.5px solid var(--border)",
-                            borderRadius: 8,
-                            padding: "8px 10px",
-                            fontSize: "calc(13px * var(--font-scale))",
-                            color: "var(--text)",
-                            fontFamily: "var(--font-body, sans-serif)",
-                            outline: "none",
-                            resize: "vertical",
-                          }}
-                        />
-                        <button
-                          type="submit"
-                          disabled={submittingReview}
-                          style={{
-                            alignSelf: "flex-start",
-                            background: submittingReview ? "var(--text-faint)" : "var(--primary)",
-                            color: "var(--nav-text)",
-                            border: "none",
-                            borderRadius: 8,
-                            padding: "7px 16px",
-                            fontSize: "calc(12px * var(--font-scale))",
-                            fontWeight: 600,
-                            cursor: submittingReview ? "not-allowed" : "pointer",
-                            fontFamily: "var(--font-body, sans-serif)",
-                          }}
-                        >
-                          {submittingReview ? "Submitting…" : "Submit review"}
-                        </button>
-                        {reviewError && (
-                          <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error)", margin: 0 }}>{reviewError}</p>
-                        )}
-                      </form>
-                    )
-                  )}
                 </div>
               </div>
             );
@@ -658,7 +533,7 @@ export default function RewardsPage() {
               >
                 <div>
                   <p style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--text)", margin: "0 0 2px" }}>
-                    {eventLabel(event.event_type)}
+                    {eventLabel(event)}
                   </p>
                   <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
                     {new Date(event.created_at).toLocaleDateString("en-PH", {

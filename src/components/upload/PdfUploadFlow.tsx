@@ -33,7 +33,6 @@ import { renderPdfPagesToCanvases } from "@/lib/pdf/render-pages-client";
 type FlowPhase =
   | "idle"
   | "uploading"
-  | "ocr_confirm"
   | "ocr_running"
   | "paste_fallback"
   | "generating"
@@ -54,7 +53,6 @@ export function PdfUploadFlow() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [phase, setPhase] = useState<FlowPhase>("idle");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [ocrMessage, setOcrMessage] = useState("");
   const [pageProgress, setPageProgress] = useState({ current: 0, total: 0 });
   const [pastedText, setPastedText]           = useState("");
   const [errorMessage, setErrorMessage]       = useState("");
@@ -142,7 +140,6 @@ export function PdfUploadFlow() {
     setPhase("idle");
     setSelectedFile(null);
     setPdfFile(null);
-    setOcrMessage("");
     setPageProgress({ current: 0, total: 0 });
     setPastedText("");
     setErrorMessage("");
@@ -261,15 +258,9 @@ export function PdfUploadFlow() {
       setImagePageNumbers(imgPages);
       setPartialText(data.partialText);
       setPdfFile(file);
-      // Give a more specific prompt when we already have some good text and know exactly
-      // which pages need scanning.
-      const scanNote =
-        imgPages.length > 0
-          ? ` ${imgPages.length} page${imgPages.length === 1 ? "" : "s"} will be scanned${data.partialText ? " (other pages already extracted)" : ""}.`
-          : "";
-      setOcrMessage(data.message + scanNote);
       setLayer1Payload(data);
-      setPhase("ocr_confirm");
+      // Auto-proceed to OCR — pass values directly to avoid stale-closure race
+      await runClientOcr(file, imgPages, data.partialText);
     },
     [callGenerate, showExtractionPreview],
   );
@@ -292,20 +283,28 @@ export function PdfUploadFlow() {
     router.push(Routes.dashboard);
   }, [router]);
 
-  const runClientOcr = useCallback(async () => {
-    if (!pdfFile) return;
+  const runClientOcr = useCallback(async (
+    overrideFile?: File,
+    overrideImagePages?: number[],
+    overridePartialText?: string,
+  ) => {
+    const file = overrideFile ?? pdfFile;
+    if (!file) return;
 
     setPhase("ocr_running");
     setErrorMessage("");
     setResultView(null);
 
+    const resolvedImagePages = overrideImagePages ?? imagePageNumbers;
+    const resolvedPartialText = overridePartialText ?? partialText;
+
     try {
       // Only render pages the server flagged as sparse — skips pages that already
       // have good embedded text, saving significant time on mixed PDFs.
-      const pagesToOcr = imagePageNumbers.length > 0 ? imagePageNumbers : undefined;
+      const pagesToOcr = resolvedImagePages.length > 0 ? resolvedImagePages : undefined;
 
       const rendered = await renderPdfPagesToCanvases(
-        pdfFile,
+        file,
         (current, total) => {
           setPageProgress({ current, total });
         },
@@ -321,7 +320,7 @@ export function PdfUploadFlow() {
         scannedPageNumbers: pagesToOcr ?? "all",
         needsPasteFallback: ocrResult.needsPasteFallback,
         minTesseractConfidence: OcrThresholds.minTesseractConfidence,
-        hasPartialText: Boolean(partialText),
+        hasPartialText: Boolean(resolvedPartialText),
         pages: ocrResult.pages.map((p) => ({
           page: p.pageNumber,
           confidence: Math.round(p.confidence * 1000) / 1000,
@@ -334,7 +333,7 @@ export function PdfUploadFlow() {
       // than all the way to paste — partial text is better than nothing.
       const ocrSucceeded = !ocrResult.needsPasteFallback && ocrResult.extractedText.trim();
       const finalText = [
-        partialText,
+        resolvedPartialText,
         ocrSucceeded ? ocrResult.extractedText : "",
       ]
         .filter(Boolean)
@@ -838,51 +837,6 @@ export function PdfUploadFlow() {
           </div>
         );
       })()}
-
-      {phase === "ocr_confirm" && pdfFile && (
-        <div
-          className="anim-fade-up"
-          style={{ display: "flex", flexDirection: "column", gap: 16, borderRadius: 20, padding: 24, border: "1.5px solid var(--border)", background: "var(--bg-card)", fontFamily: "var(--font-body, sans-serif)" }}
-        >
-          <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text)", margin: 0 }}>{ocrMessage}</p>
-          {layer1Payload != null ? (
-            <details style={{ borderRadius: 12, border: "1px solid var(--border)", background: "var(--bg-subtle)" }}>
-              <summary style={{ cursor: "pointer", padding: "10px 14px", fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
-                Layer 1 server response (JSON)
-              </summary>
-              <pre style={{ maxHeight: 192, overflow: "auto", padding: "0 14px 14px", fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)" }}>
-                {JSON.stringify(layer1Payload, null, 2)}
-              </pre>
-            </details>
-          ) : null}
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-            <button
-              type="button"
-              onClick={runClientOcr}
-              className="btn-solid"
-              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, border: "none", cursor: "pointer", background: "var(--primary)", color: "var(--on-primary)", fontFamily: "var(--font-body, sans-serif)" }}
-            >
-              Continue (Layer 2 OCR)
-            </button>
-            <button
-              type="button"
-              onClick={() => setPhase("paste_fallback")}
-              className="btn-outline"
-              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, cursor: "pointer", border: "1.5px solid var(--border)", color: "var(--text)", background: "none", fontFamily: "var(--font-body, sans-serif)" }}
-            >
-              Paste text instead
-            </button>
-            <button
-              type="button"
-              onClick={resetToIdle}
-              className="nav-link"
-              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", cursor: "pointer", color: "var(--text-muted)", background: "none", border: "none", fontFamily: "var(--font-body, sans-serif)" }}
-            >
-              Start over
-            </button>
-          </div>
-        </div>
-      )}
 
       {phase === "ocr_running" && (
         <div

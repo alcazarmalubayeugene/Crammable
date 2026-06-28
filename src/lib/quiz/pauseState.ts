@@ -14,6 +14,7 @@ export interface PausedQuizState {
     back:        string;
     userAnswer:  string;
     isCorrect:   boolean;
+    quizType:    "multiple_choice" | "identification";
   }>;
   quizType: QuizType;
 }

@@ -118,6 +118,8 @@ and the roadmap. (Deferred work is tracked separately in `docs/TODO.md`.)
 | `POST·DELETE /api/quiz/[id]/share` | `…/quiz/[id]/share/route.ts` | ✅ (v.17) share / unshare a quiz result (B5); toggles `quiz_sessions.is_public`; owner-only, rate-limited |
 | `GET /api/public/results/[sessionId]` | `…/public/results/[sessionId]/route.ts` | ✅ (v.17) unauthenticated public quiz-result read via `get_public_quiz_result()` RPC |
 | `POST /api/account/preferences` | `…/account/preferences/route.ts` | ✅ (v.17) theme/font sync to the `profiles` row; Zod-validated against the contracts domain arrays |
+| `GET /api/admin/status` | `src/app/api/admin/status/route.ts` | ✅ (v.20) admin-gated liveness probe — DB, DeepSeek, App; returns `AdminStatusData` |
+| `GET /api/rewards/referrals` | `src/app/api/rewards/referrals/route.ts` | ✅ (v.20) caller's referral history enriched with referred user's first name (service-role join, bypasses self-only RLS) |
 | `POST /api/rewards/submit-review` | `…/submit-review/route.ts` | ✅ submit in-app review (B4); admin verifies |
 | `POST /api/rewards/claim-profile-complete` | `…/claim-profile-complete/route.ts` | ✅ profile-complete earn (B4) |
 | `GET /api/admin/reviews` (+ `/verify`) | `src/app/api/admin/reviews/**` | ✅ list + atomic `verify_app_review` (E4) |
@@ -422,6 +424,55 @@ select (select count(*) from auth.users) as auth_users,
 ---
 
 ## 7. Change log / session history
+
+### 2026-06-29 — admin status, referral cap, OCR auto-proceed, lenient grading, rewards UX
+
+Seven product/UX changes shipped to main branch (and live Supabase migrations applied).
+
+**Backend (API + DB)**
+- **`GET /api/admin/status`** — new admin-gated endpoint probing DB, DeepSeek, and App
+  liveness. DB check: lightweight `profiles` SELECT; DeepSeek: `models.list()` (free, no
+  cost; 401 treated as "up" — key wrong but API reachable). Returns `AdminStatusData`
+  (`app | database | deepseek` as `"up"|"down"` + `checkedAt` ISO string). Implemented in
+  `src/app/api/admin/status/route.ts`.
+- **`GET /api/rewards/referrals`** — new authenticated endpoint that reads the caller's
+  `referral_events`, then enriches SIGNUP rows with the referred user's **first name** via
+  the admin (service-role) client — bypassing the self-only RLS on `profiles` without
+  leaking it to the client. Implemented in `src/app/api/rewards/referrals/route.ts`.
+- **Referral signup cap: 5/month → 1 ever (lifetime).** `contracts.ts`
+  `ReferralCaps[SIGNUP]` changed to `{ monthlyCap: null, lifetimeCap: 1 }`.
+  `check_referral_cap()` DB function updated: `signup` moved from the monthly branch into
+  the existing lifetime-1 branch (same as `app_review` / `profile_complete`). Migration
+  `referral_signup_lifetime_cap_1` applied to `gjrdlmxlqngqcnflygcp`.
+- **Lenient identification grading — substring/contains match.** Both the client-side
+  `looselyCorrect()` helper and the server-side `submit_quiz_result()` DB function now grade
+  an identification answer correct when the user's trimmed/lowercased answer is a substring
+  of the canonical answer, OR vice versa. Multiple-choice keeps strict exact match. The
+  `quizType` field was threaded through `SubmitQuizAnswer` (contracts), `LocalAnswer`, and
+  `PausedQuizState.answers`. Migration `quiz_identification_substring_grading` applied live.
+
+**Frontend / UX**
+- **Admin server status widget** — `/admin` page shows three color-coded badges
+  (App / Database / DeepSeek) loaded alongside the existing admin data on page load, with a
+  "Refresh" button that re-fetches on demand.
+- **Next.js dev indicator removed** — `devIndicators: false` added to `next.config.ts`
+  (dev-mode only; compile/runtime errors still surface normally).
+- **"Write a review" earn card removed from `/rewards`** — the `APP_REVIEW` earn method is
+  no longer presented to users. Admin backend (`/api/admin/reviews`, `verify_app_review`
+  RPC, pending-reviews section of `/admin`) is untouched.
+- **Referred friend's name shown in rewards history** — SIGNUP reward rows now show
+  `"{firstName} signed up"` (first name from the new `/api/rewards/referrals` endpoint),
+  falling back to "A friend signed up" when the name is unavailable. Referral cap display
+  updated to "Once ever".
+- **OCR confirmation step removed** — after a successful upload of an image-heavy PDF,
+  the app auto-proceeds to Layer-2 OCR without a confirmation card. The `ocr_confirm`
+  `FlowPhase` state was eliminated; `runClientOcr` was refactored to accept direct-value
+  overrides to avoid stale-closure races when called immediately after state updates.
+
+**TypeScript / tests**
+- `npm run typecheck` clean; `npm test` 72/72 pass (existing unit suite unchanged).
+
+---
 
 ### 2026-06-11 — feature completion (B/C/D/E) + security-audit hardening
 

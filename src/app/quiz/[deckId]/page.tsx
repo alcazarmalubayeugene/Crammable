@@ -77,12 +77,20 @@ interface LocalAnswer {
   back:        string;
   userAnswer:  string;
   isCorrect:   boolean;
+  quizType:    "multiple_choice" | "identification";
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function looselyCorrect(user: string, correct: string): boolean {
-  return user.trim().toLowerCase() === correct.trim().toLowerCase();
+function looselyCorrect(user: string, correct: string, type: "identification" | "multiple_choice"): boolean {
+  const u = user.trim().toLowerCase();
+  const c = correct.trim().toLowerCase();
+  if (!u) return false;
+  if (u === c) return true;
+  if (type === "identification") {
+    return u.includes(c) || c.includes(u);
+  }
+  return false;
 }
 
 // ── page ──────────────────────────────────────────────────────────────────────
@@ -147,7 +155,11 @@ export default function QuizPage() {
           setSessionId(paused.sessionId);
           setQuestions(paused.questions);
           setCurrentIdx(paused.currentIdx);
-          setAnswers(paused.answers);
+          // Provide a quizType default for sessions saved before this field existed
+          setAnswers(paused.answers.map((a) => ({
+            ...a,
+            quizType: a.quizType ?? QuizType.IDENTIFICATION,
+          })));
           setSelectedType(paused.quizType);
           setSelectedOption(null);
           setTypedAnswer("");
@@ -247,7 +259,7 @@ export default function QuizPage() {
     } else {
       if (!typedAnswer.trim()) return;
       userAnswer = typedAnswer;
-      correct = looselyCorrect(userAnswer, q.correctAnswer);
+      correct = looselyCorrect(userAnswer, q.correctAnswer, QuizType.IDENTIFICATION);
     }
 
     setAnswers((prev) => [
@@ -258,6 +270,7 @@ export default function QuizPage() {
         back:        q.correctAnswer,
         userAnswer,
         isCorrect:   correct,
+        quizType:    q.quizType,
       },
     ]);
     setIsCorrect(correct);
@@ -286,6 +299,7 @@ export default function QuizPage() {
       flashcardId: a.flashcardId,
       userAnswer:  a.userAnswer,
       isCorrect:   a.isCorrect,
+      quizType:    a.quizType,
     }));
 
     try {
@@ -398,6 +412,7 @@ export default function QuizPage() {
         back:        qq.correctAnswer,
         userAnswer:  "",
         isCorrect:   false,
+        quizType:    qq.quizType,
       }));
     void submitFinalResult([...answers, ...skipped]);
   }

@@ -190,6 +190,8 @@ export const ApiPaths = {
   adminGrantCredits:     "/api/admin/users/grant-credits",
   adminRevokePro:        "/api/admin/users/revoke-pro",
   adminAuditLog:         "/api/admin/audit-log",
+  adminStatus:           "/api/admin/status",
+  rewardsReferrals:      "/api/rewards/referrals",
   accountDelete:         "/api/account/delete",
   updatePreferences:     "/api/account/preferences",
   authSignup:             "/api/auth/signup",
@@ -280,8 +282,8 @@ export const CardCountOptions = [10, 20, 30] as const;
 export const ReferralCaps = {
   [ReferralEventType.SIGNUP]: {
     creditsAwarded: 10,
-    monthlyCap:     5,      // max 5 referral signups credited per calendar month
-    lifetimeCap:    null,   // no lifetime cap on this event type
+    monthlyCap:     null,   // no monthly cap — lifetime cap applies
+    lifetimeCap:    1,      // max 1 referral signup credited ever
   },
   [ReferralEventType.DECK_SHARE]: {
     creditsAwarded: 5,
@@ -800,6 +802,7 @@ export interface SubmitQuizAnswer {
   flashcardId: string;
   userAnswer:  string | null;
   isCorrect:   boolean;
+  quizType:    Extract<QuizType, "multiple_choice" | "identification">;
 }
 
 export interface SubmitQuizResultRequest {
@@ -993,6 +996,24 @@ export interface GrantCreditsResult {
 // ── POST /api/admin/users/revoke-pro ───────────────────────────────────────────
 export interface RevokeProRequest { userId: string; }
 export interface RevokeProResult  { userId: string; }
+
+// ── GET /api/admin/status ──────────────────────────────────────────────────────
+export interface AdminStatusData {
+  app:       "up";
+  database:  "up" | "down";
+  deepseek:  "up" | "down";
+  checkedAt: string;   // ISO 8601 timestamp
+}
+
+// ── GET /api/rewards/referrals ─────────────────────────────────────────────────
+/** ReferralEvent enriched with the referred user's first name (server-resolved). */
+export interface ReferralHistoryItem extends ReferralEvent {
+  referredName: string | null;   // first name of the person who signed up; null if unknown
+}
+
+export interface ReferralHistoryResult {
+  events: ReferralHistoryItem[];
+}
 
 // ── GET /api/admin/audit-log (E4) ──────────────────────────────────────────────
 export interface AdminAuditLogRow extends AdminActionLog {

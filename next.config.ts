@@ -68,6 +68,8 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   // Don't advertise the framework via X-Powered-By (ZAP low-severity finding).
   poweredByHeader: false,
+  // Hide the Next.js dev-mode build indicator (the corner badge visible during `next dev`).
+  devIndicators: false,
   // pdfjs-dist runs server-side in extract-text-server.ts — keep it out of the
   // server bundle and let Node require() it natively (lower compile + memory).
   // @napi-rs/canvas is only used client-side (render-pages-client), so it does
