@@ -55,16 +55,22 @@ function buildQuestions(cards: Flashcard[], quizType: QuizType): QuizQuestion[] 
     }
 
     if (resolvedType === QuizType.MULTIPLE_CHOICE) {
-      // Same-category distractors first for pedagogically coherent options;
-      // fall back to cards from other categories if the category is too small.
-      const sameCat = shuffled(
-        (byCategory.get(card.category) ?? []).filter((c) => c.id !== card.id),
-      );
-      const otherCat = shuffled(
-        cards.filter((c) => c.id !== card.id && c.category !== card.category),
-      );
-      const distractors = [...sameCat, ...otherCat].slice(0, 3).map((c) => c.back);
-      const options = shuffled([...distractors, card.back]);
+      // Use AI-generated distractors when available (v.21+ cards); fall back to
+      // same-category cross-card selection for older cards that predate the field.
+      let distractorTexts: string[];
+      if (card.distractors && card.distractors.length >= 3) {
+        distractorTexts = shuffled(card.distractors).slice(0, 3);
+      } else {
+        // Legacy fallback: same-category cards first, then cross-category.
+        const sameCat = shuffled(
+          (byCategory.get(card.category) ?? []).filter((c) => c.id !== card.id),
+        );
+        const otherCat = shuffled(
+          cards.filter((c) => c.id !== card.id && c.category !== card.category),
+        );
+        distractorTexts = [...sameCat, ...otherCat].slice(0, 3).map((c) => c.back);
+      }
+      const options = shuffled([...distractorTexts, card.back]);
       return {
         flashcardId:  card.id,
         questionText: card.front,

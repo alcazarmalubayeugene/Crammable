@@ -49,6 +49,7 @@ export async function insertFlashcards(
     front:            card.front,
     back:             card.back,
     explanation:      card.explanation || null,  // empty string → NULL (matches RPC NULLIF)
+    distractors:      card.distractors ?? [],
     tags:             card.tags,
     category:         card.category,
     is_reinforcement: isReinforcement,
@@ -100,6 +101,7 @@ export async function insertReinforcementCardsAndCharge(
       front: c.front,
       back: c.back,
       explanation: c.explanation,
+      distractors: c.distractors ?? [],
       tags: c.tags,
       category: c.category,
     })),

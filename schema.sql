@@ -150,6 +150,7 @@ CREATE TABLE IF NOT EXISTS public.flashcards (
                                           -- cards generated before this column existed (frontend
                                           -- falls back to a live /api/quiz/explain call when NULL).
   tags             TEXT[]      NOT NULL DEFAULT '{}',
+  distractors      TEXT[]      NOT NULL DEFAULT '{}',  -- AI-generated MC wrong options (v.21+); empty for older cards
   category         TEXT        NOT NULL DEFAULT '',
   is_reinforcement BOOLEAN     NOT NULL DEFAULT false,
   difficulty_score FLOAT       NOT NULL DEFAULT 0.5
@@ -1324,12 +1325,16 @@ BEGIN
   )
   RETURNING id INTO v_deck_id;
 
-  INSERT INTO public.flashcards (deck_id, user_id, front, back, explanation, tags, category, is_reinforcement)
+  INSERT INTO public.flashcards (deck_id, user_id, front, back, explanation, distractors, tags, category, is_reinforcement)
   SELECT v_deck_id,
          p_user_id,
          c->>'front',
          c->>'back',
          NULLIF(c->>'explanation', ''),
+         COALESCE(
+           (SELECT array_agg(d) FROM jsonb_array_elements_text(c->'distractors') AS d),
+           '{}'::text[]
+         ),
          COALESCE(
            (SELECT array_agg(t) FROM jsonb_array_elements_text(c->'tags') AS t),
            '{}'::text[]
@@ -1404,12 +1409,16 @@ BEGIN
       USING HINT = 'p_cards must contain at least one card';
   END IF;
 
-  INSERT INTO public.flashcards (deck_id, user_id, front, back, explanation, tags, category, is_reinforcement)
+  INSERT INTO public.flashcards (deck_id, user_id, front, back, explanation, distractors, tags, category, is_reinforcement)
   SELECT p_deck_id,
          p_user_id,
          c->>'front',
          c->>'back',
          NULLIF(c->>'explanation', ''),
+         COALESCE(
+           (SELECT array_agg(d) FROM jsonb_array_elements_text(c->'distractors') AS d),
+           '{}'::text[]
+         ),
          COALESCE(
            (SELECT array_agg(t) FROM jsonb_array_elements_text(c->'tags') AS t),
            '{}'::text[]
