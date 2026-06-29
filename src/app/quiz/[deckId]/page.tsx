@@ -49,7 +49,7 @@ const EXPLANATION_CACHE_KEY = "crammable_explanation_cache";
 function readExplanationCache(): Record<string, string> {
   if (typeof window === "undefined") return {};
   try {
-    return JSON.parse(sessionStorage.getItem(EXPLANATION_CACHE_KEY) ?? "{}");
+    return JSON.parse(localStorage.getItem(EXPLANATION_CACHE_KEY) ?? "{}");
   } catch {
     return {};
   }
@@ -64,9 +64,9 @@ function setCachedExplanation(flashcardId: string, explanation: string) {
   const cache = readExplanationCache();
   cache[flashcardId] = explanation;
   try {
-    sessionStorage.setItem(EXPLANATION_CACHE_KEY, JSON.stringify(cache));
+    localStorage.setItem(EXPLANATION_CACHE_KEY, JSON.stringify(cache));
   } catch {
-    // sessionStorage full/unavailable — cache is a nice-to-have, never block on it
+    // localStorage full/unavailable — cache is a nice-to-have, never block on it
   }
 }
 
@@ -227,11 +227,14 @@ export default function QuizPage() {
   // a free bonus, so errors are swallowed and never block the student.
   async function fetchExplanation(flashcardId: string, questionText: string, correctAnswer: string) {
     setExplanationLoading(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12_000);
     try {
       const res = await fetch(ApiPaths.explainAnswer, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ questionText, correctAnswer }),
+        signal: controller.signal,
       });
       const data = (await res.json()) as { success: boolean } & Partial<ExplainAnswerResult>;
       if (data.success && data.explanation) {
@@ -241,6 +244,7 @@ export default function QuizPage() {
     } catch {
       // silent — never something the student waits on or sees an error for
     } finally {
+      clearTimeout(timeoutId);
       setExplanationLoading(false);
     }
   }
