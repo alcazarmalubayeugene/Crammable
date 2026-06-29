@@ -67,9 +67,11 @@ Frontend page status is in `FRONTEND.md`. Unimplemented backend routes are track
 ### ~~6b. Migrate dashboard + deck-detail pages off Supabase-direct deck reads~~ ✅ Done
 - **Built:** `dashboard/page.tsx` lists decks via `GET /api/decks`; `decks/[id]/page.tsx`
   loads the deck + cards via `GET /api/decks/[id]` (both cookie-auth, RLS-scoped, 404 →
-  redirect/error). Each page still does a **direct, RLS-scoped read for the user's own
-  profile** (token balance / name) because there is no profile API route — that's
-  intentional, not the workaround this item was about.
+  redirect/error).
+- **Update (BackEnd branch):** `GET /api/profile` route added (`src/app/api/profile/route.ts`,
+  `ProfileResult` in contracts). Dashboard now fetches profile via `fetch(ApiPaths.profile)` —
+  the last direct browser Supabase query has been removed. All dashboard data now flows through
+  cookie-authed server routes.
 
 ### ~~7. Quiz API routes (`POST /api/quiz/[id]`, `POST /api/quiz/result`)~~ ✅ Done
 - **Files touched:** new `src/app/api/quiz/[id]/route.ts` (server-side question builder,
