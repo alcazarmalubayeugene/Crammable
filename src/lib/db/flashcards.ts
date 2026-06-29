@@ -115,26 +115,18 @@ export async function insertReinforcementCardsAndCharge(
 
 /**
  * Recompute and persist decks.card_count from the actual flashcards row count
- * (D1 manual card CRUD). A single-statement read-then-write through the
- * session client; decks RLS ("users crud own", FOR ALL) scopes the update to
- * the caller's own deck. Recomputing from source of truth (rather than +1/-1)
- * keeps this self-correcting even under concurrent edits.
+ * (D1 manual card CRUD). Delegates to the recompute_deck_card_count() RPC so
+ * the count-read and card_count-write happen in a single transaction — no race
+ * window between the two statements under concurrent card edits. SECURITY
+ * INVOKER so decks RLS still scopes the update to the caller's own deck.
  */
 export async function recomputeDeckCardCount(deckId: string): Promise<number> {
   const supabase = await createSessionClient();
-  const { count, error: countError } = await supabase
-    .from(TableNames.flashcards)
-    .select("id", { count: "exact", head: true })
-    .eq("deck_id", deckId);
-  if (countError) throw toDbError(countError, "Failed to update deck.");
-
-  const { error: updateError } = await supabase
-    .from(TableNames.decks)
-    .update({ card_count: count ?? 0 })
-    .eq("id", deckId);
-  if (updateError) throw toDbError(updateError, "Failed to update deck.");
-
-  return count ?? 0;
+  const { data, error } = await supabase.rpc("recompute_deck_card_count", {
+    p_deck_id: deckId,
+  });
+  if (error) throw toDbError(error, "Failed to update deck.");
+  return Number(data ?? 0);
 }
 
 export interface NewFlashcardInput {

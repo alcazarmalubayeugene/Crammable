@@ -40,6 +40,8 @@ export interface QuizResultData {
 
 export const QUIZ_RESULT_KEY = "crammable_quiz_result";
 
+const LOAD_TIMEOUT_MS = 10_000;
+
 // Live /api/quiz/explain calls (old cards without a baked-in explanation) take
 // 10-30s — a real DeepSeek round trip. Caching per flashcardId in sessionStorage
 // means a card only ever pays that cost once per tab session, even if the
@@ -136,7 +138,7 @@ export default function QuizPage() {
     const timeout = setTimeout(() => {
       setLoadError("Taking too long to load. Check your connection and refresh.");
       setPhase("error");
-    }, 10_000);
+    }, LOAD_TIMEOUT_MS);
 
     async function load() {
       try {

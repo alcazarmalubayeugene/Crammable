@@ -192,6 +192,7 @@ export const ApiPaths = {
   adminAuditLog:         "/api/admin/audit-log",
   adminStatus:           "/api/admin/status",
   rewardsReferrals:      "/api/rewards/referrals",
+  profile:               "/api/profile",
   accountDelete:         "/api/account/delete",
   updatePreferences:     "/api/account/preferences",
   authSignup:             "/api/auth/signup",
@@ -712,6 +713,11 @@ export interface GenerateResult {
   deckId:           string;
   cards:            GeneratedCard[];
   creditsRemaining: number;
+}
+
+// ── GET /api/profile ─────────────────────────────────────────────────────────
+export interface ProfileResult {
+  profile: Profile;
 }
 
 // ── GET /api/decks ────────────────────────────────────────────────────────────

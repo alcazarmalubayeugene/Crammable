@@ -4,19 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
-import { ApiPaths, Routes, SubscriptionTier, TableNames } from "@/lib/contracts";
+import { ApiPaths, Routes, SubscriptionTier, type Profile } from "@/lib/contracts";
 import { Navbar } from "@/components/nav/Navbar";
 import { PageLoading } from "@/components/ui/PageLoading";
 import { readPausedQuiz } from "@/lib/quiz/pauseState";
-
-interface Profile {
-  full_name: string | null;
-  email: string;
-  token_balance: number;
-  subscription_tier: string;
-  course: string | null;
-}
 
 interface DeckListItem {
   id: string;
@@ -71,24 +62,22 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function loadDashboard() {
-      const supabase = getSupabaseBrowserClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      // Both fetches are cookie-authed server-side routes — no direct Supabase
+      // client needed here. A 401 from profile means not logged in → redirect.
+      const [profileRes, decksRes] = await Promise.all([
+        fetch(ApiPaths.profile),
+        fetch(ApiPaths.decks),
+      ]);
 
-      if (!user) {
+      const profileJson = (await profileRes.json()) as {
+        success: boolean;
+        profile?: Profile;
+      };
+
+      if (!profileJson.success || !profileJson.profile) {
         window.location.href = Routes.login;
         return;
       }
-
-      // Profile stays a direct (RLS-scoped) read — there is no profile API route.
-      // Decks now come from GET /api/decks (cookie-auth) instead of a direct query.
-      const [{ data: profileData }, decksRes] = await Promise.all([
-        supabase
-          .from(TableNames.profiles)
-          .select("full_name, email, token_balance, subscription_tier, course")
-          .eq("id", user.id)
-          .single(),
-        fetch(ApiPaths.decks),
-      ]);
 
       const decksJson = (await decksRes.json()) as {
         success: boolean;
@@ -101,13 +90,13 @@ export default function DashboardPage() {
       // flow completes (or is skipped), so this never fires again afterward.
       if (
         localStorage.getItem("cm_pending_onboarding") === "1" &&
-        (!profileData?.full_name || !profileData?.course)
+        (!profileJson.profile.full_name || !profileJson.profile.course)
       ) {
         window.location.href = "/onboarding/name";
         return;
       }
 
-      setProfile(profileData);
+      setProfile(profileJson.profile);
       setDecks(decksJson.success && decksJson.decks ? decksJson.decks : []);
       setLoading(false);
     }

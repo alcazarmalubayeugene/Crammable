@@ -1,6 +1,9 @@
 import { OcrThresholds } from "@/lib/contracts";
 
-/** Rough token estimate: ~4 chars per token for Latin text. */
+// ~4 chars/token holds for English Latin text. Mixed Tagalog/English or
+// code-heavy content can run 2–3 chars/token, so at the 40k-token cap this
+// estimate may over-send by up to ~50%. Acceptable given the hard server-side
+// content cap, but worth revisiting if DeepSeek starts rejecting large inputs.
 const CHARS_PER_TOKEN = 4;
 
 export function truncateToMaxInputTokens(text: string): string {
