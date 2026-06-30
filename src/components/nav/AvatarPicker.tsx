@@ -80,7 +80,14 @@ export function AvatarPicker() {
           alt=""
           width={72}
           height={72}
-          style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", alignSelf: "center" }}
+          style={{
+            width: 72,
+            height: 72,
+            borderRadius: "50%",
+            objectFit: "cover",
+            alignSelf: "center",
+            border: "3.5px solid var(--primary)",
+          }}
         />
 
         <a
@@ -101,6 +108,48 @@ export function AvatarPicker() {
           }}
         >
           Change profile picture
+        </a>
+
+        <div style={{ borderTop: "1px solid rgba(255,252,247,0.12)", margin: "2px 0" }} />
+
+        <a
+          href={Routes.rewards}
+          className="btn-outline"
+          style={{
+            display: "block",
+            textAlign: "center",
+            background: "rgba(255,252,247,0.06)",
+            color: "rgba(255,252,247,0.9)",
+            border: "1.5px solid rgba(255,252,247,0.18)",
+            borderRadius: 8,
+            padding: "7px 12px",
+            fontSize: "0.78rem",
+            fontWeight: 600,
+            fontFamily: "var(--font-body, sans-serif)",
+            textDecoration: "none",
+          }}
+        >
+          Rewards
+        </a>
+
+        <a
+          href={Routes.help}
+          className="btn-outline"
+          style={{
+            display: "block",
+            textAlign: "center",
+            background: "rgba(255,252,247,0.06)",
+            color: "rgba(255,252,247,0.9)",
+            border: "1.5px solid rgba(255,252,247,0.18)",
+            borderRadius: 8,
+            padding: "7px 12px",
+            fontSize: "0.78rem",
+            fontWeight: 600,
+            fontFamily: "var(--font-body, sans-serif)",
+            textDecoration: "none",
+          }}
+        >
+          Help
         </a>
 
         <div style={{ borderTop: "1px solid rgba(255,252,247,0.12)", margin: "2px 0" }} />

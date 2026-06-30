@@ -124,10 +124,6 @@ export default function DashboardPage() {
         wordmarkHref={Routes.dashboard}
         coinBalance={profile?.token_balance ?? 0}
         isPro={isPro}
-        links={[
-          { label: "Rewards", href: Routes.rewards },
-          { label: "Help", href: Routes.help },
-        ]}
         showAvatarMenu
       />
 
@@ -172,7 +168,7 @@ export default function DashboardPage() {
       )}
 
       {/* ── CONTENT ── */}
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 24px" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(24px, 5vw, 56px) clamp(16px, 4vw, 32px)" }}>
 
         {/* Welcome */}
         <div className="anim-fade-up" style={{ marginBottom: 36 }}>
@@ -252,7 +248,7 @@ export default function DashboardPage() {
           <>
             {/* Deck grid — concept's "+ New deck" tile + per-card "Quiz me" button,
                 layered on top of the card_count/date info the concept doesn't show. */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
               <Link
                 href={Routes.newDeck}
                 className="anim-fade-up hover-lift"

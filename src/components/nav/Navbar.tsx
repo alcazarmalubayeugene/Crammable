@@ -110,7 +110,7 @@ export function Navbar({
           position: centerWordmark ? "relative" : undefined,
           maxWidth: "100%",
           margin: "0 auto",
-          padding: "0 24px",
+          padding: "0 clamp(16px, 4vw, 32px)",
           minHeight: 64,
           display: "flex",
           alignItems: "center",
