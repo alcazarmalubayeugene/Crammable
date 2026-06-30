@@ -106,6 +106,48 @@ export function AvatarPicker() {
         <div style={{ borderTop: "1px solid rgba(255,252,247,0.12)", margin: "2px 0" }} />
 
         <a
+          href={Routes.rewards}
+          className="btn-outline"
+          style={{
+            display: "block",
+            textAlign: "center",
+            background: "rgba(255,252,247,0.06)",
+            color: "rgba(255,252,247,0.9)",
+            border: "1.5px solid rgba(255,252,247,0.18)",
+            borderRadius: 8,
+            padding: "7px 12px",
+            fontSize: "0.78rem",
+            fontWeight: 600,
+            fontFamily: "var(--font-body, sans-serif)",
+            textDecoration: "none",
+          }}
+        >
+          Rewards
+        </a>
+
+        <a
+          href={Routes.help}
+          className="btn-outline"
+          style={{
+            display: "block",
+            textAlign: "center",
+            background: "rgba(255,252,247,0.06)",
+            color: "rgba(255,252,247,0.9)",
+            border: "1.5px solid rgba(255,252,247,0.18)",
+            borderRadius: 8,
+            padding: "7px 12px",
+            fontSize: "0.78rem",
+            fontWeight: 600,
+            fontFamily: "var(--font-body, sans-serif)",
+            textDecoration: "none",
+          }}
+        >
+          Help
+        </a>
+
+        <div style={{ borderTop: "1px solid rgba(255,252,247,0.12)", margin: "2px 0" }} />
+
+        <a
           href={Routes.settings}
           className="btn-outline"
           style={{

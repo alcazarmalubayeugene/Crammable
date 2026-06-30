@@ -451,6 +451,45 @@ button:not(:disabled):active {
   background: var(--primary-hover) !important;
 }
 
+/* ── Darken-on-hover highlight for the public landing page's primary-filled
+   CTAs (Navbar "Get Started Free", hero "Start for Free") — a brightness
+   filter instead of swapping to --primary-hover, since that token lightens
+   in dark mode (the opposite of the darker highlight asked for here). No
+   movement, just the fill darkening. ──────────────────────────────────── */
+.btn-highlight {
+  transition: filter 0.15s ease;
+}
+.btn-highlight:hover {
+  filter: brightness(0.85);
+}
+
+/* ── Same border+text highlight as .link-highlight, for elements that
+   already have a real (non-transparent) border + their own padding, like
+   the hero "See how it works" — no margin-compensation hack needed since
+   the border width isn't changing, just its color. No movement. ──────── */
+.btn-outline-highlight {
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.btn-outline-highlight:hover {
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
+/* ── Plain-text links that should get an outline box appearing around them
+   on hover (border, not a filled background) — e.g. landing page "Log in".
+   No movement, no scale, just the border + text color highlighting. ──── */
+.link-highlight {
+  transition: border-color 0.15s ease, color 0.15s ease;
+  border-radius: 8px;
+  padding: 6px 8px;
+  margin: -6px -8px;
+  border: 1.5px solid transparent;
+}
+.link-highlight:hover {
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
+}
+
 /* ── Small icon-only buttons (deck card "⋮" menu trigger) — transparent by
    default, a real solid highlight on hover (var(--bg-subtle) was too close
    to var(--bg-card) in dark mode to actually read as "hovered"). !important
