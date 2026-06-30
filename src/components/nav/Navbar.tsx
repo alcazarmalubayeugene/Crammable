@@ -42,12 +42,6 @@ export interface NavbarProps {
   adminBadge?: boolean;
   /** Bespoke right-cluster content — replaces the composed right side when set. */
   rightContent?: ReactNode;
-  /** Caps the nav row's width to match this page's own content width (e.g. 580
-   * on Settings), instead of the 1440 default — keeps sparse navs (just a back
-   * link + one label) from stretching across a wide window with nothing to
-   * fill the middle. Default 1440 suits richer navs (dashboard's coin pill +
-   * avatar). */
-  maxWidth?: number;
 }
 
 const WORDMARK_STYLE: CSSProperties = {
@@ -70,7 +64,6 @@ export function Navbar({
   showAvatarMenu,
   adminBadge,
   rightContent,
-  maxWidth = 1440,
 }: NavbarProps) {
   const composedRight = (
     <div className="nav-cluster" style={{ display: "flex", alignItems: "center", gap: 12 }}>
@@ -115,7 +108,7 @@ export function Navbar({
         className="nav-row"
         style={{
           position: centerWordmark ? "relative" : undefined,
-          maxWidth,
+          maxWidth: "100%",
           margin: "0 auto",
           padding: "0 clamp(16px, 4vw, 32px)",
           minHeight: 64,

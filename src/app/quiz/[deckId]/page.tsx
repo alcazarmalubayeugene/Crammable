@@ -966,7 +966,7 @@ export default function QuizPage() {
             </div>
 
             {/* Action buttons */}
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 18 }}>
               {!hasAnswered ? (
                 <button
                   type="button"
@@ -1028,7 +1028,7 @@ export default function QuizPage() {
               not a baked-in speech-bubble graphic, so the text stays normal HTML. */}
           {hasAnswered && !isCorrect && (
             <div
-              className="anim-fade-up"
+              className="anim-fade-up quiz-explain-sidebar"
               style={{
                 position: "absolute",
                 left: "100%",
@@ -1058,6 +1058,7 @@ export default function QuizPage() {
                 )}
               </div>
               <div
+                className="quiz-explain-capy"
                 style={{
                   width: 96,
                   height: 96,

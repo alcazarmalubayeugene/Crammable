@@ -700,7 +700,7 @@ export default function DeckDetailPage() {
               </div>
             </div>
 
-            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+            <div className="deck-action-row" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               {total > 0 && (
                 <>
                   {profile?.subscription_tier === SubscriptionTier.PRO ? (

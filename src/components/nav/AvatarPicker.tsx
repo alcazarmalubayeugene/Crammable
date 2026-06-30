@@ -80,7 +80,14 @@ export function AvatarPicker() {
           alt=""
           width={72}
           height={72}
-          style={{ width: 72, height: 72, borderRadius: "50%", objectFit: "cover", alignSelf: "center" }}
+          style={{
+            width: 72,
+            height: 72,
+            borderRadius: "50%",
+            objectFit: "cover",
+            alignSelf: "center",
+            border: "3.5px solid var(--primary)",
+          }}
         />
 
         <a

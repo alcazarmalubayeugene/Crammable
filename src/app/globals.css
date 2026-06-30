@@ -295,6 +295,39 @@ button:not(:disabled):active {
   }
 }
 
+/* ── Deck page action row (Export PDF / Start Quiz / Delete deck) — at
+   desktop padding+font sizes, three pills don't all fit on a 414px-wide
+   phone row; one would overflow past the card edge instead of wrapping
+   cleanly. Shrink padding/gap/font so all three fit on one row instead. ── */
+@media (max-width: 480px) {
+  .deck-action-row {
+    gap: 6px !important;
+    flex-wrap: nowrap !important;
+  }
+  .deck-action-row a,
+  .deck-action-row button {
+    padding: 7px 10px !important;
+    font-size: calc(11.5px * var(--font-scale)) !important;
+    gap: 4px !important;
+    white-space: nowrap !important;
+  }
+}
+/* iPhone XR and similarly-tight 414px-class screens — the tier above still
+   measured too wide for all three labels at once (~414px viewport vs.
+   ~390px+ of button content), so this tier shaves a bit more specifically
+   in that range. Isolated below the 480px tier so wider phones keep its
+   slightly roomier sizing. */
+@media (max-width: 420px) {
+  .deck-action-row {
+    gap: 4px !important;
+  }
+  .deck-action-row a,
+  .deck-action-row button {
+    padding: 6px 8px !important;
+    font-size: calc(10.5px * var(--font-scale)) !important;
+  }
+}
+
 /* ── Nav link hover/active state — applies to every nav-bar link/button
    across pages (Rewards, Settings, Log out, Back, etc.) so the header
    gives feedback on hover instead of sitting static. ──────────────────── */
@@ -535,6 +568,39 @@ button:not(:disabled):active {
 }
 .chip-card:hover:not(:disabled):not(.chip-card-active) {
   border-color: var(--primary) !important;
+}
+
+/* ── Quiz wrong-answer sidebar (speech bubble + teaching-capy.png) — floats
+   beside the question card (left: 100%) when there's room to its right.
+   Below 1100px the card fills the viewport and that space doesn't exist, so
+   the sidebar gets pushed off-screen instead of just looking cramped —
+   switch to normal flow (stacked under the card) before that happens. ──── */
+@media (max-width: 1100px) {
+  .quiz-explain-sidebar {
+    position: static !important;
+    left: auto !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    margin-top: 28px !important;
+  }
+  .quiz-explain-capy {
+    width: 140px !important;
+    height: 140px !important;
+    margin: 4px auto 0 !important;
+  }
+  /* Tail was fixed at left: 28px to point down-left at Capy's old spot
+     beside the bubble — now that Capy sits centered below it, the tail
+     needs to move to center too instead of pointing at empty space. The
+     bubble's own inline marginLeft: 12 (a desktop-sidebar offset) is
+     zeroed here too, so the tail's 50% lines up with Capy's true center
+     instead of being thrown off by that leftover offset. */
+  .speech-bubble {
+    margin-left: 0 !important;
+  }
+  .speech-bubble::after {
+    left: 50% !important;
+    transform: translateX(-50%) rotate(45deg) !important;
+  }
 }
 
 /* ── Quiz wrong-answer speech bubble (sidebar, next to teaching-capy.png) —
