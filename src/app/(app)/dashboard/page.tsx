@@ -4,11 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
-import { ApiPaths, Routes, SubscriptionTier } from "@/lib/contracts";
+import { ApiPaths, Routes, SubscriptionTier, type Profile } from "@/lib/contracts";
 import { Navbar } from "@/components/nav/Navbar";
 import { Skeleton, SkeletonDeckCard } from "@/components/ui/Skeleton";
 import { readPausedQuiz } from "@/lib/quiz/pauseState";
-import { useAppProfile } from "../AppProfileContext";
 
 interface DeckListItem {
   id: string;
@@ -67,12 +66,42 @@ export default function DashboardPage() {
   // Decks come from GET /api/decks (cookie-auth); the route enforces ownership
   // server-side. Auth + profile are handled once by the (app) layout's context.
   useEffect(() => {
-    async function loadDecks() {
-      const decksRes = await fetch(ApiPaths.decks);
+    async function loadDashboard() {
+      // Both fetches are cookie-authed server-side routes — no direct Supabase
+      // client needed here. A 401 from profile means not logged in → redirect.
+      const [profileRes, decksRes] = await Promise.all([
+        fetch(ApiPaths.profile),
+        fetch(ApiPaths.decks),
+      ]);
+
+      const profileJson = (await profileRes.json()) as {
+        success: boolean;
+        profile?: Profile;
+      };
+
+      if (!profileJson.success || !profileJson.profile) {
+        window.location.href = Routes.login;
+        return;
+      }
+
       const decksJson = (await decksRes.json()) as {
         success: boolean;
         decks?: DeckListItem[];
       };
+
+      // Fresh signups land here right after email confirmation — if they never
+      // finished the one-question-at-a-time /onboarding/* flow, send them
+      // there instead of showing the dashboard. The flag is cleared once that
+      // flow completes (or is skipped), so this never fires again afterward.
+      if (
+        localStorage.getItem("cm_pending_onboarding") === "1" &&
+        (!profileJson.profile.full_name || !profileJson.profile.course)
+      ) {
+        window.location.href = "/onboarding/name";
+        return;
+      }
+
+      setProfile(profileJson.profile);
       setDecks(decksJson.success && decksJson.decks ? decksJson.decks : []);
       setDecksLoading(false);
     }
@@ -148,10 +177,6 @@ export default function DashboardPage() {
         wordmarkHref={Routes.dashboard}
         coinBalance={profile?.token_balance ?? 0}
         isPro={isPro}
-        links={[
-          { label: "Rewards", href: Routes.rewards },
-          { label: "Help", href: Routes.help },
-        ]}
         showAvatarMenu
       />
 
@@ -196,7 +221,7 @@ export default function DashboardPage() {
       )}
 
       {/* ── CONTENT ── */}
-      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "40px 24px" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "clamp(24px, 5vw, 56px) clamp(16px, 4vw, 32px)" }}>
 
         {/* Welcome */}
         <div className="anim-fade-up" style={{ marginBottom: 36 }}>
@@ -276,7 +301,7 @@ export default function DashboardPage() {
           <>
             {/* Deck grid — concept's "+ New deck" tile + per-card "Quiz me" button,
                 layered on top of the card_count/date info the concept doesn't show. */}
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))", gap: 16 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
               <Link
                 href={Routes.newDeck}
                 className="anim-fade-up hover-lift"

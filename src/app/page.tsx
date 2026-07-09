@@ -10,11 +10,12 @@ export default function Home() {
       <Navbar
         rightContent={
           <>
-            <a href={Routes.login} className="nav-link" style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)", textDecoration: "none" }}>
+            <a href={Routes.login} className="link-highlight" style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text-faint)", textDecoration: "none" }}>
               Log in
             </a>
             <a
               href={Routes.signup}
+              className="btn-highlight"
               style={{ fontSize: "calc(14px * var(--font-scale))", background: "var(--primary)", color: "var(--nav-text)", padding: "8px 18px", borderRadius: 9, textDecoration: "none", fontWeight: 600 }}
             >
               Get Started Free
@@ -44,12 +45,14 @@ export default function Home() {
         <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "center", gap: 14 }}>
           <a
             href="/signup"
+            className="btn-highlight"
             style={{ background: "var(--primary)", color: "var(--nav-text)", padding: "14px 32px", borderRadius: 12, fontSize: "calc(15px * var(--font-scale))", fontWeight: 600, textDecoration: "none" }}
           >
             Start for Free — 3 Capycoins included
           </a>
           <a
             href="#how-it-works"
+            className="btn-outline-highlight"
             style={{ border: "1.5px solid var(--border)", color: "var(--text-muted)", padding: "14px 32px", borderRadius: 12, fontSize: "calc(15px * var(--font-scale))", textDecoration: "none" }}
           >
             See how it works

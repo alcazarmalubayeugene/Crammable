@@ -41,6 +41,8 @@ export interface QuizResultData {
 
 export const QUIZ_RESULT_KEY = "crammable_quiz_result";
 
+const LOAD_TIMEOUT_MS = 10_000;
+
 // Live /api/quiz/explain calls (old cards without a baked-in explanation) take
 // 10-30s — a real DeepSeek round trip. Caching per flashcardId in sessionStorage
 // means a card only ever pays that cost once per tab session, even if the
@@ -50,7 +52,7 @@ const EXPLANATION_CACHE_KEY = "crammable_explanation_cache";
 function readExplanationCache(): Record<string, string> {
   if (typeof window === "undefined") return {};
   try {
-    return JSON.parse(sessionStorage.getItem(EXPLANATION_CACHE_KEY) ?? "{}");
+    return JSON.parse(localStorage.getItem(EXPLANATION_CACHE_KEY) ?? "{}");
   } catch {
     return {};
   }
@@ -65,9 +67,9 @@ function setCachedExplanation(flashcardId: string, explanation: string) {
   const cache = readExplanationCache();
   cache[flashcardId] = explanation;
   try {
-    sessionStorage.setItem(EXPLANATION_CACHE_KEY, JSON.stringify(cache));
+    localStorage.setItem(EXPLANATION_CACHE_KEY, JSON.stringify(cache));
   } catch {
-    // sessionStorage full/unavailable — cache is a nice-to-have, never block on it
+    // localStorage full/unavailable — cache is a nice-to-have, never block on it
   }
 }
 
@@ -78,12 +80,20 @@ interface LocalAnswer {
   back:        string;
   userAnswer:  string;
   isCorrect:   boolean;
+  quizType:    "multiple_choice" | "identification";
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-function looselyCorrect(user: string, correct: string): boolean {
-  return user.trim().toLowerCase() === correct.trim().toLowerCase();
+function looselyCorrect(user: string, correct: string, type: "identification" | "multiple_choice"): boolean {
+  const u = user.trim().toLowerCase();
+  const c = correct.trim().toLowerCase();
+  if (!u) return false;
+  if (u === c) return true;
+  if (type === "identification") {
+    return u.includes(c) || c.includes(u);
+  }
+  return false;
 }
 
 // ── page ──────────────────────────────────────────────────────────────────────
@@ -131,7 +141,7 @@ export default function QuizPage() {
     const timeout = setTimeout(() => {
       setLoadError("Taking too long to load. Check your connection and refresh.");
       setPhase("error");
-    }, 10_000);
+    }, LOAD_TIMEOUT_MS);
 
     async function load() {
       try {
@@ -150,7 +160,11 @@ export default function QuizPage() {
           setSessionId(paused.sessionId);
           setQuestions(paused.questions);
           setCurrentIdx(paused.currentIdx);
-          setAnswers(paused.answers);
+          // Provide a quizType default for sessions saved before this field existed
+          setAnswers(paused.answers.map((a) => ({
+            ...a,
+            quizType: a.quizType ?? QuizType.IDENTIFICATION,
+          })));
           setSelectedType(paused.quizType);
           setSelectedOption(null);
           setTypedAnswer("");
@@ -218,11 +232,14 @@ export default function QuizPage() {
   // a free bonus, so errors are swallowed and never block the student.
   async function fetchExplanation(flashcardId: string, questionText: string, correctAnswer: string) {
     setExplanationLoading(true);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12_000);
     try {
       const res = await fetch(ApiPaths.explainAnswer, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ questionText, correctAnswer }),
+        signal: controller.signal,
       });
       const data = (await res.json()) as { success: boolean } & Partial<ExplainAnswerResult>;
       if (data.success && data.explanation) {
@@ -232,6 +249,7 @@ export default function QuizPage() {
     } catch {
       // silent — never something the student waits on or sees an error for
     } finally {
+      clearTimeout(timeoutId);
       setExplanationLoading(false);
     }
   }
@@ -250,7 +268,7 @@ export default function QuizPage() {
     } else {
       if (!typedAnswer.trim()) return;
       userAnswer = typedAnswer;
-      correct = looselyCorrect(userAnswer, q.correctAnswer);
+      correct = looselyCorrect(userAnswer, q.correctAnswer, QuizType.IDENTIFICATION);
     }
 
     setAnswers((prev) => [
@@ -261,6 +279,7 @@ export default function QuizPage() {
         back:        q.correctAnswer,
         userAnswer,
         isCorrect:   correct,
+        quizType:    q.quizType,
       },
     ]);
     setIsCorrect(correct);
@@ -289,6 +308,7 @@ export default function QuizPage() {
       flashcardId: a.flashcardId,
       userAnswer:  a.userAnswer,
       isCorrect:   a.isCorrect,
+      quizType:    a.quizType,
     }));
 
     try {
@@ -401,6 +421,7 @@ export default function QuizPage() {
         back:        qq.correctAnswer,
         userAnswer:  "",
         isCorrect:   false,
+        quizType:    qq.quizType,
       }));
     void submitFinalResult([...answers, ...skipped]);
   }
@@ -979,7 +1000,7 @@ export default function QuizPage() {
             </div>
 
             {/* Action buttons */}
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 18 }}>
               {!hasAnswered ? (
                 <button
                   type="button"
@@ -1041,7 +1062,7 @@ export default function QuizPage() {
               not a baked-in speech-bubble graphic, so the text stays normal HTML. */}
           {hasAnswered && !isCorrect && (
             <div
-              className="anim-fade-up"
+              className="anim-fade-up quiz-explain-sidebar"
               style={{
                 position: "absolute",
                 left: "100%",
@@ -1071,6 +1092,7 @@ export default function QuizPage() {
                 )}
               </div>
               <div
+                className="quiz-explain-capy"
                 style={{
                   width: 96,
                   height: 96,

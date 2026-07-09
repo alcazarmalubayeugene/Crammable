@@ -30,13 +30,19 @@ export async function POST(request: Request): Promise<Response> {
     if (!rejectionReason) {
       return apiFail(ApiErrorCode.VALIDATION_ERROR, "rejectionReason is required.", 400);
     }
+    if (rejectionReason.length > Validation.adminNotes.maxLength) {
+      return apiFail(ApiErrorCode.VALIDATION_ERROR, `Rejection reason must be ${Validation.adminNotes.maxLength} characters or fewer.`, 400);
+    }
 
-    const notes = body.notes?.trim().slice(0, Validation.adminNotes.maxLength) || undefined;
+    const notes = body.notes?.trim() || undefined;
+    if (notes && notes.length > Validation.adminNotes.maxLength) {
+      return apiFail(ApiErrorCode.VALIDATION_ERROR, `Notes must be ${Validation.adminNotes.maxLength} characters or fewer.`, 400);
+    }
 
     await rejectPayment(
       user.id,
       paymentId,
-      rejectionReason.slice(0, Validation.adminNotes.maxLength),
+      rejectionReason,
       notes
     );
 

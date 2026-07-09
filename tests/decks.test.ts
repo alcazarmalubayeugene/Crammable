@@ -11,8 +11,8 @@ const mockedCreateSession = vi.mocked(createSessionClient);
 
 const input: NewDeckInput = { userId: "u1", title: "Bio 101", pdfType: PdfType.TEXT };
 const cards: GeneratedCard[] = [
-  { front: "Q1", back: "A1", explanation: "E1", tags: [], category: "General" },
-  { front: "Q2", back: "A2", explanation: "E2", tags: [], category: "General" },
+  { front: "Q1", back: "A1", explanation: "E1", distractors: ["W1", "W2", "W3"], tags: [], category: "General" },
+  { front: "Q2", back: "A2", explanation: "E2", distractors: ["W1", "W2", "W3"], tags: [], category: "General" },
 ];
 
 function clientWithRpc(rpcResult: QueryResult) {

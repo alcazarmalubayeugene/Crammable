@@ -20,6 +20,7 @@ import {
   type AdminAuditLogResult,
   type AdminAuditLogRow,
   type AdminPaymentRow,
+  type AdminStatusData,
   type AdminUserRow,
   type AdminUsersListResult,
   type ApiResponse,
@@ -111,6 +112,8 @@ export default function AdminPage() {
   const [revokeStates, setRevokeStates] = useState<Record<string, RevokeState>>({});
   const [auditLog, setAuditLog] = useState<AdminAuditLogRow[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
+  const [serverStatus, setServerStatus] = useState<AdminStatusData | null>(null);
+  const [statusLoading, setStatusLoading] = useState(false);
 
   // Auth + profile (incl. is_admin) come from the (app) layout context. Once it
   // resolves, gate on is_admin and only then load the admin dashboard data.
@@ -159,6 +162,7 @@ export default function AdminPage() {
 
       loadUsers();
       loadAuditLog();
+      loadServerStatus();
     }
     void load();
   }, [profile, profileLoading]);
@@ -195,6 +199,19 @@ export default function AdminPage() {
       }
     } finally {
       setAuditLoading(false);
+    }
+  }
+
+  async function loadServerStatus() {
+    setStatusLoading(true);
+    try {
+      const res = await fetch(ApiPaths.adminStatus, { headers: await authHeaders() });
+      const data = (await res.json()) as ApiResponse<AdminStatusData>;
+      if (data.success) {
+        setServerStatus(data);
+      }
+    } finally {
+      setStatusLoading(false);
     }
   }
 
@@ -400,6 +417,59 @@ export default function AdminPage() {
 
       {/* ── CONTENT ── */}
       <div style={{ maxWidth: 900, margin: "0 auto", padding: "40px 24px 64px" }}>
+
+        {/* ── Server Status ── */}
+        <div style={{ marginBottom: 28, background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 16, padding: "18px 22px" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
+            <h2 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(16px * var(--font-scale))", fontWeight: 700, color: "var(--text)", margin: 0 }}>
+              Server Status
+            </h2>
+            <button
+              type="button"
+              onClick={loadServerStatus}
+              disabled={statusLoading}
+              style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 600, color: "var(--primary)", background: "none", border: "none", cursor: statusLoading ? "not-allowed" : "pointer", padding: 0, fontFamily: "var(--font-body, sans-serif)" }}
+            >
+              {statusLoading ? "Checking…" : "↻ Refresh"}
+            </button>
+          </div>
+          {statusLoading && !serverStatus ? (
+            <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)", margin: 0 }}>Checking…</p>
+          ) : serverStatus ? (
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", alignItems: "center" }}>
+              {(["app", "database", "deepseek"] as const).map((svc) => {
+                const status = serverStatus[svc];
+                const isUp = status === "up";
+                return (
+                  <div
+                    key={svc}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      background: isUp ? "var(--success-bg)" : "var(--error-bg)",
+                      border: `1px solid ${isUp ? "var(--success)" : "var(--error)"}`,
+                      borderRadius: 8,
+                      padding: "5px 12px",
+                    }}
+                  >
+                    <span style={{ fontSize: "calc(11px * var(--font-scale))", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: isUp ? "var(--success-dark)" : "var(--error-dark)" }}>
+                      {svc === "deepseek" ? "DeepSeek" : svc.charAt(0).toUpperCase() + svc.slice(1)}
+                    </span>
+                    <span style={{ fontSize: "calc(11px * var(--font-scale))", fontWeight: 700, color: isUp ? "var(--success-dark)" : "var(--error-dark)" }}>
+                      {isUp ? "✓ Up" : "✗ Down"}
+                    </span>
+                  </div>
+                );
+              })}
+              <span style={{ fontSize: "calc(11px * var(--font-scale))", color: "var(--text-faint)", marginLeft: "auto" }}>
+                {new Date(serverStatus.checkedAt).toLocaleTimeString()}
+              </span>
+            </div>
+          ) : (
+            <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-faint)", margin: 0 }}>Status unavailable.</p>
+          )}
+        </div>
 
         {/* Header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 28, flexWrap: "wrap", gap: 12 }}>

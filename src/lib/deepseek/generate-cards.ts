@@ -5,7 +5,7 @@ import { completeChatWithRetry } from "@/lib/deepseek/client";
 const FLASHCARD_SYSTEM_PROMPT =
   "You create study flashcards for Philippine university students. " +
   "Return valid JSON only — no markdown fences, no prose outside the JSON. " +
-  "All output (title, category names, card fronts, card backs, tags) must be in English " +
+  "All output (title, category names, card fronts, card backs, distractors, tags) must be in English " +
   "regardless of the language of the source document.";
 
 function buildFlashcardUserPrompt(
@@ -17,10 +17,10 @@ function buildFlashcardUserPrompt(
 
   const depthInstructions = isDeepDive
     ? `This is a DEEP DIVE pass — go beyond surface recall:
-- Write thorough "back" explanations (2-4 sentences) that explain the WHY/HOW, not just a one-line definition.
-- Where relevant, include a brief example, a contrast with a related/confusable concept, or a common pitfall.
+- Write the "back" as a single clear answer sentence (under 25 words) — thorough but quiz-ready, not an essay. Do not begin with "It is" or repeat the front text.
+- Where relevant, write the "explanation" (2-4 sentences) covering WHY/HOW, a contrast with a related concept, or a common pitfall.
 - Aim to use the full ${maxCards}-card budget if the source material supports it.`
-    : `Write concise "back" answers (1-2 sentences) — clear definitions, not essays.`;
+    : `Write the "back" as a single, direct answer sentence (under 20 words) — as if it will appear as one radio-button choice in a multiple-choice quiz. Do not begin with "It is" or repeat the front text.`;
 
   return `The following text was extracted from a student's course handout (PDF, OCR, or paste).
 
@@ -29,9 +29,13 @@ Group them into logical topic categories (aim for 3–7 categories).
 
 ${depthInstructions}
 
-For each card, also write a SEPARATE "explanation" (1-3 sentences): why the "back" answer is
-correct, not just a restatement of it. This is shown to the student ONLY if they answer the quiz
-question wrong — it should teach the underlying reasoning, not repeat the definition.
+For each card, write:
+1. "explanation" (1-3 sentences): WHY the "back" answer is correct — teach the reasoning, not restate the definition. Shown only when the student answers wrong.
+2. "distractors": exactly 3 plausible-but-wrong answer strings for multiple-choice use.
+   - Same format and similar length as "back" — they appear alongside the correct answer as MC options.
+   - Target misconceptions or near-misses a real student might pick.
+   - Never make a distractor obviously absurd, a paraphrase of "back", or completely unrelated to the topic.
+   - Each distractor must be distinct from the others and from "back".
 
 Return JSON in EXACTLY this shape — no other keys, no extra nesting:
 {
@@ -40,7 +44,13 @@ Return JSON in EXACTLY this shape — no other keys, no extra nesting:
     {
       "name": "Category Name",
       "cards": [
-        { "front": "question or term", "back": "answer or definition", "explanation": "why the answer is correct", "tags": ["topic"] }
+        {
+          "front": "question or term",
+          "back": "correct answer (concise, quiz-ready)",
+          "explanation": "why the answer is correct",
+          "distractors": ["plausible wrong answer 1", "plausible wrong answer 2", "plausible wrong answer 3"],
+          "tags": ["topic"]
+        }
       ]
     }
   ]
@@ -48,7 +58,7 @@ Return JSON in EXACTLY this shape — no other keys, no extra nesting:
 
 Rules:
 - ALL text must be in English — translate if the source is in another language.
-- Each card must have a non-empty front, back, and explanation.
+- Each card must have a non-empty front, back, explanation, and exactly 3 distractors.
 - tags: 0–3 short topic labels per card.
 - Distribute cards across categories; do not put all cards in one category.
 - Do not invent facts not supported by the source text.
@@ -64,6 +74,7 @@ interface RawCard {
   front?: string;
   back?: string;
   explanation?: string;
+  distractors?: string[];
   tags?: string[];
 }
 
@@ -98,6 +109,7 @@ function parseCategorisedPayload(raw: string, maxCards: number): {
           front:       card.front.trim(),
           back:        card.back.trim(),
           explanation: card.explanation?.trim() ?? "",
+          distractors: (card.distractors ?? []).map((d) => d.trim()).filter(Boolean).slice(0, 3),
           tags:        (card.tags ?? []).map((t) => t.trim()).filter(Boolean).slice(0, 5),
           category:    categoryName,
         });
@@ -115,6 +127,7 @@ function parseCategorisedPayload(raw: string, maxCards: number): {
       front:       card.front.trim(),
       back:        card.back.trim(),
       explanation: card.explanation?.trim() ?? "",
+      distractors: (card.distractors ?? []).map((d) => d.trim()).filter(Boolean).slice(0, 3),
       tags:        (card.tags ?? []).map((t) => t.trim()).filter(Boolean).slice(0, 5),
       category:    "General",
     });
@@ -147,7 +160,7 @@ export async function generateFlashcardsFromText(
 const REINFORCEMENT_SYSTEM_PROMPT =
   "You create study flashcards for Philippine university students. " +
   "Return valid JSON only — no markdown fences, no prose outside the JSON. " +
-  "All output (category names, card fronts, card backs, tags) must be in English " +
+  "All output (category names, card fronts, card backs, distractors, tags) must be in English " +
   "regardless of the language of the source material.";
 
 function buildReinforcementUserPrompt(weakCards: Flashcard[], maxCards: number): string {
@@ -162,9 +175,13 @@ the idea) — do not just repeat the original wording.
 
 Generate up to ${maxCards} new flashcards total, one per topic below where possible.
 
-For each card, also write a SEPARATE "explanation" (1-3 sentences): why the "back" answer is
-correct, not just a restatement of it. This is shown to the student ONLY if they answer the quiz
-question wrong — it should teach the underlying reasoning, not repeat the definition.
+For each card, write:
+1. "back": a single, direct answer sentence (under 20 words) — concise and quiz-ready.
+2. "explanation" (1-3 sentences): WHY the answer is correct — teach the reasoning, not restate.
+3. "distractors": exactly 3 plausible-but-wrong answer strings for multiple-choice use.
+   - Same format and similar length as "back".
+   - Target misconceptions or near-misses a real student might pick.
+   - Never obviously absurd, a paraphrase of "back", or completely off-topic.
 
 Struggling cards:
 ${cardList}
@@ -175,7 +192,13 @@ Return JSON in EXACTLY this shape — no other keys, no extra nesting:
     {
       "name": "Category Name",
       "cards": [
-        { "front": "question or term", "back": "answer or definition", "explanation": "why the answer is correct", "tags": ["topic"] }
+        {
+          "front": "question or term",
+          "back": "correct answer (concise, quiz-ready)",
+          "explanation": "why the answer is correct",
+          "distractors": ["plausible wrong answer 1", "plausible wrong answer 2", "plausible wrong answer 3"],
+          "tags": ["topic"]
+        }
       ]
     }
   ]
@@ -183,7 +206,7 @@ Return JSON in EXACTLY this shape — no other keys, no extra nesting:
 
 Rules:
 - ALL text must be in English.
-- Each card must have a non-empty front, back, and explanation.
+- Each card must have a non-empty front, back, explanation, and exactly 3 distractors.
 - tags: 0–3 short topic labels per card.
 - Do not invent facts not supported by the original cards.
 - Reuse the same category names as the struggling cards where it makes sense.

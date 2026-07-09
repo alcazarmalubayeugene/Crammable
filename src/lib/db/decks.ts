@@ -239,6 +239,7 @@ export async function createDeckWithCardsAndCharge(
       front: c.front,
       back: c.back,
       explanation: c.explanation,
+      distractors: c.distractors ?? [],
       tags: c.tags,
       category: c.category,
     })),

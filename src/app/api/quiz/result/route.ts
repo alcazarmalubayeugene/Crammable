@@ -99,9 +99,13 @@ export async function POST(request: Request): Promise<Response> {
               }
             }
           }
-        } catch {
-          // AI failure or INSUFFICIENT_CREDITS — the RPC rolls back any partial
-          // insert, so no credit is charged. Silently skip the refresh.
+        } catch (err) {
+          // Expected: INSUFFICIENT_CREDITS, RATE_LIMITED — skip silently.
+          // Unexpected: log so infra failures don't go dark.
+          const msg = err instanceof Error ? err.message : String(err);
+          if (!msg.includes("INSUFFICIENT_CREDITS") && !msg.includes("RATE_LIMITED")) {
+            console.error("[quiz/result] Living Deck refresh failed unexpectedly:", err);
+          }
         }
       } else {
         upsellMessage = UIMessages.livingDeckUpsell;
