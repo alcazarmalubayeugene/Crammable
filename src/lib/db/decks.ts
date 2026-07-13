@@ -47,14 +47,16 @@ export async function createDeck(input: NewDeckInput): Promise<Deck> {
   return data as Deck;
 }
 
-/** All of a user's decks, newest first (dashboard list). */
-export async function listDecksForUser(userId: string): Promise<Deck[]> {
+/**
+ * A user's decks, newest first (dashboard list). Active (archived_at IS NULL)
+ * by default; pass `archived: true` to list only archived decks instead —
+ * the two views are mutually exclusive, never mixed.
+ */
+export async function listDecksForUser(userId: string, opts?: { archived?: boolean }): Promise<Deck[]> {
   const supabase = await createSessionClient();
-  const { data, error } = await supabase
-    .from(TableNames.decks)
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+  let query = supabase.from(TableNames.decks).select("*").eq("user_id", userId);
+  query = opts?.archived ? query.not("archived_at", "is", null) : query.is("archived_at", null);
+  const { data, error } = await query.order("created_at", { ascending: false });
   if (error) throw toDbError(error, "Failed to load decks.");
   return (data as Deck[]) ?? [];
 }
@@ -106,13 +108,18 @@ export async function getDeckWithCards(
   return { deck: deck as Deck, cards: (cards as Flashcard[]) ?? [] };
 }
 
-/** Count a user's decks — used to enforce TierLimits.maxDecks. */
+/**
+ * Count a user's ACTIVE decks — used to enforce TierLimits.maxDecks. Archived
+ * decks are excluded on purpose: archiving is how a free-tier user gets back
+ * under the cap without losing a deck's cards/quiz history to a hard delete.
+ */
 export async function countDecksForUser(userId: string): Promise<number> {
   const supabase = await createSessionClient();
   const { count, error } = await supabase
     .from(TableNames.decks)
     .select("id", { count: "exact", head: true })
-    .eq("user_id", userId);
+    .eq("user_id", userId)
+    .is("archived_at", null);
   if (error) throw toDbError(error, "Failed to count decks.");
   return count ?? 0;
 }
@@ -165,6 +172,25 @@ export async function setDeckPublic(deckId: string, isPublic: boolean): Promise<
     .select("*")
     .maybeSingle();
   if (error) throw toDbError(error, "Failed to update deck visibility.");
+  return (data as Deck) ?? null;
+}
+
+/**
+ * Set a deck's archived_at (archive system). Session-client update — RLS
+ * scopes the write to the deck's owner. Archiving doesn't touch cards or quiz
+ * history, it just hides the deck from the default list and the maxDecks
+ * count. Returns the updated deck, or null if the deck doesn't exist / isn't
+ * owned by the caller.
+ */
+export async function setDeckArchived(deckId: string, archived: boolean): Promise<Deck | null> {
+  const supabase = await createSessionClient();
+  const { data, error } = await supabase
+    .from(TableNames.decks)
+    .update({ archived_at: archived ? new Date().toISOString() : null })
+    .eq("id", deckId)
+    .select("*")
+    .maybeSingle();
+  if (error) throw toDbError(error, "Failed to update deck archive status.");
   return (data as Deck) ?? null;
 }
 

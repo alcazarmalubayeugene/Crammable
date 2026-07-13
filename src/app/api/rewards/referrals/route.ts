@@ -18,18 +18,24 @@ export async function GET(): Promise<Response> {
 
     const supabase = await createSessionClient();
 
-    const { data: rows, error } = await supabase
-      .from(TableNames.referralEvents)
-      .select("*")
-      .eq("referrer_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(50);
+    const [{ data: rows, error }, { data: selfProfile }] = await Promise.all([
+      supabase
+        .from(TableNames.referralEvents)
+        .select("*")
+        .eq("referrer_id", user.id)
+        .order("created_at", { ascending: false })
+        .limit(50),
+      // Self-read is RLS-allowed even on the session client — just need referred_by.
+      supabase.from(TableNames.profiles).select("referred_by").eq("id", user.id).single(),
+    ]);
 
     if (error) throw error;
 
     const events = (rows ?? []) as ReferralEvent[];
+    const referrerId = (selfProfile?.referred_by as string | null) ?? null;
 
-    // Collect distinct referred_ids that are non-null (signup events)
+    // Collect distinct referred_ids that are non-null (signup events), plus the
+    // caller's own referrer (if any) — both need a name looked up the same way.
     const referredIds = [
       ...new Set(
         events
@@ -37,15 +43,16 @@ export async function GET(): Promise<Response> {
           .map((e) => e.referred_id as string),
       ),
     ];
+    const lookupIds = referrerId ? [...new Set([...referredIds, referrerId])] : referredIds;
 
     // Look up names via service-role client (RLS on profiles is self-only)
     const nameMap: Record<string, string | null> = {};
-    if (referredIds.length > 0) {
+    if (lookupIds.length > 0) {
       const admin = createAdminClient();
       const { data: profiles } = await admin
         .from(TableNames.profiles)
         .select("id, full_name")
-        .in("id", referredIds);
+        .in("id", lookupIds);
 
       for (const p of profiles ?? []) {
         // Return first name only for privacy
@@ -59,7 +66,10 @@ export async function GET(): Promise<Response> {
       referredName: e.referred_id ? (nameMap[e.referred_id] ?? null) : null,
     }));
 
-    return apiSuccess<ReferralHistoryResult>({ events: enriched });
+    return apiSuccess<ReferralHistoryResult>({
+      events: enriched,
+      referrerName: referrerId ? (nameMap[referrerId] ?? null) : null,
+    });
   } catch (err) {
     return handleApiError(err);
   }

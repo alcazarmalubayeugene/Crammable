@@ -102,6 +102,7 @@ export const ReferralEventType = {
   DECK_SHARE:       "deck_share",
   APP_REVIEW:       "app_review",
   PROFILE_COMPLETE: "profile_complete",
+  BUG_REPORT:       "bug_report",
 } as const;
 export type ReferralEventType = (typeof ReferralEventType)[keyof typeof ReferralEventType];
 
@@ -122,6 +123,7 @@ export const TableNames = {
   rateLimitLog:       "rate_limit_log",
   adminActionLog:     "admin_action_log",
   appReviews:         "app_reviews",
+  bugReports:         "bug_reports",
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -164,6 +166,7 @@ export const ApiPaths = {
   decks:               "/api/decks",
   deck:                (id: string) => `/api/decks/${id}`,
   deckShare:           (id: string) => `/api/decks/${id}/share`,
+  deckArchive:         (id: string) => `/api/decks/${id}/archive`,
   deckExport:          (id: string) => `/api/decks/${id}/export`,
   deckFlashcards:      (id: string) => `/api/decks/${id}/flashcards`,
   flashcard:           (id: string) => `/api/flashcards/${id}`,
@@ -173,8 +176,6 @@ export const ApiPaths = {
   submitQuizResult:    "/api/quiz/result",
   explainAnswer:       "/api/quiz/explain",
   quizHistory:         "/api/quiz/history",
-  // NOT YET IMPLEMENTED on the backend — see FRONTEND.md "Backend work needed:
-  // shareable quiz results" for the schema/RLS/route this pair requires.
   quizResultShare:     (sessionId: string) => `/api/quiz/${sessionId}/share`,
   publicResult:        (sessionId: string) => `/api/public/results/${sessionId}`,
   claimReferral:       "/api/referral/claim",
@@ -186,6 +187,9 @@ export const ApiPaths = {
   submitAppReview:       "/api/rewards/submit-review",
   adminReviews:          "/api/admin/reviews",
   adminVerifyReview:     "/api/admin/reviews/verify",
+  submitBugReport:       "/api/rewards/submit-bug-report",
+  adminBugReports:       "/api/admin/bug-reports",
+  adminVerifyBugReport:  "/api/admin/bug-reports/verify",
   adminUsers:            "/api/admin/users",
   adminGrantCredits:     "/api/admin/users/grant-credits",
   adminRevokeProSubscription: "/api/admin/users/revoke-pro",
@@ -245,6 +249,15 @@ export const Routes = {
 /** Max upload file size — identical for both tiers. One place to change it. */
 export const MAX_UPLOAD_SIZE_MB = 10;
 
+/**
+ * Max PDFs combinable into a single deck in one /api/upload request —
+ * identical for both tiers. Bounds DeepSeek cost/latency (all files are
+ * concatenated into one extractedText blob, still capped by
+ * OcrThresholds.maxInputTokens) and keeps /api/generate's maxDuration=60s
+ * budget realistic.
+ */
+export const MAX_FILES_PER_UPLOAD = 5;
+
 export const TierLimits = {
   [SubscriptionTier.FREE]: {
     startingCredits:  3,
@@ -303,6 +316,12 @@ export const ReferralCaps = {
     monthlyCap:     null,
     lifetimeCap:    1,
   },
+  [ReferralEventType.BUG_REPORT]: {
+    creditsAwarded:            10,
+    monthlyCap:                3,     // reports themselves aren't capped, only how many earn credit per month
+    lifetimeCap:               null,
+    requiresAdminVerification: true,
+  },
 } as const;
 
 /**
@@ -337,10 +356,13 @@ export const RateLimits: Record<string, RateLimitRule> = {
   [ApiPaths.adminPayments]:    { windowMinutes: 60,   maxRequests: 200 },
   [ApiPaths.authLogin]:        { windowMinutes: 15,   maxRequests: 10  },
   "/api/decks/[id]/share":      { windowMinutes: 1440, maxRequests: 5   }, // 24-hour window
+  "/api/decks/[id]/archive":    { windowMinutes: 60,   maxRequests: 30  }, // reversible toggle, no AI/cost involved
   "/api/quiz/[id]/share":       { windowMinutes: 1440, maxRequests: 5  }, // 24-hour window
   "/api/decks/[id]/export":     { windowMinutes: 60,   maxRequests: 10  },
   [ApiPaths.claimProfileComplete]: { windowMinutes: 1440, maxRequests: 5 }, // 24-hour window
   [ApiPaths.submitAppReview]:      { windowMinutes: 1440, maxRequests: 2 }, // 24-hour window
+  [ApiPaths.submitBugReport]:      { windowMinutes: 1440, maxRequests: 5 }, // 24-hour window — more than app review since bugs vary
+  [ApiPaths.adminVerifyBugReport]: { windowMinutes: 60,   maxRequests: 120 },
   "/api/decks/[id]":            { windowMinutes: 60,   maxRequests: 60  }, // rename (PATCH)
   "/api/decks/[id]/flashcards": { windowMinutes: 60,   maxRequests: 60  },
   "/api/flashcards/[id]":       { windowMinutes: 60,   maxRequests: 120 },
@@ -433,6 +455,10 @@ export const Validation = {
   appReview: {
     textMaxLength: 1000,
   },
+  bugReport: {
+    titleMaxLength:       150,
+    descriptionMaxLength: 2000,
+  },
 } as const;
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -482,6 +508,9 @@ export const UIMessages = {
   // has nothing real to sort by before that.
   studyWeakCardsLocked: "Try every card at least once first — weak cards aren't meaningful until then.",
 
+  // Bug reports
+  bugReportSubmitted: "Thanks for the report! Capy's team will review it — you'll get Capycoins if it's confirmed.",
+
   // Referral
   referralCredited:  (name: string, credits: number) => `+${credits} Capycoins — ${name} signed up with your link!`,
   // Shown to the person ENTERING a code: the referrer (not the claimer) is credited.
@@ -492,7 +521,9 @@ export const UIMessages = {
 
   // Credits / limits
   outOfCredits:      "You don't have enough Capycoins. Purchase more to generate another deck.",
-  deckLimitReached:  "You've reached your deck limit. Upgrade to Pro for unlimited decks.",
+  deckLimitReached:  "You've reached your deck limit. Archive an old deck or upgrade to Pro for unlimited decks.",
+  deckArchived:      "Deck archived — it won't count toward your deck limit.",
+  deckUnarchived:    "Deck restored to your active decks.",
 
   // Generic errors
   aiUnavailable:     "AI processing is temporarily unavailable. Your document is saved — try again in a few minutes.",
@@ -540,6 +571,7 @@ export interface Deck {
   generation_mode: GenerationMode;
   pdf_type:        PdfType;           // for analytics on parsing success rates
   is_public:       boolean;           // B5 public sharing — true exposes the deck at /public/decks/[id]
+  archived_at:     string | null;     // null = active; set = hidden from default list, excluded from maxDecks cap
   created_at:      string;
   updated_at:      string;
 }
@@ -623,6 +655,23 @@ export interface AppReview {
   created_at:  string;
 }
 
+export type BugReportSeverity = "low" | "medium" | "high" | "critical";
+
+/** A user-submitted bug report ("Report a bug" earn method, BackEnd). */
+export interface BugReport {
+  id:          string;
+  user_id:     string;
+  title:       string;        // ≤ Validation.bugReport.titleMaxLength
+  description: string;        // ≤ Validation.bugReport.descriptionMaxLength
+  severity:    BugReportSeverity;
+  page_url:    string | null;
+  status:      "pending" | "approved" | "rejected";
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  admin_notes: string | null;
+  created_at:  string;
+}
+
 export interface RateLimitLog {
   id:           string;
   user_id:      string;
@@ -663,16 +712,20 @@ export interface AdminActionLog {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── POST /api/upload ──────────────────────────────────────────────────────────
-// Request: multipart/form-data with a `file` field (PDF only)
+// Request: multipart/form-data with one or more `file` fields (PDF only,
+// ≤ MAX_FILES_PER_UPLOAD). Multiple files are extracted independently, in
+// request order, and returned as one array — the client concatenates their
+// text (multi-PDF-per-deck) before calling /api/generate ONCE with the
+// combined blob. /api/generate itself is single-file-shaped and unaware this
+// happened — it just sees one extractedText string, same as before.
 
 /**
- * What the server returns from /api/upload on success.
- * TEXT  → pdfjs extracted clean text. Send directly to /api/generate.
+ * Per-file result. TEXT → pdfjs extracted clean text, ready to use directly.
  * OCR   → image PDF detected (chars/page < OcrThresholds.minCharsPerPageForText).
- *          Client must run Tesseract.js, then send result to /api/generate.
+ *          Client must run Tesseract.js on this file, then merge its result.
  *
- * NOTE: Both paths are successes — the upload worked.
- *       The discriminant is `path`, not `success`.
+ * NOTE: Both paths are successes — the upload worked. The discriminant is
+ *       `path`, not `success`.
  */
 export type UploadResult =
   | { path: typeof PdfType.TEXT; extractedText: string }
@@ -682,6 +735,13 @@ export type UploadResult =
       partialText:      string;            // text already extracted from non-sparse pages; may be ""
       imagePageNumbers: number[];          // 1-based page numbers that need client-side OCR
     };
+
+export type PerFileUploadResult = UploadResult & { filename: string };
+
+/** What the server returns from /api/upload on success — one entry per uploaded file, in request order. */
+export interface MultiUploadResult {
+  files: PerFileUploadResult[];
+}
 
 /**
  * Client-side extraction state after OCR is complete.
@@ -724,8 +784,14 @@ export interface ProfileResult {
 }
 
 // ── GET /api/decks ────────────────────────────────────────────────────────────
+// ?archived=1 returns archived decks instead of the default active-only list.
 export interface DecksListResult {
   decks: Deck[];
+}
+
+// ── POST|DELETE /api/decks/[id]/archive ─────────────────────────────────────
+export interface ArchiveDeckResult {
+  archived: boolean;
 }
 
 // ── GET /api/decks/[id] ───────────────────────────────────────────────────────
@@ -974,6 +1040,35 @@ export interface VerifyReviewResult {
   creditsAwarded: number;
 }
 
+// ── POST /api/rewards/submit-bug-report ────────────────────────────────────────
+export interface SubmitBugReportRequest {
+  title:       string;              // ≤ Validation.bugReport.titleMaxLength
+  description: string;              // ≤ Validation.bugReport.descriptionMaxLength
+  severity:    BugReportSeverity;
+  pageUrl?:    string;
+}
+
+// ── GET /api/admin/bug-reports ───────────────────────────────────────────────
+export interface AdminBugReportRow extends BugReport {
+  userEmail: string;   // joined from profiles
+}
+
+export interface AdminBugReportsListResult {
+  reports: AdminBugReportRow[];
+}
+
+// ── POST /api/admin/bug-reports/verify ──────────────────────────────────────
+export interface VerifyBugReportRequest {
+  reportId: string;
+  approve:  boolean;
+  notes?:   string;
+}
+
+export interface VerifyBugReportResult {
+  userId:         string;
+  creditsAwarded: number;
+}
+
 // ── GET /api/admin/users (E4) ──────────────────────────────────────────────────
 /** Minimal profile fields for the admin user-management list. */
 export interface AdminUserRow {
@@ -1029,6 +1124,7 @@ export interface ReferralHistoryItem extends ReferralEvent {
 
 export interface ReferralHistoryResult {
   events: ReferralHistoryItem[];
+  referrerName: string | null;   // first name of whoever referred the caller; null if none/unknown
 }
 
 // ── GET /api/admin/audit-log (E4) ──────────────────────────────────────────────

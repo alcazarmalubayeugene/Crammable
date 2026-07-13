@@ -65,6 +65,20 @@
 --   E3 — downgrade_expired_pro(): daily pg_cron job flips lapsed Pro
 --        subscriptions (subscription_expires_at <= now()) back to 'free'.
 --        Previously nothing enforced expiry — once Pro, always Pro.
+--
+-- DECK ARCHIVE SYSTEM (BackEnd branch)
+--   decks.archived_at added — archiving a deck (owner-scoped update, no RPC
+--   needed) hides it from the default deck list and excludes it from the
+--   free-tier maxDecks cap, without deleting cards/quiz history. See
+--   idx_decks_user_active below.
+--
+-- BUG REPORT + REWARD SYSTEM (BackEnd branch)
+--   bug_reports table added, modeled on app_reviews (§1.10) but without its
+--   one-per-user cap — a user can file multiple reports, each independently
+--   admin-verified via verify_bug_report() (§4.16b), mirroring
+--   verify_app_review() exactly except the credit grant is gated by
+--   check_referral_cap()'s new 'bug_report' branch (monthly cap 3, like
+--   deck_share) since there's no unique-row constraint to lean on here.
 -- =============================================================================
 
 
@@ -132,6 +146,7 @@ CREATE TABLE IF NOT EXISTS public.decks (
   pdf_type        TEXT        NOT NULL DEFAULT 'text'
                               CHECK (pdf_type IN ('text', 'ocr', 'paste')),
   is_public       BOOLEAN     NOT NULL DEFAULT false,
+  archived_at     TIMESTAMPTZ,                    -- NULL = active; set = hidden from default list + excluded from maxDecks cap
   created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -226,7 +241,7 @@ CREATE TABLE IF NOT EXISTS public.referral_events (
   referrer_id     UUID        NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
   referred_id     UUID        REFERENCES public.profiles(id) ON DELETE SET NULL,
   event_type      TEXT        NOT NULL
-                              CHECK (event_type IN ('signup', 'deck_share', 'app_review', 'profile_complete')),
+                              CHECK (event_type IN ('signup', 'deck_share', 'app_review', 'profile_complete', 'bug_report')),
   -- L2: credits_awarded must match a known cap value from contracts.ts ReferralCaps
   -- Update this list if caps change in contracts.ts
   credits_awarded INTEGER     NOT NULL CHECK (credits_awarded IN (3, 5, 10, 15)),
@@ -298,6 +313,32 @@ CREATE TABLE IF NOT EXISTS public.app_reviews (
   CONSTRAINT one_review_per_user UNIQUE (user_id)
 );
 
+-- ---------------------------------------------------------------------------
+-- 1.11 bug_reports
+-- BackEnd: user-submitted bug reports ("Report a bug" reward, +10 credits,
+-- ReferralCaps.bug_report.monthlyCap = 3). Credits are NOT granted on insert —
+-- an admin verifies via verify_bug_report() (§4.16b), which inserts the
+-- corresponding referral_events row (verified=true) and grants credits.
+-- Unlike app_reviews, no one-per-user constraint: a user can file as many
+-- reports as they find real bugs; check_referral_cap() caps rewarded ones to
+-- 3/month so only the credit — never the report itself — is throttled.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.bug_reports (
+  id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     UUID        NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+  title       TEXT        NOT NULL CHECK (char_length(title) <= 150),
+  description TEXT        NOT NULL CHECK (char_length(description) <= 2000),
+  severity    TEXT        NOT NULL DEFAULT 'medium'
+                          CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+  page_url    TEXT,                  -- optional: where in the app it happened
+  status      TEXT        NOT NULL DEFAULT 'pending'
+                          CHECK (status IN ('pending', 'approved', 'rejected')),
+  reviewed_by UUID        REFERENCES public.profiles(id) ON DELETE SET NULL,
+  reviewed_at TIMESTAMPTZ,
+  admin_notes TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 
 -- =============================================================================
 -- 2. INDEXES
@@ -314,6 +355,11 @@ CREATE INDEX IF NOT EXISTS idx_profiles_email
 -- decks: dashboard list query
 CREATE INDEX IF NOT EXISTS idx_decks_user_id
   ON public.decks (user_id, created_at DESC);
+
+-- decks: active-only dashboard list + maxDecks cap count, the common case —
+-- partial index keeps it small since archived decks fall out of it entirely.
+CREATE INDEX IF NOT EXISTS idx_decks_user_active
+  ON public.decks (user_id, created_at DESC) WHERE archived_at IS NULL;
 
 -- flashcards: deck viewer
 CREATE INDEX IF NOT EXISTS idx_flashcards_deck_id
@@ -393,6 +439,15 @@ CREATE INDEX IF NOT EXISTS idx_admin_action_log_created_at
 CREATE INDEX IF NOT EXISTS idx_app_reviews_status
   ON public.app_reviews (status, created_at ASC)
   WHERE status = 'pending';
+
+-- bug_reports: admin pending-report queue (mirrors idx_app_reviews_status)
+CREATE INDEX IF NOT EXISTS idx_bug_reports_status
+  ON public.bug_reports (status, created_at ASC)
+  WHERE status = 'pending';
+
+-- bug_reports: a user's own report history
+CREATE INDEX IF NOT EXISTS idx_bug_reports_user_id
+  ON public.bug_reports (user_id, created_at DESC);
 
 
 -- =============================================================================
@@ -850,6 +905,8 @@ $$;
 --   deck_share:       monthly 3
 --   app_review:       lifetime 1
 --   profile_complete: lifetime 1
+--   bug_report:       monthly 3 (BackEnd) — reports themselves aren't capped,
+--                     only how many can earn credit in a given month
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.check_referral_cap(
   p_referrer_id UUID,
@@ -865,7 +922,7 @@ DECLARE
   monthly_count  INTEGER;
   lifetime_count INTEGER;
 BEGIN
-  IF p_event_type = 'deck_share' THEN
+  IF p_event_type IN ('deck_share', 'bug_report') THEN
     SELECT COUNT(*) INTO monthly_count
     FROM   public.referral_events
     WHERE  referrer_id = p_referrer_id
@@ -1670,6 +1727,68 @@ END;
 $$;
 
 -- ---------------------------------------------------------------------------
+-- 4.16b verify_bug_report(p_admin_id, p_report_id, p_approve, p_credits, p_notes)
+-- BackEnd: atomic admin verification of a bug_reports row — identical shape to
+-- verify_app_review() (§4.16) above, with one difference: since bug_reports has
+-- no one-per-user constraint, the monthly reward cap ('bug_report' → 3, §4.8)
+-- is enforced here explicitly before granting credit. A RAISE EXCEPTION rolls
+-- back the whole call (including the status UPDATE below it), so a
+-- REFERRAL_CAP_REACHED report is left 'pending', not silently approved with $0.
+--
+-- service_role only (callers must gate behind requireAdmin first).
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.verify_bug_report(
+  p_admin_id  UUID,
+  p_report_id UUID,
+  p_approve   BOOLEAN,
+  p_credits   INTEGER,
+  p_notes     TEXT DEFAULT NULL
+)
+RETURNS UUID  -- the reported user's id
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_user_id UUID;
+BEGIN
+  UPDATE public.bug_reports
+  SET    status      = CASE WHEN p_approve THEN 'approved' ELSE 'rejected' END,
+         reviewed_by = p_admin_id,
+         reviewed_at = now(),
+         admin_notes = p_notes
+  WHERE  id     = p_report_id
+    AND  status = 'pending'
+  RETURNING user_id INTO v_user_id;
+
+  IF v_user_id IS NULL THEN
+    RAISE EXCEPTION 'ALREADY_PROCESSED'
+      USING HINT = 'Report is not pending (already approved/rejected or missing)';
+  END IF;
+
+  IF p_approve THEN
+    IF p_credits <= 0 THEN
+      RAISE EXCEPTION 'INVALID_AMOUNT: p_credits must be greater than 0';
+    END IF;
+
+    IF NOT public.check_referral_cap(v_user_id, 'bug_report', to_char(now(), 'YYYY-MM')) THEN
+      RAISE EXCEPTION 'REFERRAL_CAP_REACHED'
+        USING HINT = 'This user has already earned the max rewarded bug reports this month';
+    END IF;
+
+    INSERT INTO public.referral_events
+      (referrer_id, referred_id, event_type, credits_awarded, verified, month_key)
+    VALUES
+      (v_user_id, v_user_id, 'bug_report', p_credits, true, to_char(now(), 'YYYY-MM'));
+
+    PERFORM public.grant_credits(v_user_id, p_credits);
+  END IF;
+
+  RETURN v_user_id;
+END;
+$$;
+
+-- ---------------------------------------------------------------------------
 -- 4.15 EXECUTE-privilege lockdown for service-role-only functions
 -- SECURITY FIX (P2-3): CREATE FUNCTION grants EXECUTE to PUBLIC by default, and
 -- Supabase additionally grants it to anon + authenticated — which exposed these
@@ -1704,6 +1823,7 @@ REVOKE EXECUTE ON FUNCTION public.downgrade_expired_pro()                       
 REVOKE EXECUTE ON FUNCTION public.claim_referral(uuid, uuid, text, text, integer) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.claim_self_referral_event(uuid, text, integer, text, uuid) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.verify_app_review(uuid, uuid, boolean, integer, text) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.verify_bug_report(uuid, uuid, boolean, integer, text) FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.admin_grant_credits(uuid, uuid, integer, text)  FROM PUBLIC, anon, authenticated;
 REVOKE EXECUTE ON FUNCTION public.prepare_account_deletion(uuid)                  FROM PUBLIC, anon, authenticated;
 
@@ -1717,6 +1837,7 @@ GRANT EXECUTE ON FUNCTION public.ensure_profile(uuid)                           
 GRANT EXECUTE ON FUNCTION public.claim_referral(uuid, uuid, text, text, integer)  TO service_role;
 GRANT EXECUTE ON FUNCTION public.claim_self_referral_event(uuid, text, integer, text, uuid) TO service_role;
 GRANT EXECUTE ON FUNCTION public.verify_app_review(uuid, uuid, boolean, integer, text) TO service_role;
+GRANT EXECUTE ON FUNCTION public.verify_bug_report(uuid, uuid, boolean, integer, text) TO service_role;
 GRANT EXECUTE ON FUNCTION public.admin_grant_credits(uuid, uuid, integer, text)  TO service_role;
 GRANT EXECUTE ON FUNCTION public.revoke_pro(uuid, uuid, text)                    TO service_role;
 GRANT EXECUTE ON FUNCTION public.prepare_account_deletion(uuid)                  TO service_role;
@@ -1794,6 +1915,7 @@ ALTER TABLE public.referral_events     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.rate_limit_log      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.admin_action_log    ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.app_reviews         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.bug_reports         ENABLE ROW LEVEL SECURITY;
 
 -- ---------------------------------------------------------------------------
 -- profiles
@@ -1971,6 +2093,33 @@ CREATE POLICY "app_reviews: admins update"
   USING    (public.is_current_user_admin())
   WITH CHECK (public.is_current_user_admin());
 
+-- ---------------------------------------------------------------------------
+-- bug_reports (BackEnd)
+-- Users: insert and read their own (no update — reports are immutable once
+-- filed). Admins: read all + update (verify workflow). Mirrors app_reviews.
+-- ---------------------------------------------------------------------------
+DROP POLICY IF EXISTS "bug_reports: users insert own" ON public.bug_reports;
+DROP POLICY IF EXISTS "bug_reports: users read own"   ON public.bug_reports;
+DROP POLICY IF EXISTS "bug_reports: admins read all"  ON public.bug_reports;
+DROP POLICY IF EXISTS "bug_reports: admins update"    ON public.bug_reports;
+
+CREATE POLICY "bug_reports: users insert own"
+  ON public.bug_reports FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "bug_reports: users read own"
+  ON public.bug_reports FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "bug_reports: admins read all"
+  ON public.bug_reports FOR SELECT
+  USING (public.is_current_user_admin());
+
+CREATE POLICY "bug_reports: admins update"
+  ON public.bug_reports FOR UPDATE
+  USING    (public.is_current_user_admin())
+  WITH CHECK (public.is_current_user_admin());
+
 
 -- =============================================================================
 -- 6. pg_cron JOBS
@@ -2076,7 +2225,8 @@ END $$;
 --   2. admin.auth.admin.deleteUser(p_user_id)
 --   Step 1 detaches admin_action_log.payment_id (RESTRICT) and writes the
 --   'account_deleted' audit row; step 2 cascades through every FK (profiles,
---   decks, flashcards, quiz_*, payment_submissions, referral_events, app_reviews).
+--   decks, flashcards, quiz_*, payment_submissions, referral_events, app_reviews,
+--   bug_reports).
 --
 -- ADDING A NEW ADMIN
 --   Via service-role client or Supabase SQL Editor only:

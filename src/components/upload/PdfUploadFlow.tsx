@@ -8,6 +8,7 @@ import {
   App,
   CardCountOptions,
   GenerationMode,
+  MAX_FILES_PER_UPLOAD,
   MAX_UPLOAD_SIZE_MB,
   OcrThresholds,
   PdfType,
@@ -21,7 +22,7 @@ import {
   type GeneratedCard,
   type GenerateRequest,
   type GenerateResult,
-  type UploadResult,
+  type MultiUploadResult,
 } from "@/lib/contracts";
 import type { UploadTestDebug } from "@/app/api/upload/route";
 import { PDF_EXTRACTION_TEST_MODE } from "@/lib/dev/pdf-test-mode";
@@ -85,9 +86,12 @@ export function PdfUploadFlow() {
   const [cardCount, setCardCount] = useState<(typeof CardCountOptions)[number]>(10);
   const tierMaxCards = TierLimits[subscriptionTier].maxCardsPerDeck;
 
-  // File is attached on selection but generation only starts when the user
+  // Files are attached on selection but generation only starts when the user
   // explicitly clicks "Generate flashcards" — lets deck settings be filled in first.
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  // Multi-PDF: choosing files replaces the whole selection (native <input> behavior);
+  // individual files can be removed from the staged list afterward.
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [fileSelectWarning, setFileSelectWarning] = useState("");
 
   // Concept #4's "Generating" checklist (Finding key concepts… / Writing your
   // flashcards) splits the single opaque /api/generate call into two
@@ -141,7 +145,8 @@ export function PdfUploadFlow() {
 
   const resetToIdle = useCallback(() => {
     setPhase("idle");
-    setSelectedFile(null);
+    setSelectedFiles([]);
+    setFileSelectWarning("");
     setPdfFile(null);
     setPageProgress({ current: 0, total: 0 });
     setPastedText("");
@@ -228,14 +233,14 @@ export function PdfUploadFlow() {
     [router, generationMode, deckName, cardCount, mutateProfile],
   );
 
-  const uploadPdf = useCallback(
-    async (file: File) => {
+  const uploadPdfs = useCallback(
+    async (files: File[]) => {
       setPhase("uploading");
       setErrorMessage("");
       setResultView(null);
 
       const formData = new FormData();
-      formData.append("file", file);
+      for (const file of files) formData.append("file", file);
 
       const headers = await authHeaders();
       const res = await fetch(ApiPaths.upload, {
@@ -244,8 +249,8 @@ export function PdfUploadFlow() {
         body: formData,
       });
 
-      const data = (await res.json()) as ApiResponse<UploadResult> & {
-        _debug?: UploadTestDebug;
+      const data = (await res.json()) as ApiResponse<MultiUploadResult> & {
+        _debug?: UploadTestDebug[];
       };
 
       if (!data.success) {
@@ -254,39 +259,84 @@ export function PdfUploadFlow() {
         return;
       }
 
-      if (data.path === PdfType.TEXT) {
-        if (PDF_EXTRACTION_TEST_MODE) {
-          showExtractionPreview("Layer 1 — text PDF", data, data.extractedText);
+      // Single file: full behavior unchanged, including the OCR/paste-fallback
+      // pipeline below (which is inherently single-file — it renders and
+      // Tesseract-scans pages of ONE PDF).
+      if (data.files.length === 1) {
+        const [only] = data.files;
+        const debug = data._debug?.[0] ?? only;
+
+        if (only.path === PdfType.TEXT) {
+          if (PDF_EXTRACTION_TEST_MODE) {
+            showExtractionPreview("Layer 1 — text PDF", debug, only.extractedText);
+            return;
+          }
+          await callGenerate(only.extractedText, PdfType.TEXT, debug);
           return;
         }
-        await callGenerate(data.extractedText, PdfType.TEXT, data._debug ?? data);
+
+        setImagePageNumbers(only.imagePageNumbers);
+        setPartialText(only.partialText);
+        setPdfFile(files[0]);
+        setLayer1Payload(only);
+        // Auto-proceed to OCR — pass values directly to avoid stale-closure race
+        await runClientOcr(files[0], only.imagePageNumbers, only.partialText);
         return;
       }
 
-      const imgPages = data.imagePageNumbers;
-      setImagePageNumbers(imgPages);
-      setPartialText(data.partialText);
-      setPdfFile(file);
-      setLayer1Payload(data);
-      // Auto-proceed to OCR — pass values directly to avoid stale-closure race
-      await runClientOcr(file, imgPages, data.partialText);
+      // Multiple files: the fast text-extraction path only. A scanned/image PDF
+      // in the batch needs client-side OCR, and running that per-file for an
+      // arbitrary N-file batch (with per-file paste fallback on top) is a much
+      // larger, separate state machine — out of scope here. Ask the user to
+      // upload that one separately instead of silently mishandling it.
+      const needsOcr = data.files.filter((f) => f.path === PdfType.OCR);
+      if (needsOcr.length > 0) {
+        setPhase("error");
+        const names = needsOcr.map((f) => `"${f.filename}"`).join(", ");
+        setErrorMessage(
+          `${names} ${needsOcr.length === 1 ? "looks like a scanned document" : "look like scanned documents"} and need${needsOcr.length === 1 ? "s" : ""} OCR. Upload ${needsOcr.length === 1 ? "it" : "them"} on its own so Capy can process it, or remove it from this batch.`,
+        );
+        return;
+      }
+
+      const combinedText = data.files
+        .map((f) => (f.path === PdfType.TEXT ? `=== ${f.filename} ===\n${f.extractedText}` : ""))
+        .join("\n\n")
+        .trim();
+
+      if (PDF_EXTRACTION_TEST_MODE) {
+        showExtractionPreview(`Layer 1 — ${data.files.length} text PDFs combined`, data, combinedText);
+        return;
+      }
+      await callGenerate(combinedText, PdfType.TEXT, data._debug ?? data);
     },
     [callGenerate, showExtractionPreview],
   );
 
   const onFileSelected = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
-      setSelectedFile(file);
+      const chosen = Array.from(event.target.files ?? []);
+      if (chosen.length === 0) return;
+      if (chosen.length > MAX_FILES_PER_UPLOAD) {
+        setFileSelectWarning(`You can combine up to ${MAX_FILES_PER_UPLOAD} PDFs into one deck — only the first ${MAX_FILES_PER_UPLOAD} were kept.`);
+        setSelectedFiles(chosen.slice(0, MAX_FILES_PER_UPLOAD));
+        return;
+      }
+      setFileSelectWarning("");
+      setSelectedFiles(chosen);
     },
     [],
   );
 
+  const removeSelectedFile = useCallback((index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+    setFileSelectWarning("");
+  }, []);
+
   const handleGenerateClick = useCallback(async () => {
-    if (!selectedFile) return;
-    await uploadPdf(selectedFile);
-  }, [selectedFile, uploadPdf]);
+    if (selectedFiles.length === 0) return;
+    await uploadPdfs(selectedFiles);
+  }, [selectedFiles, uploadPdfs]);
 
   const handleCancel = useCallback(() => {
     router.push(Routes.dashboard);
@@ -513,22 +563,22 @@ export function PdfUploadFlow() {
             }}
           >
             <span style={{ fontSize: "calc(26px * var(--font-scale))", lineHeight: 1 }}>📄</span>
-            {selectedFile ? (
+            {selectedFiles.length > 0 ? (
               <>
                 <span style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
-                  {selectedFile.name}
+                  {selectedFiles.length === 1 ? selectedFiles[0].name : `${selectedFiles.length} files selected`}
                 </span>
                 <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)" }}>
-                  {(selectedFile.size / (1024 * 1024)).toFixed(2)} MB selected — click to change
+                  click to change selection
                 </span>
               </>
             ) : (
               <>
                 <span style={{ fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
-                  Drop your PDF here
+                  Drop your PDF(s) here
                 </span>
                 <span style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)" }}>
-                  or click to browse — max {MAX_UPLOAD_SIZE_MB} MB
+                  or click to browse — max {MAX_UPLOAD_SIZE_MB} MB each, up to {MAX_FILES_PER_UPLOAD} files per deck
                 </span>
               </>
             )}
@@ -545,16 +595,46 @@ export function PdfUploadFlow() {
                 fontFamily: "var(--font-body, sans-serif)",
               }}
             >
-              Choose file
+              Choose file(s)
             </span>
             <input
               ref={fileInputRef}
               type="file"
               accept="application/pdf,.pdf"
+              multiple
               onChange={onFileSelected}
               style={{ position: "absolute", width: 1, height: 1, padding: 0, margin: -1, overflow: "hidden", clip: "rect(0,0,0,0)", border: 0 }}
             />
           </label>
+
+          {fileSelectWarning && (
+            <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error)", margin: "8px 0 0" }}>
+              {fileSelectWarning}
+            </p>
+          )}
+
+          {selectedFiles.length > 1 && (
+            <ul style={{ display: "flex", flexDirection: "column", gap: 6, margin: "10px 0 0", padding: 0, listStyle: "none" }}>
+              {selectedFiles.map((f, i) => (
+                <li
+                  key={`${f.name}-${i}`}
+                  style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "6px 10px", borderRadius: 8, background: "var(--bg-subtle)", fontSize: "calc(12.5px * var(--font-scale))", color: "var(--text)" }}
+                >
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {f.name} <span style={{ color: "var(--text-faint)" }}>({(f.size / (1024 * 1024)).toFixed(1)} MB)</span>
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => removeSelectedFile(i)}
+                    aria-label={`Remove ${f.name}`}
+                    style={{ background: "none", border: "none", color: "var(--text-faint)", cursor: "pointer", fontSize: "calc(14px * var(--font-scale))", lineHeight: 1, padding: "2px 6px", flexShrink: 0 }}
+                  >
+                    ✕
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
           </div>
 
           <div
@@ -758,10 +838,10 @@ export function PdfUploadFlow() {
             </button>
             <button
               type="button"
-              disabled={!selectedFile}
+              disabled={selectedFiles.length === 0}
               onClick={handleGenerateClick}
               className="btn-solid"
-              style={{ background: "var(--primary)", color: "var(--on-primary)", border: "none", borderRadius: 10, padding: "8px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, fontFamily: "var(--font-body, sans-serif)", cursor: selectedFile ? "pointer" : "not-allowed", opacity: selectedFile ? 1 : 0.5 }}
+              style={{ background: "var(--primary)", color: "var(--on-primary)", border: "none", borderRadius: 10, padding: "8px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, fontFamily: "var(--font-body, sans-serif)", cursor: selectedFiles.length > 0 ? "pointer" : "not-allowed", opacity: selectedFiles.length > 0 ? 1 : 0.5 }}
             >
               Generate flashcards
             </button>

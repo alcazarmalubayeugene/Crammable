@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { authHeaders } from "@/lib/api/auth-headers";
 import { PageLoading } from "@/components/ui/PageLoading";
 import { Navbar } from "@/components/nav/Navbar";
@@ -12,13 +11,14 @@ import {
   ReferralCaps,
   ReferralEventType,
   Routes,
-  TableNames,
   UIMessages,
   Validation,
   type ApiResponse,
+  type BugReportSeverity,
   type ClaimReferralResult,
   type ReferralHistoryItem,
   type ReferralHistoryResult,
+  type SubmitBugReportRequest,
 } from "@/lib/contracts";
 
 // ── earn-method display config ────────────────────────────────────────────────
@@ -48,6 +48,14 @@ const EARN_METHODS = [
     credits: ReferralCaps[ReferralEventType.PROFILE_COMPLETE].creditsAwarded,
     cap: "Once ever",
   },
+  {
+    type: ReferralEventType.BUG_REPORT,
+    icon: "🐞",
+    label: "Report a bug",
+    desc: "Found something broken? Tell us below — confirmed reports earn Capycoins.",
+    credits: ReferralCaps[ReferralEventType.BUG_REPORT].creditsAwarded,
+    cap: `Up to ${ReferralCaps[ReferralEventType.BUG_REPORT].monthlyCap}x per month`,
+  },
 ] as const;
 
 function eventLabel(event: ReferralHistoryItem): string {
@@ -57,6 +65,7 @@ function eventLabel(event: ReferralHistoryItem): string {
     case ReferralEventType.DECK_SHARE:       return "Shared a deck";
     case ReferralEventType.APP_REVIEW:       return "App review";
     case ReferralEventType.PROFILE_COMPLETE: return "Completed profile";
+    case ReferralEventType.BUG_REPORT:       return "Bug report confirmed";
     default:                                  return event.event_type;
   }
 }
@@ -64,10 +73,11 @@ function eventLabel(event: ReferralHistoryItem): string {
 // ── component ─────────────────────────────────────────────────────────────────
 
 export default function RewardsPage() {
-  const [profile, setProfile] = useState<MinProfile | null>(null);
+  const { profile, loading: profileLoading, mutate: mutateProfile } = useAppProfile();
   const [history, setHistory] = useState<ReferralHistoryItem[]>([]);
   const [referrerName, setReferrerName] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const loading = profileLoading || historyLoading;
 
   // claim form
   const [claimCode, setClaimCode] = useState("");
@@ -78,42 +88,37 @@ export default function RewardsPage() {
   // copy feedback
   const [copied, setCopied] = useState(false);
 
+  // bug report form
+  const [bugTitle, setBugTitle] = useState("");
+  const [bugDescription, setBugDescription] = useState("");
+  const [bugSeverity, setBugSeverity] = useState<BugReportSeverity>("medium");
+  const [bugError, setBugError] = useState("");
+  const [bugSuccess, setBugSuccess] = useState("");
+  const [submittingBug, setSubmittingBug] = useState(false);
+
+  // Auth + profile come from the (app) layout context. Once the profile
+  // resolves, load this page's own data — referral history (and the
+  // referrer's first name) via the /api/rewards/referrals service-role route,
+  // since RLS on profiles is self-only and can't resolve another user's name.
   useEffect(() => {
     if (profileLoading || !profile) return;
 
-      const [profileRes, historyRes] = await Promise.all([
-        supabase
-          .from(TableNames.profiles)
-          .select("token_balance, full_name, referral_code, referred_by")
-          .eq("id", user.id)
-          .single(),
-        fetch(ApiPaths.rewardsReferrals, {
-          headers: await authHeaders(),
-        }),
-      ]);
-
-      const profileData = profileRes.data as MinProfile;
-      setProfile(profileData);
+    async function load() {
+      const historyRes = await fetch(ApiPaths.rewardsReferrals, {
+        headers: await authHeaders(),
+      });
 
       if (historyRes.ok) {
         const historyData = (await historyRes.json()) as ApiResponse<ReferralHistoryResult>;
         if (historyData.success) {
           setHistory(historyData.events);
+          setReferrerName(historyData.referrerName);
         }
       }
 
-      if (referredBy) {
-        const { data: referrer } = await supabase
-          .from(TableNames.profiles)
-          .select("full_name")
-          .eq("id", referredBy)
-          .single();
-        setReferrerName(referrer?.full_name ?? "a classmate");
-      }
-
-      setLoading(false);
+      setHistoryLoading(false);
     }
-    load(profile.id, profile.referred_by);
+    void load();
   }, [profile, profileLoading]);
 
   async function copyCode() {
@@ -157,6 +162,52 @@ export default function RewardsPage() {
       setClaimError(UIMessages.genericError);
     } finally {
       setClaiming(false);
+    }
+  }
+
+  async function handleSubmitBugReport(e: React.FormEvent) {
+    e.preventDefault();
+    const title = bugTitle.trim();
+    const description = bugDescription.trim();
+    if (!title) {
+      setBugError("A short title is required.");
+      return;
+    }
+    if (!description) {
+      setBugError("Tell us what happened.");
+      return;
+    }
+    setBugError("");
+    setBugSuccess("");
+    setSubmittingBug(true);
+
+    try {
+      const res = await fetch(ApiPaths.submitBugReport, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await authHeaders()),
+        } as HeadersInit,
+        body: JSON.stringify({
+          title,
+          description,
+          severity: bugSeverity,
+          pageUrl: typeof window !== "undefined" ? window.location.href : undefined,
+        } satisfies SubmitBugReportRequest),
+      });
+      const data = (await res.json()) as ApiResponse<unknown>;
+      if (!data.success) {
+        setBugError(data.error.message);
+        return;
+      }
+      setBugSuccess(UIMessages.bugReportSubmitted);
+      setBugTitle("");
+      setBugDescription("");
+      setBugSeverity("medium");
+    } catch {
+      setBugError(UIMessages.genericError);
+    } finally {
+      setSubmittingBug(false);
     }
   }
 
@@ -303,6 +354,9 @@ export default function RewardsPage() {
             const deckShareCount = history.filter(
               (e) => e.event_type === ReferralEventType.DECK_SHARE
             ).length;
+            const bugReportRewardCount = history.filter(
+              (e) => e.event_type === ReferralEventType.BUG_REPORT
+            ).length;
 
             return (
               <div
@@ -372,10 +426,139 @@ export default function RewardsPage() {
                       </a>
                     )
                   )}
+
+                  {/* BUG_REPORT: earned count / CTA */}
+                  {method.type === ReferralEventType.BUG_REPORT && (
+                    bugReportRewardCount > 0 ? (
+                      <span style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 700, color: "var(--success)" }}>
+                        ✓ Earned {bugReportRewardCount}x
+                      </span>
+                    ) : (
+                      <a href="#report-bug" style={{ fontSize: "calc(12px * var(--font-scale))", fontWeight: 700, color: "var(--primary)", textDecoration: "none" }}>
+                        Report a bug →
+                      </a>
+                    )
+                  )}
                 </div>
               </div>
             );
           })}
+        </div>
+
+        {/* ── Report a bug ── */}
+        <div
+          id="report-bug"
+          style={{
+            background: "var(--bg-card)",
+            border: "1.5px solid var(--border)",
+            borderRadius: 16,
+            padding: "22px 24px",
+            marginBottom: 28,
+            scrollMarginTop: 24,
+          }}
+        >
+          <h2
+            style={{
+              fontFamily: "var(--font-display, serif)",
+              fontSize: "calc(16px * var(--font-scale))",
+              fontWeight: 700,
+              color: "var(--text)",
+              marginBottom: 4,
+            }}
+          >
+            Found a bug?
+          </h2>
+          <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)", marginBottom: 16, lineHeight: 1.5 }}>
+            Tell us what went wrong. Confirmed reports earn +{ReferralCaps[ReferralEventType.BUG_REPORT].creditsAwarded} Capycoins each,
+            up to {ReferralCaps[ReferralEventType.BUG_REPORT].monthlyCap}x per month.
+          </p>
+
+          {bugSuccess ? (
+            <div style={{ background: "var(--success-bg)", border: "1.5px solid var(--success)", borderRadius: 10, padding: "12px 16px" }}>
+              <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--success-dark)", fontWeight: 600, margin: 0 }}>
+                ✅ {bugSuccess}
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmitBugReport} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <input
+                type="text"
+                value={bugTitle}
+                onChange={(e) => setBugTitle(e.target.value.slice(0, Validation.bugReport.titleMaxLength))}
+                placeholder="Short summary, e.g. 'Quiz results page blank on submit'"
+                maxLength={Validation.bugReport.titleMaxLength}
+                style={{
+                  background: "var(--bg)",
+                  border: "1.5px solid var(--border)",
+                  borderRadius: 8,
+                  padding: "10px 12px",
+                  fontSize: "calc(14px * var(--font-scale))",
+                  color: "var(--text)",
+                  fontFamily: "var(--font-body, sans-serif)",
+                  outline: "none",
+                }}
+              />
+              <textarea
+                value={bugDescription}
+                onChange={(e) => setBugDescription(e.target.value.slice(0, Validation.bugReport.descriptionMaxLength))}
+                placeholder="What happened? What did you expect instead? Steps to reproduce help a lot."
+                maxLength={Validation.bugReport.descriptionMaxLength}
+                rows={4}
+                style={{
+                  background: "var(--bg)",
+                  border: "1.5px solid var(--border)",
+                  borderRadius: 8,
+                  padding: "10px 12px",
+                  fontSize: "calc(14px * var(--font-scale))",
+                  color: "var(--text)",
+                  fontFamily: "var(--font-body, sans-serif)",
+                  outline: "none",
+                  resize: "vertical",
+                }}
+              />
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+                <select
+                  value={bugSeverity}
+                  onChange={(e) => setBugSeverity(e.target.value as BugReportSeverity)}
+                  style={{
+                    background: "var(--bg)",
+                    border: "1.5px solid var(--border)",
+                    borderRadius: 8,
+                    padding: "9px 12px",
+                    fontSize: "calc(13px * var(--font-scale))",
+                    color: "var(--text)",
+                    fontFamily: "var(--font-body, sans-serif)",
+                  }}
+                >
+                  <option value="low">Low — minor annoyance</option>
+                  <option value="medium">Medium — gets in the way</option>
+                  <option value="high">High — blocks a feature</option>
+                  <option value="critical">Critical — app breaks / data loss</option>
+                </select>
+                <button
+                  type="submit"
+                  disabled={submittingBug}
+                  style={{
+                    background: submittingBug ? "var(--text-faint)" : "var(--primary)",
+                    color: "var(--nav-text)",
+                    border: "none",
+                    borderRadius: 8,
+                    padding: "10px 20px",
+                    fontSize: "calc(14px * var(--font-scale))",
+                    fontWeight: 600,
+                    cursor: submittingBug ? "not-allowed" : "pointer",
+                    fontFamily: "var(--font-body, sans-serif)",
+                  }}
+                >
+                  {submittingBug ? "Sending…" : "Submit report"}
+                </button>
+              </div>
+            </form>
+          )}
+
+          {bugError && (
+            <p style={{ fontSize: "calc(13px * var(--font-scale))", color: "var(--error)", marginTop: 8 }}>{bugError}</p>
+          )}
         </div>
 
         {/* ── Claim a referral code ── */}

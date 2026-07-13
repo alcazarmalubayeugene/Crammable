@@ -1,13 +1,15 @@
 import {
   ApiErrorCode,
   ApiPaths,
+  MAX_FILES_PER_UPLOAD,
   OcrThresholds,
   PdfType,
   SubscriptionTier,
   TierLimits,
   UIMessages,
   type ApiResponse,
-  type UploadResult,
+  type MultiUploadResult,
+  type PerFileUploadResult,
 } from "@/lib/contracts";
 import { apiFail, handleApiError } from "@/lib/api/errors";
 import { assertSameOrigin } from "@/lib/api/csrf";
@@ -18,6 +20,9 @@ import { requireAuth } from "@/lib/auth/helpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+// Multiple files are extracted sequentially in one request — give it more
+// headroom than a single-file extraction needs.
+export const maxDuration = 60;
 
 const PDF_MIME = "application/pdf";
 
@@ -71,86 +76,106 @@ export async function POST(request: Request): Promise<Response> {
     }
 
     // SECURITY (audit 8.2): reject oversized bodies on the declared Content-Length
-    // BEFORE buffering the multipart payload into memory. The precise per-file
-    // check below still applies; this is the cheap pre-filter (with a small
-    // multipart-overhead margin) that stops a memory-pressure DoS up front.
+    // BEFORE buffering the multipart payload into memory. Sized for the worst
+    // case (every slot filled at the per-file cap) since we don't know the real
+    // file count until formData is parsed; the precise per-file check below
+    // still applies to each individual file regardless.
     const contentLength = Number(request.headers.get("content-length") ?? 0);
-    if (contentLength > maxUploadMb * 1024 * 1024 + 1024 * 1024) {
+    if (contentLength > maxUploadMb * MAX_FILES_PER_UPLOAD * 1024 * 1024 + 1024 * 1024) {
       return apiFail(
         ApiErrorCode.FILE_TOO_LARGE,
-        `File must be ${maxUploadMb} MB or smaller.`,
+        `Files must total ${maxUploadMb * MAX_FILES_PER_UPLOAD} MB or smaller.`,
         413,
       );
     }
 
     const formData = await request.formData();
-    const file = formData.get("file");
-    if (!(file instanceof File)) {
+    const files = formData.getAll("file").filter((f): f is File => f instanceof File);
+
+    if (files.length === 0) {
       return apiFail(
         ApiErrorCode.VALIDATION_ERROR,
-        "A PDF file is required.",
+        "At least one PDF file is required.",
         400,
       );
     }
 
-    if (!isPdfFile(file)) {
+    if (files.length > MAX_FILES_PER_UPLOAD) {
       return apiFail(
-        ApiErrorCode.INVALID_FILE_TYPE,
-        "Only PDF files are supported.",
+        ApiErrorCode.VALIDATION_ERROR,
+        `You can combine up to ${MAX_FILES_PER_UPLOAD} PDFs into one deck.`,
         400,
       );
     }
 
-    if (file.size > maxUploadMb * 1024 * 1024) {
-      return apiFail(
-        ApiErrorCode.FILE_TOO_LARGE,
-        `File must be ${maxUploadMb} MB or smaller.`,
-        413,
-      );
-    }
+    const results: PerFileUploadResult[] = [];
+    const debugByFile: UploadTestDebug[] = [];
 
-    const buffer = await file.arrayBuffer();
-    const extraction = await extractTextFromPdfBuffer(buffer);
+    for (const file of files) {
+      if (!isPdfFile(file)) {
+        return apiFail(
+          ApiErrorCode.INVALID_FILE_TYPE,
+          `"${file.name}" isn't a PDF. Only PDF files are supported.`,
+          400,
+        );
+      }
 
-    // Page count is unlimited (maxPages === Infinity) — the 10 MB file-size check
-    // above is the only upload guard. The check is kept Infinity-safe so a finite
-    // per-tier page cap can be reintroduced later by editing TierLimits alone.
-    if (Number.isFinite(maxPages) && extraction.pageCount > maxPages) {
-      return apiFail(
-        ApiErrorCode.PAGE_LIMIT_EXCEEDED,
-        `This PDF has ${extraction.pageCount} pages. Your plan allows up to ${maxPages} pages.`,
-        400,
-      );
-    }
+      if (file.size > maxUploadMb * 1024 * 1024) {
+        return apiFail(
+          ApiErrorCode.FILE_TOO_LARGE,
+          `"${file.name}" is larger than ${maxUploadMb} MB.`,
+          413,
+        );
+      }
 
-    const debug: UploadTestDebug | undefined = PDF_EXTRACTION_TEST_MODE
-      ? {
+      const buffer = await file.arrayBuffer();
+      const extraction = await extractTextFromPdfBuffer(buffer);
+
+      // Page count is unlimited (maxPages === Infinity) — the 10 MB per-file size
+      // check above is the only upload guard. The check is kept Infinity-safe so
+      // a finite per-tier page cap can be reintroduced later by editing
+      // TierLimits alone. Applied per file, same as the single-file cap was.
+      if (Number.isFinite(maxPages) && extraction.pageCount > maxPages) {
+        return apiFail(
+          ApiErrorCode.PAGE_LIMIT_EXCEEDED,
+          `"${file.name}" has ${extraction.pageCount} pages. Your plan allows up to ${maxPages} pages per file.`,
+          400,
+        );
+      }
+
+      if (PDF_EXTRACTION_TEST_MODE) {
+        debugByFile.push({
           pageCount:        extraction.pageCount,
           avgCharsPerPage:  Math.round(extraction.avgCharsPerPage * 10) / 10,
           isImagePdf:       extraction.isImagePdf,
           imagePageCount:   extraction.imagePageNumbers.length,
           imagePageNumbers: extraction.imagePageNumbers,
           threshold:        OcrThresholds.minCharsPerPageForText,
-        }
-      : undefined;
+        });
+      }
 
-    if (extraction.isImagePdf || !extraction.extractedText.trim()) {
-      const body = {
-        success:          true as const,
-        path:             PdfType.OCR,
-        message:          UIMessages.ocrWarning,
-        partialText:      extraction.partialText,
-        imagePageNumbers: extraction.imagePageNumbers,
-        ...(debug ? { _debug: debug } : {}),
-      };
-      return Response.json(body, { status: 200 });
+      if (extraction.isImagePdf || !extraction.extractedText.trim()) {
+        results.push({
+          filename:         file.name,
+          path:             PdfType.OCR,
+          message:          UIMessages.ocrWarning,
+          partialText:      extraction.partialText,
+          imagePageNumbers: extraction.imagePageNumbers,
+        });
+        continue;
+      }
+
+      results.push({
+        filename:      file.name,
+        path:          PdfType.TEXT,
+        extractedText: extraction.extractedText,
+      });
     }
 
-    const body: ApiResponse<UploadResult> & { _debug?: UploadTestDebug } = {
+    const body: ApiResponse<MultiUploadResult> & { _debug?: UploadTestDebug[] } = {
       success: true,
-      path: PdfType.TEXT,
-      extractedText: extraction.extractedText,
-      ...(debug ? { _debug: debug } : {}),
+      files: results,
+      ...(PDF_EXTRACTION_TEST_MODE ? { _debug: debugByFile } : {}),
     };
     return Response.json(body, { status: 200 });
   } catch (err) {

@@ -226,10 +226,9 @@ export default function QuizResultPage() {
   const missedRef = useRef<HTMLDivElement>(null);
   const [shareStatus, setShareStatus] = useState<"idle" | "working" | "shared" | "saved" | "error">("idle");
 
-  // Real shareable link toggle (backend pending — see FRONTEND.md "Backend work
-  // needed: shareable quiz results"). isPublic/linkSharing/linkError/linkCopied
-  // mirror decks/[id]/page.tsx's toggleShare()/copyShareLink() exactly, just
-  // scoped to a quiz session instead of a deck.
+  // Shareable link toggle — mirrors decks/[id]/page.tsx's
+  // toggleShare()/copyShareLink() exactly, just scoped to a quiz session
+  // instead of a deck.
   const [isPublic, setIsPublic] = useState(false);
   const [linkSharing, setLinkSharing] = useState(false);
   const [linkError, setLinkError] = useState("");
@@ -312,9 +311,6 @@ export default function QuizResultPage() {
     }
   }
 
-  // Calls the not-yet-implemented POST /api/quiz/[sessionId]/share. Until the
-  // backend column/route/RLS policy land, this surfaces whatever error the
-  // missing route returns — see FRONTEND.md for exactly what unblocks it.
   async function toggleResultShare() {
     if (!result!.sessionId) return;
     setLinkSharing(true);
@@ -532,9 +528,7 @@ export default function QuizResultPage() {
           )}
         </div>
 
-        {/* Share this result as a real link (mirrors decks/[id]'s share block).
-            Backend pending — see FRONTEND.md "Backend work needed: shareable
-            quiz results" for the column/RLS/route this needs to actually work. */}
+        {/* Share this result as a real link (mirrors decks/[id]'s share block). */}
         {result.sessionId && (
           <div
             style={{

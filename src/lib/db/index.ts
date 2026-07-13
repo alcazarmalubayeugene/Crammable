@@ -41,6 +41,7 @@ export {
   renameDeck,
   createDeckWithCardsAndCharge,
   setDeckPublic,
+  setDeckArchived,
   getPublicDeckWithCards,
   type NewDeckInput,
 } from "@/lib/db/decks";
@@ -90,6 +91,12 @@ export {
   getOwnAppReview,
 } from "@/lib/db/reviews";
 
+// Bug reports (BackEnd)
+export {
+  createBugReport,
+  listOwnBugReports,
+} from "@/lib/db/bugReports";
+
 // Admin payment verification + user management (E4)
 export {
   listPendingPayments,
@@ -97,6 +104,8 @@ export {
   rejectPayment,
   listPendingAppReviews,
   verifyAppReview,
+  listPendingBugReports,
+  verifyBugReport,
   listUsers,
   grantCreditsAsAdmin,
   listAuditLog,

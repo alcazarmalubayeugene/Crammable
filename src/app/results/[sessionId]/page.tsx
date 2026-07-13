@@ -10,13 +10,6 @@ import { Navbar } from "@/components/nav/Navbar";
  * Read-only public quiz-result viewer — no auth required. Mirrors
  * /public/decks/[id]/page.tsx's shape (fetch → loading/error/content states),
  * scoped to a single quiz session instead of a deck.
- *
- * NOT YET FUNCTIONAL — GET /api/public/results/[sessionId] doesn't exist yet
- * (no quiz_sessions.is_public column, no RLS policy, no route). Until that
- * backend work lands (see FRONTEND.md "Backend work needed: shareable quiz
- * results"), every link this page is given will show the error state below.
- * The UI is built ahead of the backend on purpose, same as result/page.tsx's
- * "Share this result" toggle that links here.
  */
 export default function PublicResultPage() {
   const params = useParams();

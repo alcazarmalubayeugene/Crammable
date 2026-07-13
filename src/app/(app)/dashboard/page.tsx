@@ -15,19 +15,50 @@ interface DeckListItem {
   card_count: number;
   created_at: string;
   source_filename: string | null;
+  archived_at: string | null;
 }
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { profile, loading: profileLoading } = useAppProfile();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileLoading, setProfileLoading] = useState(true);
   const [decks, setDecks] = useState<DeckListItem[]>([]);
   const [decksLoading, setDecksLoading] = useState(true);
-  // Show the skeleton shell until both the shared profile and this page's decks
+  // Show the skeleton shell until both the profile and this page's decks
   // have resolved.
   const loading = profileLoading || decksLoading;
   // Which deck's "⋮" menu is open — at most one at a time, closed by clicking
   // anywhere else (see the document click listener below).
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  // Active (default) vs archived deck list — mutually exclusive, refetched on toggle.
+  const [viewingArchived, setViewingArchived] = useState(false);
+
+  async function loadDeckList(archived: boolean) {
+    setDecksLoading(true);
+    const res = await fetch(`${ApiPaths.decks}${archived ? "?archived=1" : ""}`);
+    const json = (await res.json()) as { success: boolean; decks?: DeckListItem[] };
+    setDecks(json.success && json.decks ? json.decks : []);
+    setDecksLoading(false);
+  }
+
+  async function toggleArchivedView() {
+    const next = !viewingArchived;
+    setViewingArchived(next);
+    setOpenMenuId(null);
+    await loadDeckList(next);
+  }
+
+  async function handleArchiveDeck(deckId: string, currentlyArchived: boolean) {
+    setOpenMenuId(null);
+    const res = await fetch(ApiPaths.deckArchive(deckId), { method: currentlyArchived ? "DELETE" : "POST" });
+    const json = (await res.json()) as { success: boolean; error?: { message: string } };
+    if (!json.success) {
+      window.alert(json.error?.message ?? "Failed to update deck. Please try again.");
+      return;
+    }
+    // The deck always leaves whichever view it was archived/unarchived from.
+    setDecks((prev) => prev.filter((d) => d.id !== deckId));
+  }
 
   useEffect(() => {
     if (!openMenuId) return;
@@ -102,10 +133,11 @@ export default function DashboardPage() {
       }
 
       setProfile(profileJson.profile);
+      setProfileLoading(false);
       setDecks(decksJson.success && decksJson.decks ? decksJson.decks : []);
       setDecksLoading(false);
     }
-    loadDecks();
+    loadDashboard();
   }, []);
 
   // Fresh signups land here right after email confirmation — if they never
@@ -252,7 +284,7 @@ export default function DashboardPage() {
             <div style={{ width: 44, height: 44, background: "var(--success-bg)", borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", fontSize: "calc(22px * var(--font-scale))" }}>📚</div>
             <div style={{ flex: 1 }}>
               <div style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(26px * var(--font-scale))", fontWeight: 700, color: "var(--text)", lineHeight: 1 }}>{decks.length}</div>
-              <div style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginTop: 3 }}>Active decks</div>
+              <div style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", marginTop: 3 }}>{viewingArchived ? "Archived decks" : "Active decks"}</div>
             </div>
             <Link href={Routes.newDeck} style={{ fontSize: "calc(20px * var(--font-scale))", color: "var(--primary)", textDecoration: "none", fontWeight: 700, lineHeight: 1 }} title="Create a new deck">+</Link>
           </div>
@@ -281,46 +313,71 @@ export default function DashboardPage() {
           )}
         </div>
 
+        {/* Active/archived view toggle */}
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <button
+            type="button"
+            onClick={toggleArchivedView}
+            style={{
+              background: "transparent",
+              border: "none",
+              color: "var(--primary)",
+              fontSize: "calc(13px * var(--font-scale))",
+              fontWeight: 600,
+              cursor: "pointer",
+              padding: "4px 8px",
+            }}
+          >
+            {viewingArchived ? "← Back to active decks" : "🗄 View archived decks"}
+          </button>
+        </div>
+
         {decks.length === 0 ? (
           /* Empty state */
           <div className="anim-fade-up-3" style={{ background: "var(--bg-card)", border: "1.5px dashed var(--border)", borderRadius: 20, padding: "60px 24px", textAlign: "center" }}>
             <h2 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(20px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 8 }}>
-              No decks yet
+              {viewingArchived ? "No archived decks" : "No decks yet"}
             </h2>
             <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))", marginBottom: 28, maxWidth: 360, margin: "0 auto 28px" }}>
-              Upload a PDF reviewer and Capy will turn it into a flashcard deck in seconds.
+              {viewingArchived
+                ? "Decks you archive show up here — they still count zero toward your deck limit."
+                : "Upload a PDF reviewer and Capy will turn it into a flashcard deck in seconds."}
             </p>
-            <Link
-              href={Routes.newDeck}
-              style={{ display: "inline-block", background: "var(--primary)", color: "var(--nav-text)", padding: "12px 28px", borderRadius: 10, fontWeight: 600, fontSize: "calc(14px * var(--font-scale))", textDecoration: "none" }}
-            >
-              + Create your first deck
-            </Link>
+            {!viewingArchived && (
+              <Link
+                href={Routes.newDeck}
+                style={{ display: "inline-block", background: "var(--primary)", color: "var(--nav-text)", padding: "12px 28px", borderRadius: 10, fontWeight: 600, fontSize: "calc(14px * var(--font-scale))", textDecoration: "none" }}
+              >
+                + Create your first deck
+              </Link>
+            )}
           </div>
         ) : (
           <>
             {/* Deck grid — concept's "+ New deck" tile + per-card "Quiz me" button,
                 layered on top of the card_count/date info the concept doesn't show. */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 16 }}>
-              <Link
-                href={Routes.newDeck}
-                className="anim-fade-up hover-lift"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  minHeight: 96,
-                  border: "1.5px dashed var(--border)",
-                  borderRadius: 16,
-                  background: "var(--bg-subtle)",
-                  color: "var(--text-muted)",
-                  fontWeight: 600,
-                  fontSize: "calc(14px * var(--font-scale))",
-                  textDecoration: "none",
-                }}
-              >
-                ＋ New deck
-              </Link>
+              {!viewingArchived && (
+                <Link
+                  href={Routes.newDeck}
+                  className="anim-fade-up hover-lift"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    minHeight: 96,
+                    border: "1.5px dashed var(--border)",
+                    borderRadius: 16,
+                    background: "var(--bg-subtle)",
+                    color: "var(--text-muted)",
+                    fontWeight: 600,
+                    fontSize: "calc(14px * var(--font-scale))",
+                    textDecoration: "none",
+                  }}
+                >
+                  ＋ New deck
+                </Link>
+              )}
               {decks.map((deck, i) => {
                 const paused = readPausedQuiz(deck.id);
                 return (
@@ -400,6 +457,26 @@ export default function DashboardPage() {
                         >
                           ✎ Edit
                         </Link>
+                        <button
+                          type="button"
+                          onClick={() => handleArchiveDeck(deck.id, viewingArchived)}
+                          className="menu-item"
+                          style={{
+                            display:      "block",
+                            width:        "100%",
+                            textAlign:    "left",
+                            padding:      "10px 16px",
+                            fontSize:     "calc(13px * var(--font-scale))",
+                            color:        "var(--text)",
+                            background:   "transparent",
+                            border:       "none",
+                            borderTop:    "1px solid var(--border)",
+                            cursor:       "pointer",
+                            fontFamily:   "var(--font-body, sans-serif)",
+                          }}
+                        >
+                          {viewingArchived ? "↩ Unarchive" : "🗄 Archive"}
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleDeleteDeck(deck.id, deck.title)}

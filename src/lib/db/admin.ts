@@ -6,9 +6,11 @@ import {
   type AdminActionLog,
   type AdminAppReviewRow,
   type AdminAuditLogRow,
+  type AdminBugReportRow,
   type AdminPaymentRow,
   type AdminUserRow,
   type AppReview,
+  type BugReport,
   type PaymentSubmission,
 } from "@/lib/contracts";
 import { toDbError } from "@/lib/db/errors";
@@ -246,6 +248,51 @@ export async function verifyAppReview(
     p_notes: notes ?? null,
   });
   if (error) throw toDbError(error, "Failed to verify review.");
+  return { userId: data as string, creditsAwarded: approve ? credits : 0 };
+}
+
+/** Pending bug reports (BackEnd) joined with the submitter's email, oldest first (FIFO). */
+export async function listPendingBugReports(): Promise<AdminBugReportRow[]> {
+  const admin = createAdminClient();
+  const { data, error } = await admin
+    .from(TableNames.bugReports)
+    .select(`*, user:${TableNames.profiles}!user_id(email)`)
+    .eq("status", "pending")
+    .order("created_at", { ascending: true });
+  if (error) throw toDbError(error, "Failed to load pending bug reports.");
+
+  return ((data as Array<BugReport & { user: { email: string } | null }>) ?? []).map((row) => {
+    const { user, ...report } = row;
+    return { ...report, userEmail: user?.email ?? "" } satisfies AdminBugReportRow;
+  });
+}
+
+/**
+ * Approve or reject a bug report atomically via verify_bug_report() (schema
+ * §4.16b): claims the row (status='pending' guard), and on approve also
+ * checks the monthly reward cap, inserts the referral_events ledger row, and
+ * grants credits — all in one transaction. Returns the reported user's id and
+ * the credits awarded (0 on reject or if the monthly cap was already hit).
+ *
+ * @throws {DbError} VALIDATION_ERROR if the report isn't pending.
+ * @throws {DbError} REFERRAL_CAP_REACHED if this user already hit the monthly cap.
+ */
+export async function verifyBugReport(
+  adminId: string,
+  reportId: string,
+  approve: boolean,
+  credits: number,
+  notes?: string
+): Promise<{ userId: string; creditsAwarded: number }> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc("verify_bug_report", {
+    p_admin_id: adminId,
+    p_report_id: reportId,
+    p_approve: approve,
+    p_credits: credits,
+    p_notes: notes ?? null,
+  });
+  if (error) throw toDbError(error, "Failed to verify bug report.");
   return { userId: data as string, creditsAwarded: approve ? credits : 0 };
 }
 

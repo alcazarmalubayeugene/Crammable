@@ -19,6 +19,7 @@ import {
   type AdminAppReviewRow,
   type AdminAuditLogResult,
   type AdminAuditLogRow,
+  type AdminBugReportRow,
   type AdminPaymentRow,
   type AdminStatusData,
   type AdminUserRow,
@@ -30,6 +31,8 @@ import {
   type RejectPaymentRequest,
   type RevokeProRequest,
   type RevokeProResult,
+  type VerifyBugReportRequest,
+  type VerifyBugReportResult,
   type VerifyReviewRequest,
   type VerifyReviewResult,
 } from "@/lib/contracts";
@@ -105,6 +108,8 @@ export default function AdminPage() {
   const [rowStates, setRowStates] = useState<Record<string, RowState>>({});
   const [reviews, setReviews] = useState<AdminAppReviewRow[]>([]);
   const [reviewRowStates, setReviewRowStates] = useState<Record<string, ReviewRowState>>({});
+  const [bugReports, setBugReports] = useState<AdminBugReportRow[]>([]);
+  const [bugReportRowStates, setBugReportRowStates] = useState<Record<string, ReviewRowState>>({});
   const [users, setUsers] = useState<AdminUserRow[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [userSearch, setUserSearch] = useState("");
@@ -156,6 +161,18 @@ export default function AdminPage() {
         const reviewStates: Record<string, ReviewRowState> = {};
         reviewRows.forEach((r) => { reviewStates[r.id] = emptyReviewRowState(); });
         setReviewRowStates(reviewStates);
+      }
+
+      const bugReportsRes = await fetch(ApiPaths.adminBugReports, {
+        headers: await authHeaders(),
+      });
+      if (bugReportsRes.ok) {
+        const bugReportsData = await bugReportsRes.json();
+        const bugReportRows: AdminBugReportRow[] = bugReportsData.reports ?? [];
+        setBugReports(bugReportRows);
+        const bugReportStates: Record<string, ReviewRowState> = {};
+        bugReportRows.forEach((r) => { bugReportStates[r.id] = emptyReviewRowState(); });
+        setBugReportRowStates(bugReportStates);
       }
 
       setLoading(false);
@@ -311,6 +328,32 @@ export default function AdminPage() {
       setReviews((prev) => prev.filter((r) => r.id !== reviewId));
     } catch {
       setReviewRow(reviewId, { actionState: "idle", error: UIMessages.genericError });
+    }
+  }
+
+  function setBugReportRow(id: string, patch: Partial<ReviewRowState>) {
+    setBugReportRowStates((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }));
+  }
+
+  async function verifyBugReport(reportId: string, approve: boolean) {
+    setBugReportRow(reportId, { actionState: "verifying", error: "" });
+    try {
+      const res = await fetch(ApiPaths.adminVerifyBugReport, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(await authHeaders()),
+        } as HeadersInit,
+        body: JSON.stringify({ reportId, approve } satisfies VerifyBugReportRequest),
+      });
+      const data = (await res.json()) as ApiResponse<VerifyBugReportResult>;
+      if (!data.success) {
+        setBugReportRow(reportId, { actionState: "idle", error: data.error.message });
+        return;
+      }
+      setBugReports((prev) => prev.filter((r) => r.id !== reportId));
+    } catch {
+      setBugReportRow(reportId, { actionState: "idle", error: UIMessages.genericError });
     }
   }
 
@@ -687,6 +730,80 @@ export default function AdminPage() {
                       type="button"
                       disabled={busy}
                       onClick={() => verifyReview(review.id, false)}
+                      style={{ background: "none", border: "1.5px solid var(--border)", borderRadius: 8, padding: "9px 20px", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text-muted)", cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
+                    >
+                      ✗ Reject
+                    </button>
+                  </div>
+
+                  {rs.error && (
+                    <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--error)", marginTop: 8 }}>{rs.error}</p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── Pending bug reports (BackEnd) ── */}
+        <h2 style={{ fontFamily: "var(--font-display, serif)", fontSize: "calc(16px * var(--font-scale))", fontWeight: 700, color: "var(--text)", margin: "36px 0 12px" }}>
+          Pending Bug Reports
+        </h2>
+        {bugReports.length === 0 ? (
+          <div style={{ background: "var(--bg-card)", border: "1.5px dashed var(--border)", borderRadius: 16, padding: "32px 24px", textAlign: "center" }}>
+            <p style={{ color: "var(--text-muted)", fontSize: "calc(14px * var(--font-scale))" }}>No pending bug reports.</p>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {bugReports.map((report) => {
+              const rs = bugReportRowStates[report.id] ?? emptyReviewRowState();
+              const busy = rs.actionState !== "idle";
+              const severityColor =
+                report.severity === "critical" ? "var(--error)" :
+                report.severity === "high"     ? "var(--error)" :
+                report.severity === "medium"   ? "var(--primary)" : "var(--text-muted)";
+              return (
+                <div
+                  key={report.id}
+                  style={{ background: "var(--bg-card)", border: "1.5px solid var(--border)", borderRadius: 16, padding: "20px 22px" }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10, marginBottom: 10 }}>
+                    <div>
+                      <p style={{ fontSize: "calc(15px * var(--font-scale))", fontWeight: 600, color: "var(--text)", marginBottom: 2 }}>
+                        {report.title}
+                      </p>
+                      <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)", margin: 0 }}>
+                        {report.userEmail}
+                      </p>
+                    </div>
+                    <span style={{ fontSize: "calc(11px * var(--font-scale))", fontWeight: 700, background: "var(--bg-subtle)", color: severityColor, borderRadius: 20, padding: "3px 10px", textTransform: "uppercase" }}>
+                      {report.severity}
+                    </span>
+                  </div>
+
+                  <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text)", marginBottom: 8, whiteSpace: "pre-wrap" }}>
+                    {report.description}
+                  </p>
+
+                  {report.page_url && (
+                    <p style={{ fontSize: "calc(12px * var(--font-scale))", color: "var(--text-faint)", marginBottom: 14, wordBreak: "break-all" }}>
+                      📍 {report.page_url}
+                    </p>
+                  )}
+
+                  <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => verifyBugReport(report.id, true)}
+                      style={{ background: "var(--success)", color: "var(--nav-text)", border: "none", borderRadius: 8, padding: "9px 20px", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
+                    >
+                      {busy ? "…" : `✓ Approve (+${ReferralCaps[ReferralEventType.BUG_REPORT].creditsAwarded} Capycoins)`}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => verifyBugReport(report.id, false)}
                       style={{ background: "none", border: "1.5px solid var(--border)", borderRadius: 8, padding: "9px 20px", fontSize: "calc(13px * var(--font-scale))", fontWeight: 600, color: "var(--text-muted)", cursor: busy ? "not-allowed" : "pointer", fontFamily: "var(--font-body, sans-serif)" }}
                     >
                       ✗ Reject
