@@ -23,7 +23,9 @@ import {
   type GenerateRequest,
   type GenerateResult,
   type MultiUploadResult,
+  type PerFileUploadResult,
 } from "@/lib/contracts";
+import { budgetCombinedText, type BudgetedFileText } from "@/lib/text/truncate";
 import type { UploadTestDebug } from "@/app/api/upload/route";
 import { PDF_EXTRACTION_TEST_MODE } from "@/lib/dev/pdf-test-mode";
 import { authHeaders } from "@/lib/api/auth-headers";
@@ -60,6 +62,15 @@ export function PdfUploadFlow() {
   const [pageProgress, setPageProgress] = useState({ current: 0, total: 0 });
   const [pastedText, setPastedText]           = useState("");
   const [errorMessage, setErrorMessage]       = useState("");
+  // S4: per-file upload progress (one request per file) — "Reading 2 of 3 — notes.pdf"
+  const [fileProgress, setFileProgress]       = useState<{ current: number; total: number; filename: string } | null>(null);
+  // S4: files that failed individually — the rest of the batch still proceeds.
+  const [batchFailures, setBatchFailures]     = useState<{ filename: string; message: string }[]>([]);
+  // S5: set when the proportional text budget had to cut content — warn BEFORE
+  // a Capycoin is charged, so a partial deck is never silently generated.
+  const [budgetWarning, setBudgetWarning]     = useState<string | null>(null);
+  // S6: per-file status for the recovery list — keyed by selectedFiles index.
+  const [fileStatuses, setFileStatuses]       = useState<Record<number, "queued" | "reading" | "done" | "skipped">>({});
   const [layer1Payload, setLayer1Payload]     = useState<unknown>(null);
   const [resultView, setResultView]           = useState<ResultView | null>(null);
   // Populated when the upload returns path: "ocr" — used for selective page rendering.
@@ -151,6 +162,10 @@ export function PdfUploadFlow() {
     setPageProgress({ current: 0, total: 0 });
     setPastedText("");
     setErrorMessage("");
+    setFileProgress(null);
+    setBatchFailures([]);
+    setBudgetWarning(null);
+    setFileStatuses({});
     setLayer1Payload(null);
     setResultView(null);
     setImagePageNumbers([]);
@@ -176,35 +191,67 @@ export function PdfUploadFlow() {
       setGenStage(1);
       setErrorMessage("");
 
-      const payload: GenerateRequest = {
-        extractedText,
-        pdfType,
-        title: deckName.trim() || undefined,
-        maxCards: cardCount,
-        ...(generationMode === GenerationMode.DEEP_DIVE ? { generationMode } : {}),
-      };
-      const headers = await authHeaders({ "Content-Type": "application/json" });
-      const res = await fetch(ApiPaths.generate, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload),
-      });
+      const GENERATE_TIMEOUT_MS = 120_000; // 2 min -- server maxDuration is 60 s
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), GENERATE_TIMEOUT_MS);
 
-      const data = (await res.json()) as ApiResponse<GenerateResult>;
-      if (!data.success) {
-        if (data.error.code === ApiErrorCode.EXTRACTION_FAILED) {
-          setPhase("paste_fallback");
-          setErrorMessage("");
-          setResultView({
-            label: "Extraction too weak for AI",
-            debug: data.error,
-            extractedText,
-          });
+      let data: ApiResponse<GenerateResult>;
+      try {
+        const payload: GenerateRequest = {
+          extractedText,
+          pdfType,
+          title: deckName.trim() || undefined,
+          maxCards: cardCount,
+          ...(generationMode === GenerationMode.DEEP_DIVE ? { generationMode } : {}),
+        };
+        const headers = await authHeaders({ "Content-Type": "application/json" });
+        const res = await fetch(ApiPaths.generate, {
+          method: "POST",
+          headers,
+          body: JSON.stringify(payload),
+          signal: controller.signal,
+        });
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          const detail = text.slice(0, 200) || "HTTP ".concat(String(res.status));
+          throw new Error("Server error (".concat(String(res.status), "): ", detail));
+        }
+
+        const contentType = res.headers.get("content-type") ?? "";
+        if (!contentType.includes("application/json")) {
+          const text = await res.text().catch(() => "");
+          throw new Error("Unexpected response (".concat(String(res.status), "): ", text.slice(0, 200)));
+        }
+
+        data = (await res.json()) as ApiResponse<GenerateResult>;
+        if (!data.success) {
+          if (data.error.code === ApiErrorCode.EXTRACTION_FAILED) {
+            setPhase("paste_fallback");
+            setErrorMessage("");
+            setResultView({
+              label: "Extraction too weak for AI",
+              debug: data.error,
+              extractedText,
+            });
+            return;
+          }
+          setPhase("error");
+          setErrorMessage(data.error.message);
           return;
         }
-        setPhase("error");
-        setErrorMessage(data.error.message);
+      } catch (err) {
+        if (controller.signal.aborted) {
+          setPhase("error");
+          setErrorMessage("That took too long -- try fewer files or a smaller PDF.");
+        } else {
+          const message = err instanceof Error ? err.message : "Something went wrong.";
+          setPhase("error");
+          setErrorMessage("Generation failed: ".concat(message));
+        }
         return;
+      } finally {
+        clearTimeout(timeoutId);
       }
 
       // A successful generation deducts a credit — push the fresh balance into
@@ -233,134 +280,19 @@ export function PdfUploadFlow() {
     [router, generationMode, deckName, cardCount, mutateProfile],
   );
 
-  const uploadPdfs = useCallback(
-    async (files: File[]) => {
-      setPhase("uploading");
-      setErrorMessage("");
-      setResultView(null);
-
-      const formData = new FormData();
-      for (const file of files) formData.append("file", file);
-
-      const headers = await authHeaders();
-      const res = await fetch(ApiPaths.upload, {
-        method: "POST",
-        headers,
-        body: formData,
-      });
-
-      const data = (await res.json()) as ApiResponse<MultiUploadResult> & {
-        _debug?: UploadTestDebug[];
-      };
-
-      if (!data.success) {
-        setPhase("error");
-        setErrorMessage(data.error.message);
-        return;
-      }
-
-      // Single file: full behavior unchanged, including the OCR/paste-fallback
-      // pipeline below (which is inherently single-file — it renders and
-      // Tesseract-scans pages of ONE PDF).
-      if (data.files.length === 1) {
-        const [only] = data.files;
-        const debug = data._debug?.[0] ?? only;
-
-        if (only.path === PdfType.TEXT) {
-          if (PDF_EXTRACTION_TEST_MODE) {
-            showExtractionPreview("Layer 1 — text PDF", debug, only.extractedText);
-            return;
-          }
-          await callGenerate(only.extractedText, PdfType.TEXT, debug);
-          return;
-        }
-
-        setImagePageNumbers(only.imagePageNumbers);
-        setPartialText(only.partialText);
-        setPdfFile(files[0]);
-        setLayer1Payload(only);
-        // Auto-proceed to OCR — pass values directly to avoid stale-closure race
-        await runClientOcr(files[0], only.imagePageNumbers, only.partialText);
-        return;
-      }
-
-      // Multiple files: the fast text-extraction path only. A scanned/image PDF
-      // in the batch needs client-side OCR, and running that per-file for an
-      // arbitrary N-file batch (with per-file paste fallback on top) is a much
-      // larger, separate state machine — out of scope here. Ask the user to
-      // upload that one separately instead of silently mishandling it.
-      const needsOcr = data.files.filter((f) => f.path === PdfType.OCR);
-      if (needsOcr.length > 0) {
-        setPhase("error");
-        const names = needsOcr.map((f) => `"${f.filename}"`).join(", ");
-        setErrorMessage(
-          `${names} ${needsOcr.length === 1 ? "looks like a scanned document" : "look like scanned documents"} and need${needsOcr.length === 1 ? "s" : ""} OCR. Upload ${needsOcr.length === 1 ? "it" : "them"} on its own so Capy can process it, or remove it from this batch.`,
-        );
-        return;
-      }
-
-      const combinedText = data.files
-        .map((f) => (f.path === PdfType.TEXT ? `=== ${f.filename} ===\n${f.extractedText}` : ""))
-        .join("\n\n")
-        .trim();
-
-      if (PDF_EXTRACTION_TEST_MODE) {
-        showExtractionPreview(`Layer 1 — ${data.files.length} text PDFs combined`, data, combinedText);
-        return;
-      }
-      await callGenerate(combinedText, PdfType.TEXT, data._debug ?? data);
-    },
-    [callGenerate, showExtractionPreview],
-  );
-
-  const onFileSelected = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const chosen = Array.from(event.target.files ?? []);
-      if (chosen.length === 0) return;
-      if (chosen.length > MAX_FILES_PER_UPLOAD) {
-        setFileSelectWarning(`You can combine up to ${MAX_FILES_PER_UPLOAD} PDFs into one deck — only the first ${MAX_FILES_PER_UPLOAD} were kept.`);
-        setSelectedFiles(chosen.slice(0, MAX_FILES_PER_UPLOAD));
-        return;
-      }
-      setFileSelectWarning("");
-      setSelectedFiles(chosen);
-    },
-    [],
-  );
-
-  const removeSelectedFile = useCallback((index: number) => {
-    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
-    setFileSelectWarning("");
-  }, []);
-
-  const handleGenerateClick = useCallback(async () => {
-    if (selectedFiles.length === 0) return;
-    await uploadPdfs(selectedFiles);
-  }, [selectedFiles, uploadPdfs]);
-
-  const handleCancel = useCallback(() => {
-    router.push(Routes.dashboard);
-  }, [router]);
-
-  const runClientOcr = useCallback(async (
-    overrideFile?: File,
-    overrideImagePages?: number[],
-    overridePartialText?: string,
-  ) => {
-    const file = overrideFile ?? pdfFile;
-    if (!file) return;
-
-    setPhase("ocr_running");
-    setErrorMessage("");
-    setResultView(null);
-
-    const resolvedImagePages = overrideImagePages ?? imagePageNumbers;
-    const resolvedPartialText = overridePartialText ?? partialText;
-
-    try {
+  // S3b: core per-file OCR — render the sparse pages, run Tesseract, merge the
+  // result with the server's partial text. Shared by the single-file path and
+  // the multi-file sequential OCR queue. Returns the merged text (may be "")
+  // plus debug info; throws only on hard failures (render/Tesseract errors).
+  const ocrFileToText = useCallback(
+    async (
+      file: File,
+      imagePageNumbers: number[],
+      partialText: string,
+    ): Promise<{ finalText: string; debug: unknown; needsPasteFallback: boolean }> => {
       // Only render pages the server flagged as sparse — skips pages that already
       // have good embedded text, saving significant time on mixed PDFs.
-      const pagesToOcr = resolvedImagePages.length > 0 ? resolvedImagePages : undefined;
+      const pagesToOcr = imagePageNumbers.length > 0 ? imagePageNumbers : undefined;
 
       const rendered = await renderPdfPagesToCanvases(
         file,
@@ -379,7 +311,7 @@ export function PdfUploadFlow() {
         scannedPageNumbers: pagesToOcr ?? "all",
         needsPasteFallback: ocrResult.needsPasteFallback,
         minTesseractConfidence: OcrThresholds.minTesseractConfidence,
-        hasPartialText: Boolean(resolvedPartialText),
+        hasPartialText: Boolean(partialText),
         pages: ocrResult.pages.map((p) => ({
           page: p.pageNumber,
           confidence: Math.round(p.confidence * 1000) / 1000,
@@ -392,12 +324,38 @@ export function PdfUploadFlow() {
       // than all the way to paste — partial text is better than nothing.
       const ocrSucceeded = !ocrResult.needsPasteFallback && ocrResult.extractedText.trim();
       const finalText = [
-        resolvedPartialText,
+        partialText,
         ocrSucceeded ? ocrResult.extractedText : "",
       ]
         .filter(Boolean)
         .join("\n\n")
         .trim();
+
+      return { finalText, debug, needsPasteFallback: ocrResult.needsPasteFallback };
+    },
+    [],
+  );
+
+  // Single-file OCR flow: auto-proceed from the upload response, then generate
+  // directly. Paste fallback is the single-file dead-end (per-file paste
+  // fallback for multi-file batches is handled by the queue in uploadPdfs).
+  const runClientOcr = useCallback(async (
+    overrideFile?: File,
+    overrideImagePages?: number[],
+    overridePartialText?: string,
+  ) => {
+    const file = overrideFile ?? pdfFile;
+    if (!file) return;
+
+    setPhase("ocr_running");
+    setErrorMessage("");
+    setResultView(null);
+
+    const resolvedImagePages = overrideImagePages ?? imagePageNumbers;
+    const resolvedPartialText = overridePartialText ?? partialText;
+
+    try {
+      const { finalText, debug } = await ocrFileToText(file, resolvedImagePages, resolvedPartialText);
 
       if (!finalText) {
         setPhase("paste_fallback");
@@ -418,7 +376,290 @@ export function PdfUploadFlow() {
       setPhase("paste_fallback");
       setErrorMessage(err instanceof Error ? err.message : "OCR failed");
     }
-  }, [pdfFile, imagePageNumbers, partialText, callGenerate, showExtractionPreview]);
+  }, [pdfFile, imagePageNumbers, partialText, ocrFileToText, callGenerate, showExtractionPreview]);
+
+  const uploadPdfs = useCallback(
+    async (files: File[]) => {
+      setPhase("uploading");
+      setErrorMessage("");
+      setResultView(null);
+      setFileProgress(null);
+      setBatchFailures([]);
+      setBudgetWarning(null);
+
+      // S4 pre-flight: total batch size checked client-side BEFORE any network
+      // I/O, mirroring the server's worst-case acceptance — a doomed batch
+      // should never burn rate-limit slots on requests that cannot succeed.
+      const totalBytes = files.reduce(function (sum, f) { return sum + f.size; }, 0);
+      const totalCapBytes = MAX_UPLOAD_SIZE_MB * MAX_FILES_PER_UPLOAD * 1024 * 1024;
+      if (totalBytes > totalCapBytes) {
+        setPhase("error");
+        setErrorMessage(
+          "Those files total ".concat(
+            (totalBytes / (1024 * 1024)).toFixed(1),
+            " MB. Capy can read up to ",
+            String(MAX_UPLOAD_SIZE_MB * MAX_FILES_PER_UPLOAD),
+            " MB per deck -- remove a file and try again.",
+          ),
+        );
+        return;
+      }
+
+      // S4: one request per file, in order. Each request sits far under the
+      // platform body cap and gets its own 60 s server budget, so one large or
+      // slow file can no longer sink the whole batch. Failures are recorded
+      // per-file and the rest of the batch still proceeds.
+      const successes: Array<{ file: File; result: PerFileUploadResult }> = [];
+      const failures: Array<{ filename: string; message: string }> = [];
+      const debugByFile: UploadTestDebug[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        let fileOk = false;
+        // S6: mark this file as being read in the status list.
+        setFileStatuses(function (prev) {
+          const next = Object.assign({}, prev);
+          next[i] = "reading";
+          return next;
+        });
+        setFileProgress({ current: i + 1, total: files.length, filename: file.name });
+
+        const controller = new AbortController();
+        const timeoutId = setTimeout(function () { controller.abort(); }, 120_000);
+
+        try {
+          const formData = new FormData();
+          formData.append("file", file);
+
+          const headers = await authHeaders();
+          const res = await fetch(ApiPaths.upload, {
+            method: "POST",
+            headers,
+            body: formData,
+            signal: controller.signal,
+          });
+
+          if (!res.ok) {
+            const statusText = "HTTP ".concat(String(res.status));
+            let detail = "";
+            try { detail = await res.text(); } catch { /* ignore */ }
+            if (res.status === 413) {
+              failures.push({ filename: file.name, message: "Too large to upload -- try a smaller file." });
+            } else if (res.status === 504) {
+              failures.push({ filename: file.name, message: "Timed out -- try a smaller file." });
+            } else {
+              failures.push({ filename: file.name, message: statusText.concat(": ", (detail || statusText).slice(0, 200)) });
+            }
+            continue;
+          }
+
+          const contentType = res.headers.get("content-type") ?? "";
+          if (contentType.indexOf("application/json") === -1) {
+            let badText = "";
+            try { badText = await res.text(); } catch { /* ignore */ }
+            failures.push({ filename: file.name, message: "Unexpected response (".concat(String(res.status), "): ", badText.slice(0, 200)) });
+            continue;
+          }
+
+          const data = (await res.json()) as ApiResponse<MultiUploadResult> & {
+            _debug?: UploadTestDebug[];
+          };
+
+          if (!data.success) {
+            failures.push({ filename: file.name, message: data.error.message });
+            continue;
+          }
+
+          const [only] = data.files;
+          if (!only) {
+            failures.push({ filename: file.name, message: "Server returned no result for this file." });
+            continue;
+          }
+          successes.push({ file, result: only });
+          fileOk = true;
+          if (data._debug?.[0]) debugByFile.push(data._debug[0]);
+        } catch (err) {
+          const message = controller.signal.aborted
+            ? "Reading took too long -- try a smaller file."
+            : err instanceof Error ? err.message : "Something went wrong.";
+          failures.push({ filename: file.name, message: message });
+        } finally {
+          // S6: resolve this file's status — "done" or "skipped".
+          setFileStatuses(function (prev) {
+            const next = Object.assign({}, prev);
+            next[i] = fileOk ? "done" : "skipped";
+            return next;
+          });
+          clearTimeout(timeoutId);
+        }
+      }
+
+      if (successes.length === 0) {
+        setPhase("error");
+        setErrorMessage(
+          "None of your files could be read. ".concat(
+            failures.map(function (f) { return '"'.concat(f.filename, '": ', f.message); }).join(" "),
+          ),
+        );
+        return;
+      }
+
+      if (failures.length > 0) {
+        setBatchFailures(failures);
+      }
+
+      // Single file: full behavior unchanged, including the OCR/paste-fallback
+      // pipeline below (which is inherently single-file -- it renders and
+      // Tesseract-scans pages of ONE PDF).
+      if (successes.length === 1) {
+        const { file, result: only } = successes[0];
+        const debug = debugByFile[0] ?? only;
+
+        if (only.path === PdfType.TEXT) {
+          // S5: a single oversized file is also silently tail-truncated server-
+          // side; budget it here so the user is warned BEFORE a credit is used.
+          const budget = budgetCombinedText([{ filename: only.filename, text: only.extractedText }]);
+          if (budget.droppedChars > 0) {
+            setBudgetWarning(
+              "This PDF is larger than one deck can hold -- only the first ~".concat(
+                String(Math.round(budget.combinedText.length / 100) * 100),
+                " characters fit. The rest was trimmed.",
+              ),
+            );
+          }
+          if (PDF_EXTRACTION_TEST_MODE) {
+            showExtractionPreview("Layer 1 -- text PDF", debug, budget.combinedText);
+            return;
+          }
+          await callGenerate(budget.combinedText, PdfType.TEXT, debug);
+          return;
+        }
+
+        setImagePageNumbers(only.imagePageNumbers);
+        setPartialText(only.partialText);
+        setPdfFile(file);
+        setLayer1Payload(only);
+        // Auto-proceed to OCR -- pass values directly to avoid stale-closure race
+        await runClientOcr(file, only.imagePageNumbers, only.partialText);
+        return;
+      }
+
+      // Multiple files (S3b): TEXT files combine directly; OCR-classified files
+      // are processed sequentially through client-side OCR and merged in order.
+      // A file whose OCR yields no usable text is skipped and reported — it no
+      // longer kills the whole batch (finding A removed).
+      const results = successes.map(function (s) { return s.result; });
+      const deckFiles: BudgetedFileText[] = [];
+      const ocrQueue: Array<{ file: File; result: PerFileUploadResult }> = [];
+      for (const s of successes) {
+        if (s.result.path === PdfType.TEXT) {
+          deckFiles.push({ filename: s.result.filename, text: s.result.extractedText });
+        } else {
+          ocrQueue.push(s);
+        }
+      }
+
+      for (let i = 0; i < ocrQueue.length; i++) {
+        const { file, result } = ocrQueue[i];
+        // Narrow the union: only OCR-variant results reach this queue (TEXT
+        // results were filtered above), so imagePageNumbers/partialText are
+        // required here, not the optional TEXT-variant shape.
+        if (result.path !== PdfType.OCR) continue;
+        setPhase("ocr_running");
+        setFileProgress({ current: i + 1, total: ocrQueue.length, filename: file.name });
+        try {
+          const { finalText } = await ocrFileToText(file, result.imagePageNumbers, result.partialText);
+          if (finalText) {
+            deckFiles.push({ filename: result.filename, text: finalText });
+          } else {
+            failures.push({
+              filename: file.name,
+              message: "OCR couldn't read this file -- it was skipped. Try uploading it alone and pasting its text.",
+            });
+          }
+        } catch (err) {
+          failures.push({
+            filename: file.name,
+            message: err instanceof Error ? err.message : "OCR failed -- file skipped.",
+          });
+        }
+      }
+
+      // S5: give every file a proportional share of the token budget instead of
+      // letting the first files consume it and silently dropping the tail.
+      const budget = budgetCombinedText(deckFiles);
+      if (budget.droppedChars > 0) {
+        setBudgetWarning(
+          "Your files total more than one deck can hold -- content from ".concat(
+            budget.droppedFrom.join(", "),
+            " was trimmed so every file still contributes.",
+          ),
+        );
+      }
+
+      if (failures.length > 0) {
+        setBatchFailures(failures);
+      }
+
+      if (!budget.combinedText) {
+        setPhase("error");
+        setErrorMessage(
+          "None of your files produced readable text. ".concat(
+            failures.map(function (f) { return '"'.concat(f.filename, '": ', f.message); }).join(" "),
+          ),
+        );
+        return;
+      }
+
+      if (PDF_EXTRACTION_TEST_MODE) {
+        showExtractionPreview("Layer 1+2 -- ".concat(String(successes.length), " files combined (", String(ocrQueue.length), " OCR'd)"), { files: results, _debug: debugByFile }, budget.combinedText);
+        return;
+      }
+      await callGenerate(budget.combinedText, PdfType.TEXT, debugByFile.length > 0 ? debugByFile : results);
+    },
+    [callGenerate, showExtractionPreview, ocrFileToText, runClientOcr],
+  );
+
+  const onFileSelected = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const chosen = Array.from(event.target.files ?? []);
+      if (chosen.length === 0) return;
+      setFileStatuses({});
+      setBudgetWarning(null);
+      if (chosen.length > MAX_FILES_PER_UPLOAD) {
+        setFileSelectWarning(`You can combine up to ${MAX_FILES_PER_UPLOAD} PDFs into one deck — only the first ${MAX_FILES_PER_UPLOAD} were kept.`);
+        setSelectedFiles(chosen.slice(0, MAX_FILES_PER_UPLOAD));
+        return;
+      }
+      setFileSelectWarning("");
+      setSelectedFiles(chosen);
+    },
+    [],
+  );
+
+  const removeSelectedFile = useCallback((index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index));
+    setFileStatuses((prev) => {
+      const next: Record<number, "queued" | "reading" | "done" | "skipped"> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        const key = Number(k);
+        if (key === index) continue;          // dropped file
+        next[key > index ? key - 1 : key] = v; // shift later indices down
+      }
+      return next;
+    });
+    setBudgetWarning(null);
+    setFileSelectWarning("");
+  }, []);
+
+  const handleGenerateClick = useCallback(async () => {
+    if (selectedFiles.length === 0) return;
+    await uploadPdfs(selectedFiles);
+  }, [selectedFiles, uploadPdfs]);
+
+  const handleCancel = useCallback(() => {
+    router.push(Routes.dashboard);
+  }, [router]);
 
   const submitPaste = useCallback(async () => {
     const text = pastedText.trim();
@@ -878,12 +1119,38 @@ export function PdfUploadFlow() {
             />
             <div>
               <p style={{ margin: 0, fontFamily: "var(--font-display, serif)", fontSize: "calc(18px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
-                Reading your PDF, hang tight…
+                {extracting && fileProgress && fileProgress.total > 1
+                  ? `Reading ${fileProgress.current} of ${fileProgress.total} — ${fileProgress.filename}`
+                  : "Reading your PDF, hang tight…"}
               </p>
               <p style={{ margin: "4px 0 0", fontSize: "calc(13px * var(--font-scale))", color: "var(--text-muted)" }}>
                 {deckName.trim() || "Your deck"} · generating {cardCount} cards
               </p>
             </div>
+
+            {batchFailures.length > 0 && (
+              <div style={{ width: "100%", maxWidth: 360, borderRadius: 10, padding: "10px 14px", background: "var(--bg-subtle)", border: "1.5px solid var(--border)", textAlign: "left" }}>
+                <p style={{ margin: 0, fontSize: "calc(12.5px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
+                  {batchFailures.length === 1 ? "1 file was skipped" : `${batchFailures.length} files were skipped`}
+                </p>
+                {batchFailures.map((f) => (
+                  <p key={f.filename} style={{ margin: "4px 0 0", fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)" }}>
+                    <strong>{f.filename}</strong>: {f.message}
+                  </p>
+                ))}
+              </div>
+            )}
+
+            {budgetWarning && (
+              <div style={{ width: "100%", maxWidth: 360, borderRadius: 10, padding: "10px 14px", background: "var(--bg-subtle)", border: "1.5px solid var(--border)", textAlign: "left" }}>
+                <p style={{ margin: 0, fontSize: "calc(12.5px * var(--font-scale))", fontWeight: 600, color: "var(--text)" }}>
+                  ⚠ Some content was trimmed
+                </p>
+                <p style={{ margin: "4px 0 0", fontSize: "calc(12px * var(--font-scale))", color: "var(--text-muted)" }}>
+                  {budgetWarning}
+                </p>
+              </div>
+            )}
 
             <div style={{ width: "100%", maxWidth: 360, display: "flex", flexDirection: "column", gap: 6 }}>
               {rows.map((row) => (
@@ -935,10 +1202,17 @@ export function PdfUploadFlow() {
           aria-live="polite"
         >
           <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--text)", margin: 0 }}>
-            {pageProgress.total > 0
-              ? UIMessages.ocrProgress(pageProgress.current, pageProgress.total)
-              : "Preparing OCR…"}
+            {fileProgress && fileProgress.total > 1
+              ? `OCR: file ${fileProgress.current} of ${fileProgress.total} — ${fileProgress.filename}`
+              : pageProgress.total > 0
+                ? UIMessages.ocrProgress(pageProgress.current, pageProgress.total)
+                : "Preparing OCR…"}
           </p>
+          {fileProgress && fileProgress.total > 1 && pageProgress.total > 0 && (
+            <p style={{ fontSize: "calc(12.5px * var(--font-scale))", color: "var(--text-muted)", margin: "6px 0 0" }}>
+              {UIMessages.ocrProgress(pageProgress.current, pageProgress.total)}
+            </p>
+          )}
           <div style={{ marginTop: 12, height: 8, overflow: "hidden", borderRadius: 999, background: "var(--border)" }}>
             <div
               style={{
@@ -1079,14 +1353,81 @@ export function PdfUploadFlow() {
           <p style={{ fontSize: "calc(14px * var(--font-scale))", color: "var(--error-dark)", margin: 0 }} role="alert">
             {errorMessage}
           </p>
-          <button
-            type="button"
-            onClick={resetToIdle}
-            className="btn-solid"
-            style={{ alignSelf: "flex-start", borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, border: "none", cursor: "pointer", background: "var(--primary)", color: "var(--on-primary)", fontFamily: "var(--font-body, sans-serif)" }}
-          >
-            Try again
-          </button>
+          {selectedFiles.length > 0 && (
+            <>
+              <p style={{ fontSize: "calc(12.5px * var(--font-scale))", fontWeight: 600, color: "var(--text)", margin: "4px 0 0" }}>
+                Your files
+              </p>
+              <ul style={{ display: "flex", flexDirection: "column", gap: 6, margin: 0, padding: 0, listStyle: "none" }}>
+                {selectedFiles.map((f, i) => {
+                  const status = fileStatuses[i] ?? "queued";
+                  const chipColor =
+                    status === "done" ? "var(--success)"
+                    : status === "skipped" ? "var(--error)"
+                    : status === "reading" ? "var(--primary)"
+                    : "var(--text-faint)";
+                  const chipLabel =
+                    status === "done" ? "done"
+                    : status === "skipped" ? "failed"
+                    : status === "reading" ? "reading…"
+                    : "queued";
+                  return (
+                    <li
+                      key={`${f.name}-${i}`}
+                      style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "6px 10px", borderRadius: 8, background: "var(--bg-subtle)", fontSize: "calc(12.5px * var(--font-scale))", color: "var(--text)" }}
+                    >
+                      <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {f.name}
+                      </span>
+                      <span style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+                        <span
+                          style={{
+                            fontSize: "calc(10.5px * var(--font-scale))",
+                            fontWeight: 700,
+                            letterSpacing: "0.04em",
+                            textTransform: "uppercase",
+                            color: chipColor,
+                            border: "1px solid ".concat(chipColor),
+                            borderRadius: 999,
+                            padding: "1px 8px",
+                          }}
+                        >
+                          {chipLabel}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => removeSelectedFile(i)}
+                          aria-label={`Remove ${f.name}`}
+                          style={{ background: "none", border: "none", color: "var(--text-faint)", cursor: "pointer", fontSize: "calc(14px * var(--font-scale))", lineHeight: 1, padding: "2px 6px" }}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 10 }}>
+            <button
+              type="button"
+              onClick={handleGenerateClick}
+              disabled={selectedFiles.length === 0}
+              className="btn-solid"
+              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, border: "none", cursor: selectedFiles.length > 0 ? "pointer" : "not-allowed", opacity: selectedFiles.length > 0 ? 1 : 0.5, background: "var(--primary)", color: "var(--on-primary)", fontFamily: "var(--font-body, sans-serif)" }}
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              onClick={resetToIdle}
+              className="btn-outline"
+              style={{ borderRadius: 10, padding: "10px 20px", fontSize: "calc(14px * var(--font-scale))", fontWeight: 600, cursor: "pointer", border: "1.5px solid var(--border)", color: "var(--text-muted)", background: "none", fontFamily: "var(--font-body, sans-serif)" }}
+            >
+              Start over
+            </button>
+          </div>
         </div>
       )}
 

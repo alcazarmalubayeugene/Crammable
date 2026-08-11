@@ -11,6 +11,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 - [`CLAUDE.md`](./CLAUDE.md) / [`AGENTS.md`](./AGENTS.md) — backend rules and conventions.
 - [`docs/LAUNCH_OPS.md`](./docs/LAUNCH_OPS.md) — pre-launch dashboard runbook: Google OAuth provider + custom SMTP setup (code is done; these are external config gates).
 - [`docs/PROJECT-DOCUMENTATION.md`](./docs/PROJECT-DOCUMENTATION.md) · [`docs/TODO.md`](./docs/TODO.md)
+- [`docs/PDF_EXTRACTION_PIPELINE_FIXES.md`](./docs/PDF_EXTRACTION_PIPELINE_FIXES.md) — 2026-08-11 session: multi-PDF upload defect fixes S1–S6 (silent hang, OCR misclassification, per-file uploads, OCR queue, truncation budget, recovery UX).
 
 ## Testing
 

@@ -166,9 +166,14 @@ export async function POST(request: Request): Promise<Response> {
       }
 
       results.push({
-        filename:      file.name,
-        path:          PdfType.TEXT,
-        extractedText: extraction.extractedText,
+        filename:         file.name,
+        path:             PdfType.TEXT,
+        extractedText:    extraction.extractedText,
+        // Optional OCR top-up (option 2b): sparse pages in an otherwise-text
+        // PDF are reported so the client can selectively OCR just those pages
+        // without routing the whole file (or any multi-file batch) to OCR.
+        partialText:      extraction.partialText,
+        imagePageNumbers: extraction.imagePageNumbers,
       });
     }
 

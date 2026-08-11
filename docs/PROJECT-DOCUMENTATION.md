@@ -95,7 +95,7 @@ and the roadmap. (Deferred work is tracked separately in `docs/TODO.md`.)
 
 | Route | File | Status |
 |---|---|---|
-| `POST /api/upload` | `src/app/api/upload/route.ts` | ✅ PDF → in-memory text extraction → OCR detection. The PDF is parsed from the request buffer and **never written to Storage** (stronger than the old "delete after extraction" — nothing to delete). Auth/consent/rate-limit always enforced + CSRF + size pre-check (2026-06-10) |
+| `POST /api/upload` | `src/app/api/upload/route.ts` | ✅ PDF → in-memory text extraction → OCR detection. The PDF is parsed from the request buffer and **never written to Storage** (stronger than the old "delete after extraction" — nothing to delete). Auth/consent/rate-limit always enforced + CSRF + size pre-check (2026-06-10). **Multi-PDF (2026-08-11):** client sends one file per request (up to `MAX_FILES_PER_UPLOAD`, merged client-side); TEXT results carry optional `imagePageNumbers`/`partialText` OCR top-up; rate limit 30/hr |
 | `POST /api/generate` | `src/app/api/generate/route.ts` | ✅ DeepSeek generation; tier + deck-limit enforcement; `createDeckWithCards` + `deductCredit` |
 | `GET /api/decks` | `src/app/api/decks/route.ts` | ✅ User's decks, session-client RLS |
 | `GET /api/decks/[id]` | `src/app/api/decks/[id]/route.ts` | ✅ Deck + cards; 404 for non-owned (no ownership leak) |
@@ -424,6 +424,63 @@ select (select count(*) from auth.users) as auth_users,
 ---
 
 ## 7. Change log / session history
+
+### 2026-08-11 — multi-PDF extraction pipeline overhaul (S1–S6)
+
+Defect analysis of "two or more PDFs won't scan" → seven findings (A–G), then the
+full recommended fix sequence shipped on `origin/BackEnd` (uncommitted working
+tree at session end). Full record: **`docs/PDF_EXTRACTION_PIPELINE_FIXES.md`**.
+
+**S1 — silent hang fixed (frontend).** `uploadPdfs` + `callGenerate` now wrap
+the fetch/`res.json()` pipeline in `try/catch`, check `res.ok` and
+`content-type` before parsing (per-status copy incl. the HTTP code), and carry
+an `AbortController` 120 s timeout. Non-JSON platform rejections (413 / 504 /
+HTML pages) surface as error cards instead of an eternal "Reading your PDF,
+hang tight…" spinner.
+
+**S2 — OCR misclassification fixed (contracts first).** Added
+`OcrThresholds.minCharsForTextPath: 500` in `contracts.ts`; the classifier in
+`extract-text-server.ts` now routes to OCR only when sparse pages exist AND the
+readable text is under 500 chars (was: `>= 3 sparse pages || > 10% sparse`).
+`UploadResult.TEXT` gained optional `imagePageNumbers` / `partialText` (OCR
+top-up, not a routing decision); `/api/upload` TEXT results carry them.
+Ordinary documents with figures (slide decks, chapters with figure pages) now
+take the fast text path.
+
+**S4 — one file per request (structural).** Client sends N sequential
+single-file POSTs to `/api/upload` and merges results client-side — each
+request sits under the platform body cap and gets its own 60 s budget.
+`extract-text-server.ts` now calls `page.cleanup()` per page and
+`await pdf.destroy()` in a `finally` (no leaked pdf.js resources). Client-side
+pre-flight total-size check + per-file progress added. **Rate limit moved with
+it (required):** `RateLimits[ApiPaths.upload]` 5/hour → 30/hour in
+`contracts.ts`.
+
+**S3b — sequential per-file OCR queue (finding A removed).** The batch-killing
+OCR block is gone: TEXT files join directly, OCR files are processed in order
+via a new `ocrFileToText` helper, and one `/api/generate` call merges
+everything. An unreadable OCR file is skipped and reported, never a batch
+abort. OCR progress shows "OCR: file 2 of 3 — scan.pdf". Side effect:
+`runClientOcr` moved above `uploadPdfs`, fixing the one pre-existing lint error.
+
+**S5 — proportional truncation budget (finding G fixed).** New
+`budgetCombinedText()` in `src/lib/text/truncate.ts` gives each file a share of
+the 160k-char budget proportional to its length (was: tail-first truncation
+that silently dropped later PDFs). Applied at all generate entry points; the
+busy card warns "⚠ Some content was trimmed" **before** the Capycoin is
+charged.
+
+**S6 — recovery UX (finding F fixed).** Per-file status chips
+(done / failed / reading… / queued) tracked during upload; the error card now
+keeps the selection — "Try again" re-runs with retained files (✕ to remove
+failed ones first), "Start over" is the explicit full reset.
+
+**Verification:** `tsc --noEmit` clean · Vitest 72/72 · eslint 0 errors on
+touched files (down from 1 pre-existing at HEAD; 2 pre-existing warnings
+remain). Classifier + budget logic validated by simulations against the repro
+matrix. Nothing committed/pushed.
+
+---
 
 ### 2026-06-29 — admin status, referral cap, OCR auto-proceed, lenient grading, rewards UX
 

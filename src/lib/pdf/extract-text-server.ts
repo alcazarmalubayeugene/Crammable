@@ -36,11 +36,17 @@ function pageCharCount(text: string): number {
  * the client can OCR only those pages instead of the whole document. partialText carries
  * the already-good text from non-sparse pages, ready to merge with OCR results.
  *
- * isImagePdf triggers the OCR path when:
- *   - >= 3 sparse pages exist, OR
- *   - > 10% of pages are sparse
- * This catches mixed PDFs that the old average-based check missed while still sending
- * mostly-text PDFs (e.g. one blank cover page) straight through.
+ * isImagePdf is decided by text sufficiency, not sparse-page count:
+ *   - pageCount is 0, OR
+ *   - at least one sparse page exists AND the non-sparse pages yield fewer
+ *     than OcrThresholds.minCharsForTextPath characters.
+ *
+ * A document with a handful of sparse pages (title slide, section divider,
+ * figure pages) but plenty of real text elsewhere is classified TEXT — those
+ * sparse pages are returned as imagePageNumbers for an OPTIONAL per-page OCR
+ * top-up, not as an all-or-nothing routing decision. This fixes the old
+ * scale-blind ">= 3 sparse pages" rule that misrouted ordinary documents with
+ * figures (e.g. slide decks) onto the OCR path.
  */
 export async function extractTextFromPdfBuffer(
   buffer: ArrayBuffer,
@@ -48,48 +54,60 @@ export async function extractTextFromPdfBuffer(
   const pdfjs = await getPdfJs();
   const data = new Uint8Array(buffer);
   const pdf = await pdfjs.getDocument({ data, useSystemFonts: true }).promise;
-  const pageCount = pdf.numPages;
-  const pageTexts: string[] = [];
-  let totalChars = 0;
+  try {
+    const pageCount = pdf.numPages;
+    const pageTexts: string[] = [];
+    let totalChars = 0;
 
-  for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-    const page = await pdf.getPage(pageNum);
-    const content = await page.getTextContent();
-    const pageText = content.items
-      .map((item) => ("str" in item ? item.str : ""))
-      .join(" ")
+    for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const content = await page.getTextContent();
+      const pageText = content.items
+        .map((item) => ("str" in item ? item.str : ""))
+        .join(" ")
+        .trim();
+      pageTexts.push(pageText);
+      totalChars += pageCharCount(pageText);
+      // Release this page's resources before loading the next one — prevents
+      // per-page objects from accumulating for the lifetime of the request.
+      page.cleanup();
+    }
+
+    const avgCharsPerPage = pageCount > 0 ? totalChars / pageCount : 0;
+
+    const imagePageNumbers = pageTexts
+      .map((text, i) => ({ pageNum: i + 1, chars: pageCharCount(text) }))
+      .filter(({ chars }) => chars < OcrThresholds.minCharsPerPageForText)
+      .map(({ pageNum }) => pageNum);
+
+    const extractedText = pageTexts.join("\n\n").trim();
+
+    const sparseSet = new Set(imagePageNumbers);
+    const partialText = pageTexts
+      .filter((_, i) => !sparseSet.has(i + 1))
+      .filter(Boolean)
+      .join("\n\n")
       .trim();
-    pageTexts.push(pageText);
-    totalChars += pageCharCount(pageText);
+
+    // Text-sufficiency classifier (option 2b): a document is only routed to OCR
+    // when it has sparse pages AND the readable text is too weak to build a deck.
+    const isImagePdf =
+      pageCount === 0 ||
+      (imagePageNumbers.length > 0 &&
+        pageCharCount(partialText) < OcrThresholds.minCharsForTextPath);
+
+    return {
+      pageCount,
+      extractedText,
+      avgCharsPerPage,
+      isImagePdf,
+      imagePageNumbers,
+      partialText,
+    };
+  } finally {
+    // Always release the document + worker, even when a page fails to parse —
+    // a leaked pdfjs document would otherwise stay reachable for the rest of
+    // the request while the next file in the batch loads on top of it.
+    await pdf.destroy();
   }
-
-  const avgCharsPerPage = pageCount > 0 ? totalChars / pageCount : 0;
-
-  const imagePageNumbers = pageTexts
-    .map((text, i) => ({ pageNum: i + 1, chars: pageCharCount(text) }))
-    .filter(({ chars }) => chars < OcrThresholds.minCharsPerPageForText)
-    .map(({ pageNum }) => pageNum);
-
-  const isImagePdf =
-    pageCount === 0 ||
-    imagePageNumbers.length >= 3 ||
-    (pageCount > 0 && imagePageNumbers.length / pageCount > 0.1);
-
-  const extractedText = pageTexts.join("\n\n").trim();
-
-  const sparseSet = new Set(imagePageNumbers);
-  const partialText = pageTexts
-    .filter((_, i) => !sparseSet.has(i + 1))
-    .filter(Boolean)
-    .join("\n\n")
-    .trim();
-
-  return {
-    pageCount,
-    extractedText,
-    avgCharsPerPage,
-    isImagePdf,
-    imagePageNumbers,
-    partialText,
-  };
 }

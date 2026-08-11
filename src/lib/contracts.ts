@@ -347,7 +347,13 @@ export interface RateLimitRule {
 }
 
 export const RateLimits: Record<string, RateLimitRule> = {
-  [ApiPaths.upload]:           { windowMinutes: 60,   maxRequests: 5   },
+  // S4: uploads are now ONE FILE PER REQUEST (the client sends N sequential
+  // single-file requests per deck instead of one multi-file request), so the
+  // old 5/hour budget would cap a single 5-file deck at 5 requests and leave
+  // nothing for the rest of the hour. 30/hour ~= the old 5 batches x 5 files
+  // per-file throughput (25 files/hour) plus headroom, at a fraction of the
+  // per-request cost (one file extracted per request, not up to five).
+  [ApiPaths.upload]:           { windowMinutes: 60,   maxRequests: 30  },
   [ApiPaths.generate]:         { windowMinutes: 60,   maxRequests: 2   },
   [ApiPaths.submitQuizResult]: { windowMinutes: 60,   maxRequests: 30  },
   [ApiPaths.explainAnswer]:    { windowMinutes: 60,   maxRequests: 30  }, // free, but still a real DeepSeek call
@@ -384,6 +390,14 @@ export const RateLimits: Record<string, RateLimitRule> = {
 export const OcrThresholds = {
   /** Avg chars/page below this → treat as image PDF → trigger OCR (Layer 2) */
   minCharsPerPageForText: 100,
+  /**
+   * Non-sparse text (chars) below this → classify the whole file as needing
+   * OCR, regardless of page count. At or above it, a PDF that has sparse
+   * pages is still classified TEXT — the sparse pages are returned as an
+   * optional OCR top-up (imagePageNumbers) rather than a routing decision.
+   * Replaces the old scale-blind ">= 3 sparse pages" rule.
+   */
+  minCharsForTextPath: 500,
   /** Tesseract confidence (0–1) below this for majority of pages → trigger paste fallback (Layer 3) */
   minTesseractConfidence: 0.6,
   /** Max tokens forwarded to DeepSeek after extraction */
@@ -721,14 +735,24 @@ export interface AdminActionLog {
 
 /**
  * Per-file result. TEXT → pdfjs extracted clean text, ready to use directly.
- * OCR   → image PDF detected (chars/page < OcrThresholds.minCharsPerPageForText).
- *          Client must run Tesseract.js on this file, then merge its result.
+ * OCR   → image PDF detected: the readable text is too weak to build a deck on
+ *          its own (see OcrThresholds.minCharsForTextPath). Client must run
+ *          Tesseract.js on this file, then merge its result.
+ *
+ * TEXT results may also carry imagePageNumbers + partialText: sparse pages in
+ * an otherwise-text PDF are returned as an OPTIONAL OCR top-up, not a routing
+ * decision — the deck can be built from extractedText alone.
  *
  * NOTE: Both paths are successes — the upload worked. The discriminant is
  *       `path`, not `success`.
  */
 export type UploadResult =
-  | { path: typeof PdfType.TEXT; extractedText: string }
+  | {
+      path:             typeof PdfType.TEXT;
+      extractedText:    string;
+      imagePageNumbers?: number[];   // sparse pages needing optional OCR top-up; [] when none
+      partialText?:     string;      // text from non-sparse pages; same as extractedText when no sparse pages
+    }
   | {
       path:             typeof PdfType.OCR;
       message:          string;            // UIMessages.ocrWarning
